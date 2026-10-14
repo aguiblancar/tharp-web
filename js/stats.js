@@ -554,7 +554,83 @@
       sobel: { z: sobelZ, p: pZ(sobelZ) }, abStd: ab * sdx / sdy, r2m: fa.r2, r2y: fb.r2, n };
   }
 
+  // ---------- optimización sin derivadas (Nelder-Mead) ----------
+  function nelderMead(fn, x0, step = 0.5, tol = 1e-10, maxit = 4000) {
+    const n = x0.length; let pts = [x0.slice()].concat(x0.map((_, i) => { const p = x0.slice(); p[i] += step * (Math.abs(p[i]) || 1); return p; }));
+    let vals = pts.map(fn);
+    for (let it = 0; it < maxit; it++) {
+      const ord = vals.map((v, i) => i).sort((a, b) => vals[a] - vals[b]); pts = ord.map(i => pts[i]); vals = ord.map(i => vals[i]);
+      if (Math.abs(vals[n] - vals[0]) <= tol * (Math.abs(vals[0]) + tol)) break;
+      const c = Array.from({ length: n }, (_, j) => sum(pts.slice(0, n).map(p => p[j])) / n), mv = (a, b, t) => a.map((v, j) => v + t * (b[j] - v));
+      const xr = mv(c, pts[n], -1), fr = fn(xr);
+      if (fr < vals[0]) { const xe = mv(c, pts[n], -2), fe = fn(xe); if (fe < fr) { pts[n] = xe; vals[n] = fe; } else { pts[n] = xr; vals[n] = fr; } }
+      else if (fr < vals[n - 1]) { pts[n] = xr; vals[n] = fr; }
+      else { const xc = mv(c, pts[n], fr < vals[n] ? -.5 : .5), fc = fn(xc);
+        if (fc < Math.min(fr, vals[n])) { pts[n] = xc; vals[n] = fc; }
+        else for (let i = 1; i <= n; i++) { pts[i] = mv(pts[0], pts[i], .5); vals[i] = fn(pts[i]); } }
+    }
+    return { x: pts[0], f: vals[0] };
+  }
+
+  // ---------- modelo lineal mixto (REML), como lme4 + lmerTest ----------
+  // X: n × p (con constante); g: grupo de cada fila; zcol: columna de X con pendiente aleatoria (−1 = solo intercepto)
+  function lmm(y, X, g, zcol = -1) {
+    const N = y.length, p = X[0].length, q = zcol >= 0 ? 2 : 1, ids = [...new Set(g)];
+    const G = ids.map(id => { const rows = []; g.forEach((v, i) => { if (v === id) rows.push(i); }); return { X: rows.map(i => X[i]), y: rows.map(i => y[i]), Z: rows.map(i => (q === 2 ? [1, X[i][zcol]] : [1])) }; });
+    const Lam = th => (q === 1 ? [[Math.abs(th[0])]] : [[Math.abs(th[0]), 0], [th[1], Math.abs(th[2])]]);
+    function parts(th) { // por grupo, con la identidad de Woodbury: M = I + A A', A = Z Λ (dimensión q)
+      const L = Lam(th), XtWX = Array.from({ length: p }, () => new Array(p).fill(0)), XtWy = new Array(p).fill(0); let logdet = 0; const cache = [];
+      for (const gr of G) {
+        const A = gr.Z.map(z => L[0].map((_, c) => sum(z.map((zv, k) => zv * L[k][c])))), K = ident(q);
+        A.forEach(a => { for (let r = 0; r < q; r++) for (let c = 0; c < q; c++) K[r][c] += a[r] * a[c]; });
+        const Ki = inv(K); logdet += Math.log(Math.abs(det(K)));
+        const Winv = v => { const At = L[0].map((_, c) => sum(A.map((a, i) => a[c] * v[i]))), u = Ki.map(r => sum(r.map((x, k) => x * At[k]))); return v.map((x, i) => x - sum(A[i].map((a, k) => a * u[k]))); };
+        const Wy = Winv(gr.y), WX = Array.from({ length: p }, (_, c) => Winv(gr.X.map(r => r[c])));
+        for (let a = 0; a < p; a++) { XtWy[a] += sum(gr.X.map((r, i) => r[a] * Wy[i])); for (let b = 0; b < p; b++) XtWX[a][b] += sum(gr.X.map((r, i) => r[a] * WX[b][i])); }
+        cache.push({ Winv });
+      }
+      const XtWXi = inv(XtWX); if (!XtWXi) return null;
+      const beta = XtWXi.map(r => sum(r.map((v, k) => v * XtWy[k])));
+      let rq = 0; G.forEach((gr, k) => { const r = gr.y.map((v, i) => v - sum(gr.X[i].map((x, j) => x * beta[j]))), Wr = cache[k].Winv(r); rq += sum(r.map((v, i) => v * Wr[i])); });
+      return { beta, XtWXi, logdet, logdetX: Math.log(det(XtWX)), rq };
+    }
+    const dev = th => { const P = parts(th); if (!P) return 1e300; const s2 = P.rq / (N - p); return (N - p) * (1 + Math.log(2 * Math.PI * s2)) + P.logdet + P.logdetX; };
+    let best = null;
+    for (const start of (q === 1 ? [[1], [0.3], [3]] : [[1, 0, 1], [0.5, 0, 0.2], [2, 0, 0.5]])) { const r = nelderMead(dev, start); if (!best || r.f < best.f) best = r; }
+    const th = best.x, P = parts(th), s2 = P.rq / (N - p), L = Lam(th);
+    const Tau = L.map(r => L.map(c => s2 * sum(r.map((v, k) => v * c[k])))), cov = P.XtWXi.map(r => r.map(v => v * s2));
+    // Satterthwaite: desviación REML sin perfilar en φ = (θ, σ²); Cov(φ) ≈ 2 H⁻¹
+    const D = ph => { const Q = parts(ph.slice(0, -1)); if (!Q) return 1e300; const sg = ph[ph.length - 1]; return (N - p) * Math.log(sg) + Q.logdet + Q.logdetX + Q.rq / sg; };
+    const phi = th.map(Math.abs).map((v, k) => (q === 2 && k === 1 ? th[1] : v)).concat([s2]), np = phi.length, hs = phi.map(v => 1e-4 * Math.max(Math.abs(v), 1e-2));
+    const H = Array.from({ length: np }, () => new Array(np).fill(0));
+    for (let a = 0; a < np; a++) for (let b = a; b < np; b++) {
+      const e = (da, db) => { const v = phi.slice(); v[a] += da; v[b] += db; return D(v); };
+      H[a][b] = H[b][a] = a === b ? (e(hs[a], 0) - 2 * D(phi) + e(-hs[a], 0)) / (hs[a] * hs[a]) : (e(hs[a], hs[b]) - e(hs[a], -hs[b]) - e(-hs[a], hs[b]) + e(-hs[a], -hs[b])) / (4 * hs[a] * hs[b]);
+    }
+    const Hi = inv(H), Acov = Hi ? Hi.map(r => r.map(v => 2 * v)) : null;
+    const varB = (ph, j) => { const Q = parts(ph.slice(0, -1)); return Q ? ph[ph.length - 1] * Q.XtWXi[j][j] : NaN; };
+    const se = cov.map((r, j) => Math.sqrt(r[j])), df = se.map((_, j) => {
+      if (!Acov) return NaN; const f0 = varB(phi, j), gr = phi.map((_, k) => { const a = phi.slice(), b = phi.slice(); a[k] += hs[k]; b[k] -= hs[k]; return (varB(a, j) - varB(b, j)) / (2 * hs[k]); });
+      const den = sum(gr.map((x, a) => sum(gr.map((z, b) => x * Acov[a][b] * z)))); return 2 * f0 * f0 / den; });
+    const t = P.beta.map((b, j) => b / se[j]), pv = t.map((v, j) => (isFinite(df[j]) && df[j] > 0 ? pT(v, df[j]) : pZ(v)));
+    const ci = P.beta.map((b, j) => { const tc = isFinite(df[j]) && df[j] > 0 ? tcrit(df[j]) : 1.959964; return [b - tc * se[j], b + tc * se[j]]; });
+    // R² de Nakagawa (varianza de los efectos fijos, de los aleatorios y residual)
+    const fit = X.map(r => sum(r.map((v, k) => v * P.beta[k]))), vf = variance(fit);
+    const vr = q === 1 ? Tau[0][0] : mean(X.map(r => { const z = [1, r[zcol]]; return sum(z.map((a, i) => sum(z.map((b, j) => a * Tau[i][j] * b)))); }));
+    // residuos condicionales: y − Xβ − Zb, con b = Λ (I + A'A)⁻¹ A' r (predicción BLUP de cada grupo)
+    const resid = new Array(N); let gi = 0;
+    ids.forEach(id => { const rows = []; g.forEach((v, i) => { if (v === id) rows.push(i); }); const gr = G[gi++];
+      const A = gr.Z.map(z => L[0].map((_, c) => sum(z.map((zv, k) => zv * L[k][c])))), K = ident(q);
+      A.forEach(a => { for (let r = 0; r < q; r++) for (let c = 0; c < q; c++) K[r][c] += a[r] * a[c]; });
+      const r = rows.map(i => y[i] - fit[i]), At = L[0].map((_, c) => sum(A.map((a, i) => a[c] * r[i]))), u = inv(K).map(row => sum(row.map((x, k) => x * At[k])));
+      const bvec = L.map(row => sum(row.map((x, k) => x * u[k])));
+      rows.forEach((i, k) => { resid[i] = r[k] - sum(gr.Z[k].map((z, j) => z * bvec[j])); }); });
+    return { beta: P.beta, se, df, t, p: pv, ci, s2, Tau, ngroups: ids.length, N, reml: best.f, singular: Math.abs(th[0]) < 1e-4 || (q === 2 && Math.abs(th[2]) < 1e-4),
+      r2m: vf / (vf + vr + s2), r2c: (vf + vr) / (vf + vr + s2), corRE: q === 2 ? Tau[0][1] / Math.sqrt(Tau[0][0] * Tau[1][1]) : null,
+      icc: q === 1 ? Tau[0][0] / (Tau[0][0] + s2) : null, resid };
+  }
+
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
-    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
+    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
 })(typeof window !== 'undefined' ? window : this);

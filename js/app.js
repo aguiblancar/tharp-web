@@ -231,6 +231,16 @@
        <label class="field"><span>Mediador (M)</span>${sel('meM', nums, pick(dMe.m, defMeM))}</label>
        <label class="field"><span>Variable dependiente (Y)</span>${sel('meY', nums, pick(dMe.y, defMeY))}</label></div>`,
       nums.length < 2 ? 'Necesitas un predictor, un mediador cuantitativo y una variable dependiente cuantitativa.' : '');
+    const dL2 = D.lmm || {}, allV = ST.vars, gDef = (allV.find(v => /^(id|participante|sujeto|caso|case|subject|grupo|clase|centro|escuela|colegio)$|(^id[_ ]|[_ ]id$)/i.test(v.name)) || allV[0] || {}).name;
+    h += card('lmm', !!D.lmm && nums.length >= 1, 'Modelo lineal mixto (datos longitudinales o anidados)', 'Varias mediciones por persona, o personas dentro de grupos (alumnos en clases, pacientes en hospitales): efectos fijos con gl de Satterthwaite, efectos aleatorios, CCI y R² de Nakagawa.',
+      `<p class="small muted" style="margin:0 0 10px">Los datos deben estar en <b>formato largo</b>: una fila por medición y una columna que identifique a la persona o al grupo.</p>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Variable dependiente</span>${sel('lmY', nums, pick(dL2.y, nums[0] && nums[0].name))}</label>
+       <label class="field"><span>Agrupación (persona o grupo)</span>${sel('lmG', allV, pick(dL2.g, gDef))}</label>
+       <label class="field"><span>Pendiente aleatoria (opcional)</span><select id="lmS"><option value="">Ninguna (solo intercepto aleatorio)</option>${nums.map(v => `<option value="${esc(v.name)}"${dL2.s === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label></div>
+       <div class="field"><span>Efectos fijos (predictores)</span>${chips('lmX', nums.concat(facs), v => (dL2.x ? dL2.x.includes(v.name) : false))}</div>
+       <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end"><label class="field"><span>Interacción (opcional): predictor A</span><select id="lmIA"><option value="">Sin interacción</option>${nums.concat(facs).map(v => `<option value="${esc(v.name)}"${dL2.ia === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
+       <label class="field"><span>× predictor B</span><select id="lmIB"><option value="">—</option>${nums.concat(facs).map(v => `<option value="${esc(v.name)}"${dL2.ib === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label></div>`,
+      nums.length < 1 ? 'Necesitas una variable dependiente cuantitativa.' : '');
     const dE = D.efa || {};
     h += card('efa', !!D.efa && nums.length >= 3, 'Análisis factorial exploratorio', 'Estructura interna de un cuestionario: KMO, Bartlett, análisis paralelo, cargas factoriales, comunalidades y varianza explicada.',
       `<div class="field"><span>Ítems</span>${chips('eI', nums, v => (dE.items ? dE.items.includes(v.name) : false))}</div>
@@ -629,6 +639,64 @@
     return { vals: catOf(v).map(x => (x === null ? null : x === lv[1] ? 1 : 0)), bin: true, lv };
   }
   function rCode01(v, info) { return info.bin ? `as.numeric(datos[[${rq(v)}]] == ${rq(info.lv[1])})  # 0 = ${info.lv[0]}, 1 = ${info.lv[1]}` : `datos[[${rq(v)}]]`; }
+
+  function runLmm(yN, xNames, gN, slopeN, inter = []) {
+    const sec = { title: `Modelo mixto: ${yN}`, test: 'Modelo lineal mixto (REML)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    xNames = xNames.filter(n => n !== yN && n !== gN);
+    if (gN === yN) { sec.error = 'La variable de agrupación no puede ser la variable dependiente.'; return sec; }
+    if (slopeN && !xNames.includes(slopeN)) { sec.error = `Para estimar una pendiente aleatoria de ${slopeN}, inclúyela también como efecto fijo.`; return sec; }
+    const yv = numOf(vByName(yN)), gv = vByName(gN).raw.map(x => (x === null ? null : String(x)));
+    const [iA, iB] = inter, hasI = !!(iA && iB);
+    if ((iA || iB) && !hasI) { sec.error = 'Para la interacción elige los dos predictores (A y B).'; return sec; }
+    if (hasI && (iA === iB || !xNames.includes(iA) || !xNames.includes(iB))) { sec.error = 'Los dos predictores de la interacción deben ser distintos y estar incluidos como efectos fijos.'; return sec; }
+    const { idx, cols, X } = design(xNames, i => yv[i] !== null && gv[i] !== null), n = idx.length;
+    if (hasI) { // columnas de la interacción: producto de las columnas de A por las de B (variables ficticias incluidas)
+      const ca = cols.map((c, k) => ({ c, k })).filter(o => o.c.v && o.c.v.name === iA), cb = cols.map((c, k) => ({ c, k })).filter(o => o.c.v && o.c.v.name === iB);
+      ca.forEach(a => cb.forEach(b => { cols.push({ name: `${a.c.name} × ${b.c.name}`, inter: true }); X.forEach(r => r.push(r[a.k] * r[b.k])); }));
+    }
+    if (n < 10) { sec.error = 'Hay muy pocas observaciones completas.'; return sec; }
+    const g = idx.map(i => gv[i]), y = idx.map(i => yv[i]), sizes = Object.values(g.reduce((a, k) => (a[k] = (a[k] || 0) + 1, a), {})), ng = sizes.length;
+    if (Math.max(...sizes) < 2) { sec.error = `Cada valor de «${gN}» aparece en una sola fila. Un modelo mixto necesita varias filas por persona o grupo: organiza los datos en formato largo (una fila por medición) o elige otra variable de agrupación.`; return sec; }
+    if (ng < 3) { sec.error = `Solo hay ${ng} grupos: se necesitan bastantes más para estimar la variabilidad entre grupos.`; return sec; }
+    const zcol = slopeN ? cols.findIndex(c => c.name === slopeN) : -1;
+    if (slopeN && (zcol < 0 || cols[zcol].level !== undefined)) { sec.error = 'La pendiente aleatoria debe ser un predictor cuantitativo.'; return sec; }
+    if (xNames.length && n < cols.length + 3) { sec.error = 'Hay pocas observaciones para tantos predictores.'; return sec; }
+    const r = S.lmm(y, X, g, zcol), r0 = S.lmm(y, y.map(() => [1]), g, -1);
+    if (!r || !isFinite(r.s2)) { sec.error = 'No se pudo estimar el modelo (colinealidad perfecta entre predictores o datos insuficientes).'; return sec; }
+    const sw = S.shapiro(r.resid.length > 5000 ? r.resid.slice(0, 5000) : r.resid);
+    sec.decision = `Se ajustó un modelo lineal mixto por REML con ${n} observaciones de ${ng} unidades de ${esc(gN)}, con intercepto aleatorio${hasI ? ` y la interacción ${esc(iA)} × ${esc(iB)}` : ''}${slopeN ? ` y pendiente aleatoria de ${esc(slopeN)}` : ''}.`;
+    sec.why.push(`Las observaciones no son independientes: varias pertenecen a la misma unidad (${esc(gN)}). Ignorarlo infla los falsos positivos; el modelo mixto lo tiene en cuenta con efectos aleatorios.`);
+    sec.why.push(`El intercepto aleatorio permite que cada ${esc(gN)} tenga su propio nivel medio${slopeN ? `, y la pendiente aleatoria, que el efecto de ${esc(slopeN)} varíe entre ellos` : ''}.`);
+    sec.why.push('Los grados de libertad de los efectos fijos se calculan con la aproximación de Satterthwaite (como lmerTest en R), y los datos perdidos no obligan a eliminar a la persona entera: se usan todas las mediciones disponibles.');
+    sec.checks.push(chk(r0.icc >= .05 ? 'ok' : 'info', `Correlación intraclase (modelo nulo): CCI = ${nz(r0.icc.toFixed(3))}. El ${f(r0.icc * 100, 1)} % de la varianza de ${esc(yN)} se debe a diferencias entre unidades de ${esc(gN)}.${r0.icc < .05 ? ' Es baja: el modelo mixto puede no aportar mucho frente a una regresión.' : ''}`));
+    sec.checks.push(chk(ng >= 20 ? 'ok' : 'info', `Número de grupos: ${ng} (entre ${Math.min(...sizes)} y ${Math.max(...sizes)} observaciones por grupo).${ng >= 20 ? '' : ' Con menos de 20 grupos la varianza aleatoria se estima con poca precisión.'}`));
+    if (r.singular) sec.warn = 'Ajuste singular: la varianza de algún efecto aleatorio es prácticamente 0 (o la correlación entre efectos aleatorios es ±1). El modelo es demasiado complejo para los datos: simplifica la parte aleatoria (por ejemplo, quita la pendiente aleatoria).';
+    if (sw) sec.checks.push(chk(sw.p >= .05 ? 'ok' : n >= 100 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}.${sw.p >= .05 ? '' : n >= 100 ? ' Con muchas observaciones el modelo es robusto a desviaciones moderadas.' : ' No se cumple y la muestra es pequeña.'}`));
+    sec.alt = 'Modelo lineal generalizado mixto (GLMM) si la variable dependiente es dicotómica o un recuento.';
+    sec.tables.push(apaTable('Efectos fijos', ['Predictor', '<i>B</i>', '<i>EE</i>', '<i>gl</i>', '<i>t</i>', '<i>p</i>', 'IC 95 %'],
+      cols.map((c, j) => [esc(c.name), f(r.beta[j], 3), f(r.se[j], 3), f(r.df[j], 1), f(r.t[j]), pv(r.p[j]), `[${f(r.ci[j][0], 3)}, ${f(r.ci[j][1], 3)}]`]),
+      'Grados de libertad de Satterthwaite. Las variables categóricas se codifican frente a su primera categoría.'));
+    const reRows = [[`${esc(gN)}: intercepto`, f(r.Tau[0][0], 3), f(Math.sqrt(r.Tau[0][0]), 3)]];
+    if (slopeN) reRows.push([`${esc(gN)}: pendiente de ${esc(slopeN)}`, f(r.Tau[1][1], 3), f(Math.sqrt(r.Tau[1][1]), 3)]);
+    reRows.push(['Residual', f(r.s2, 3), f(Math.sqrt(r.s2), 3)]);
+    sec.tables.push(apaTable('Efectos aleatorios', ['Componente', 'Varianza', '<i>DT</i>'], reRows,
+      (slopeN ? `Correlación entre intercepto y pendiente aleatorios: ${r2s(r.corRE)}. ` : '') + `${n} observaciones; ${ng} grupos. <i>R</i>² marginal = ${nz(r.r2m.toFixed(3))}; <i>R</i>² condicional = ${nz(r.r2c.toFixed(3))} (Nakagawa). CCI del modelo nulo = ${nz(r0.icc.toFixed(3))}.`));
+    const sig = cols.map((c, j) => ({ c, j })).filter(o => o.j > 0 && r.p[o.j] < .05), ns = cols.filter((c, j) => j > 0 && r.p[j] >= .05).map(c => esc(c.name));
+    let t = `Se ajustó un modelo lineal mixto (REML) para ${esc(yN)} con ${n} observaciones anidadas en ${ng} unidades de ${esc(gN)}, con intercepto aleatorio${slopeN ? ` y pendiente aleatoria de ${esc(slopeN)}` : ''}. La correlación intraclase del modelo nulo fue ${nz(r0.icc.toFixed(2))}: el ${f(r0.icc * 100, 1)} % de la varianza se debía a diferencias entre unidades de ${esc(gN)}. `;
+    if (cols.length > 1) {
+      const sigI = sig.filter(o => o.c.inter);
+      if (hasI) t += sigI.length ? `La interacción ${esc(iA)} × ${esc(iB)} fue estadísticamente significativa (${list(sigI.map(o => `<i>B</i> = ${f(r.beta[o.j], 2)}, <i>t</i>(${f(r.df[o.j], 1)}) = ${f(r.t[o.j])}, ${pt(r.p[o.j])}`))}): el efecto de ${esc(iA)} depende de ${esc(iB)}, por lo que los efectos principales deben interpretarse con cautela. ` : `La interacción ${esc(iA)} × ${esc(iB)} no fue estadísticamente significativa. `;
+      if (sig.filter(o => !o.c.inter).length) t += list(sig.filter(o => !o.c.inter).map(o => `${esc(o.c.name)} se asoció ${r.beta[o.j] > 0 ? 'positivamente' : 'negativamente'} con ${esc(yN)} (<i>B</i> = ${f(r.beta[o.j], 2)}, <i>t</i>(${f(r.df[o.j], 1)}) = ${f(r.t[o.j])}, ${pt(r.p[o.j])})`)) + '. ';
+      const nsM = cols.filter((c, j) => j > 0 && !c.inter && r.p[j] >= .05).map(c => esc(c.name));
+      if (nsM.length) t += `${list(nsM)} no ${nsM.length > 1 ? 'fueron predictores significativos' : 'fue un predictor significativo'}. `;
+      t += `Los efectos fijos explicaron el ${f(r.r2m * 100, 1)} % de la varianza (<i>R</i>² marginal) y el modelo completo, el ${f(r.r2c * 100, 1)} % (<i>R</i>² condicional).`;
+    }
+    sec.text.push(t);
+    const fx = (xNames.length ? xNames.map(rn).join(' + ') : '1') + (hasI ? ` + ${rn(iA)}:${rn(iB)}` : '');
+    sec.code = `# Modelo lineal mixto: ${yN}\nmodelo <- lmerTest::lmer(${rn(yN)} ~ ${fx} + (${slopeN ? `1 + ${rn(slopeN)}` : '1'} | ${rn(gN)}), data = datos, REML = TRUE)\nsummary(modelo)  # gl de Satterthwaite\nconfint(modelo, method = "Wald")\n` +
+      `performance::r2_nakagawa(modelo)\nperformance::icc(lmerTest::lmer(${rn(yN)} ~ 1 + (1 | ${rn(gN)}), data = datos, REML = TRUE))  # CCI del modelo nulo`;
+    return sec;
+  }
 
   function runModeration(yN, xN, wN) {
     const sec = { title: `Moderación: ${xN} → ${yN}, moderado por ${wN}`, test: 'Moderación (regresión con interacción)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
@@ -1082,6 +1150,7 @@
       if (isOn('fact')) add(runFactorial($('#fY').value, $('#fA').value, $('#fB').value));
       if (isOn('ancova')) add(runAncova($('#acY').value, $('#acG').value, checkedVals('acC')));
       if (isOn('binrel')) add(runBinRel(checkedVals('bR')));
+      if (isOn('lmm')) add(runLmm($('#lmY').value, checkedVals('lmX'), $('#lmG').value, $('#lmS').value, [$('#lmIA').value, $('#lmIB').value]));
       if (isOn('mod')) add(runModeration($('#moY').value, $('#moX').value, $('#moW').value));
       if (isOn('med')) add(runMediation($('#meY').value, $('#meX').value, $('#meM').value));
       if (isOn('efa')) add(runEfa(checkedVals('eI'), $('#eN').value, $('#eR').value));
