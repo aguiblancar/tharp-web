@@ -241,6 +241,11 @@
        <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end"><label class="field"><span>Interacción (opcional): predictor A</span><select id="lmIA"><option value="">Sin interacción</option>${nums.concat(facs).map(v => `<option value="${esc(v.name)}"${dL2.ia === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
        <label class="field"><span>× predictor B</span><select id="lmIB"><option value="">—</option>${nums.concat(facs).map(v => `<option value="${esc(v.name)}"${dL2.ib === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label></div>`,
       nums.length < 1 ? 'Necesitas una variable dependiente cuantitativa.' : '');
+    const dCf = D.cfa || [];
+    h += card('cfa', !!D.cfa && nums.length >= 3, 'Análisis factorial confirmatorio', 'Contrasta una estructura de factores definida de antemano: índices de ajuste (CFI, TLI, RMSEA, SRMR), cargas estandarizadas, correlaciones entre factores y fiabilidad (ω, AVE).',
+      `<p class="small muted" style="margin:0 0 10px">Asigna cada ítem a un solo factor. Deja vacíos los factores que no uses.</p>` +
+      [0, 1, 2, 3].map(k => `<div class="field" style="border-top:1px solid var(--line);padding-top:10px"><span>Factor ${k + 1}: <input id="cfN${k}" value="${esc((dCf[k] && dCf[k].name) || `Factor ${k + 1}`)}" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px;width:200px"></span>${chips('cfI' + k, nums, v => !!(dCf[k] && dCf[k].items.includes(v.name)))}</div>`).join(''),
+      nums.length < 3 ? 'Necesitas al menos tres ítems cuantitativos.' : '');
     const dE = D.efa || {};
     h += card('efa', !!D.efa && nums.length >= 3, 'Análisis factorial exploratorio', 'Estructura interna de un cuestionario: KMO, Bartlett, análisis paralelo, cargas factoriales, comunalidades y varianza explicada.',
       `<div class="field"><span>Ítems</span>${chips('eI', nums, v => (dE.items ? dE.items.includes(v.name) : false))}</div>
@@ -639,6 +644,63 @@
     return { vals: catOf(v).map(x => (x === null ? null : x === lv[1] ? 1 : 0)), bin: true, lv };
   }
   function rCode01(v, info) { return info.bin ? `as.numeric(datos[[${rq(v)}]] == ${rq(info.lv[1])})  # 0 = ${info.lv[0]}, 1 = ${info.lv[1]}` : `datos[[${rq(v)}]]`; }
+
+  function runCfa(spec) {
+    const sec = { title: 'Análisis factorial confirmatorio', test: 'AFC (máxima verosimilitud)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (!spec.length) { sec.error = 'Asigna ítems al menos a un factor.'; return sec; }
+    const all = spec.flatMap(fc => fc.items), dup = all.filter((v, i) => all.indexOf(v) !== i);
+    if (dup.length) { sec.error = `Cada ítem debe estar en un solo factor (repetido: ${list([...new Set(dup)].map(esc))}).`; return sec; }
+    if (new Set(spec.map(fc => fc.name)).size < spec.length) { sec.error = 'Cada factor debe tener un nombre distinto.'; return sec; }
+    if (spec.length === 1 && spec[0].items.length < 3) { sec.error = 'Un modelo de un solo factor necesita al menos 3 ítems para poder estimarse.'; return sec; }
+    if (spec.some(fc => fc.items.length < 2)) { sec.error = 'Cada factor necesita al menos 2 ítems (mejor 3 o más).'; return sec; }
+    const vars = all.map(vByName), cols = vars.map(numOf), idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null)), n = idx.length, p = all.length;
+    if (n < p + 5) { sec.error = `Hay muy pocos casos completos (${n}) para ${p} ítems.`; return sec; }
+    const X = idx.map(i => cols.map(c => c[i]));
+    if (vars.some((_, j) => S.sd(X.map(r => r[j])) === 0)) { sec.error = 'Algún ítem tiene el mismo valor en todos los casos. Exclúyelo.'; return sec; }
+    const facIdx = []; let o = 0; spec.forEach(fc => { facIdx.push(fc.items.map(() => o++)); });
+    const r = S.cfa(X, facIdx), m = spec.length;
+    if (!isFinite(r.chi)) { sec.error = 'El modelo no pudo estimarse (matriz de covarianzas singular o modelo no identificado).'; return sec; }
+    const good = r.cfi >= .95 && r.tli >= .95 && r.rmsea <= .06 && r.srmr <= .08, ok = r.cfi >= .90 && r.tli >= .90 && r.rmsea <= .08 && r.srmr <= .10;
+    const verdict = good ? 'bueno' : ok ? 'aceptable' : 'insuficiente';
+    sec.decision = `Se contrastó un modelo de ${m} factor${m > 1 ? 'es correlacionados' : ''} con ${p} ítems y ${n} casos completos, estimado por máxima verosimilitud.`;
+    sec.why.push('El análisis factorial confirmatorio comprueba si los datos se ajustan a una estructura de factores definida de antemano (por la teoría o por estudios previos), a diferencia del exploratorio, que la descubre.');
+    sec.why.push('Cada factor se identifica fijando a 1 la carga de su primer ítem (ítem marcador); por eso se interpretan sobre todo las cargas estandarizadas.');
+    sec.why.push('El ajuste se valora con varios índices a la vez (Hu y Bentler, 1999): CFI y TLI ≥ .95, RMSEA ≤ .06 y SRMR ≤ .08 indican buen ajuste; CFI y TLI ≥ .90 y RMSEA ≤ .08, ajuste aceptable.');
+    sec.checks.push(chk(good ? 'ok' : ok ? 'info' : 'no', `Ajuste global ${verdict}: CFI = ${nz(r.cfi.toFixed(3))}, TLI = ${nz(r.tli.toFixed(3))}, RMSEA = ${nz(r.rmsea.toFixed(3))}, SRMR = ${nz(r.srmr.toFixed(3))}.`));
+    if (!r.conv) sec.warn = 'La estimación no convergió del todo: los resultados pueden no ser fiables. Revisa el modelo (ítems con muy poca relación con su factor) o la muestra.';
+    if (r.heywood.length) sec.warn = `Caso Heywood: ${list(r.heywood.map(j => esc(all[j])))} ${r.heywood.length > 1 ? 'tienen' : 'tiene'} una varianza residual negativa, lo que indica un modelo mal especificado o una muestra pequeña. Los resultados no son interpretables tal cual.`;
+    const weak = all.filter((_, j) => Math.abs(r.std[j]) < .4);
+    sec.checks.push(weak.length ? chk('no', `Cargas estandarizadas < .40: ${list(weak.map(esc))}. Estos ítems apenas reflejan su factor.`) : chk('ok', 'Todas las cargas estandarizadas son ≥ .40.'));
+    const neg = all.filter((_, j) => r.std[j] < -.3); if (neg.length) sec.checks.push(chk('info', `Cargas negativas en ${list(neg.map(esc))}: probablemente son ítems inversos.`));
+    sec.checks.push(chk(n >= 200 ? 'ok' : 'info', `Tamaño muestral: ${n} casos.${n >= 200 ? '' : ' Se recomiendan al menos 200 para un AFC estable.'}`));
+    sec.checks.push(chk('info', 'La máxima verosimilitud supone variables continuas y normales. Con ítems tipo Likert de pocas categorías (5 o menos), considera en R un estimador para datos ordinales (WLSMV) o la versión robusta (MLR).'));
+    if (m > 1) { const fl = []; for (let a = 0; a < m; a++) for (let b = 0; b < a; b++) if (Math.abs(r.facCor[a][b]) >= Math.sqrt(Math.min(r.rel[a].ave, r.rel[b].ave))) fl.push(`${esc(spec[a].name)} y ${esc(spec[b].name)}`);
+      sec.checks.push(fl.length ? chk('no', `Validez discriminante (Fornell-Larcker) dudosa entre ${list(fl)}: su correlación supera la raíz de la AVE.`) : chk('ok', 'Validez discriminante (Fornell-Larcker): cada factor comparte más varianza con sus ítems que con los demás factores.')); }
+    sec.alt = 'Si el ajuste es insuficiente, revisa ítems con cargas bajas o un análisis factorial exploratorio previo. Con ítems ordinales, el estimador WLSMV en lavaan.';
+    const crit = (v, g0, a0, inv) => (inv ? (v <= g0 ? 'bueno' : v <= a0 ? 'aceptable' : 'insuficiente') : (v >= g0 ? 'bueno' : v >= a0 ? 'aceptable' : 'insuficiente'));
+    sec.tables.push(apaTable('Índices de ajuste del modelo', ['χ²', '<i>gl</i>', '<i>p</i>', 'CFI', 'TLI', 'RMSEA', 'IC 90 % RMSEA', 'SRMR', '<i>n</i>'],
+      [[f(r.chi), r.df, pv(r.pval), nz(r.cfi.toFixed(3)), nz(r.tli.toFixed(3)), nz(r.rmsea.toFixed(3)), `[${nz(r.rmseaCI[0].toFixed(3))}, ${nz(r.rmseaCI[1].toFixed(3))}]`, nz(r.srmr.toFixed(3)), n]],
+      `Valoración: CFI ${crit(r.cfi, .95, .90)}, TLI ${crit(r.tli, .95, .90)}, RMSEA ${crit(r.rmsea, .06, .08, true)}, SRMR ${crit(r.srmr, .08, .10, true)}. Estimación por máxima verosimilitud.`));
+    const rows = []; spec.forEach((fc, k) => fc.items.forEach((it, i) => { const j = facIdx[k][i], e = r.est.find(q => q.t === 'l' && q.j === j);
+      rows.push([i === 0 ? `<b>${esc(fc.name)}</b>` : '', esc(it), e ? f(e.est, 3) : '1 (fijo)', e ? f(e.se, 3) : '—', e ? f(e.z) : '—', e ? pv(e.p) : '—', r2s(r.std[j]), nz((1 - r.std[j] ** 2).toFixed(2))]); }));
+    sec.tables.push(apaTable('Cargas factoriales', ['Factor', 'Ítem', '<i>B</i>', '<i>EE</i>', '<i>z</i>', '<i>p</i>', 'β', 'Varianza residual (est.)'], rows, 'β = carga estandarizada. El primer ítem de cada factor fija la escala (carga = 1).'));
+    sec.tables.push(apaTable('Fiabilidad y validez convergente', ['Factor', 'Ítems', 'ω', 'AVE'], spec.map((fc, k) => [esc(fc.name), fc.items.length, nz(r.rel[k].omega.toFixed(3)), nz(r.rel[k].ave.toFixed(3))]),
+      'ω = fiabilidad compuesta (omega) a partir del AFC; los ítems con carga negativa (inversos) se consideran recodificados. AVE = varianza media extraída (≥ .50 indica validez convergente).'));
+    if (m > 1) sec.tables.push(apaTable('Correlaciones entre factores', [''].concat(spec.map(fc => esc(fc.name))), spec.map((fc, a) => [esc(fc.name)].concat(spec.map((_, b) => (a === b ? '—' : b < a ? r2s(r.facCor[a][b]) : ''))))));
+    let t = `Se realizó un análisis factorial confirmatorio por máxima verosimilitud para contrastar un modelo de ${m} factor${m > 1 ? 'es correlacionados' : ''} (${spec.map(fc => `${esc(fc.name)}: ${fc.items.length} ítems`).join('; ')}) con ${n} participantes. `;
+    t += `El ajuste del modelo fue ${verdict}, χ²(${r.df}) = ${f(r.chi)}, ${pt(r.pval)}, CFI = ${nz(r.cfi.toFixed(2))}, TLI = ${nz(r.tli.toFixed(2))}, RMSEA = ${nz(r.rmsea.toFixed(3))}, IC 90 % [${nz(r.rmseaCI[0].toFixed(3))}, ${nz(r.rmseaCI[1].toFixed(3))}], SRMR = ${nz(r.srmr.toFixed(3))}. `;
+    const absS = r.std.map(Math.abs); t += `Las cargas estandarizadas oscilaron entre ${nz(Math.min(...absS).toFixed(2))} y ${nz(Math.max(...absS).toFixed(2))}${neg.length ? ' en valor absoluto' : ''}`;
+    t += `, y la fiabilidad compuesta fue ${list(spec.map((fc, k) => `${m > 1 ? `${esc(fc.name)} ` : ''}ω = ${nz(r.rel[k].omega.toFixed(2))}`))}.`;
+    if (m > 1) { const cs = []; for (let a = 0; a < m; a++) for (let b = 0; b < a; b++) cs.push(r.facCor[a][b]); t += ` Las correlaciones entre factores oscilaron entre ${r2s(Math.min(...cs))} y ${r2s(Math.max(...cs))}.`; }
+    sec.text.push(t);
+    const syn = n0 => /^[A-Za-z.][A-Za-z0-9._]*$/.test(n0), allSyn = all.every(syn) && spec.every(fc => syn(fc.name.replace(/\s+/g, '_')));
+    const iname = (it, j) => (allSyn ? it : `i${j + 1}`), fname = (fc, k) => (allSyn ? fc.name.replace(/\s+/g, '_') : `F${k + 1}`);
+    let jj = 0; const modelo = spec.map((fc, k) => `${fname(fc, k)} =~ ${fc.items.map(it => iname(it, jj++)).join(' + ')}`).join('\n');
+    sec.code = `# Análisis factorial confirmatorio (lavaan)\nitems <- datos[complete.cases(datos[, c(${all.map(rq).join(', ')})]), c(${all.map(rq).join(', ')})]\n` +
+      (allSyn ? '' : `names(items) <- c(${all.map((_, j) => rq('i' + (j + 1))).join(', ')})  # ${all.map((it, j) => `i${j + 1} = ${it}`).join('; ')}\n`) +
+      `modelo <- '\n${modelo}\n'\najuste <- lavaan::cfa(modelo, data = items)\nsummary(ajuste, fit.measures = TRUE, standardized = TRUE)\nlavaan::fitMeasures(ajuste, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr"))\nlavaan::standardizedSolution(ajuste)`;
+    return sec;
+  }
 
   function runLmm(yN, xNames, gN, slopeN, inter = []) {
     const sec = { title: `Modelo mixto: ${yN}`, test: 'Modelo lineal mixto (REML)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
@@ -1150,6 +1212,7 @@
       if (isOn('fact')) add(runFactorial($('#fY').value, $('#fA').value, $('#fB').value));
       if (isOn('ancova')) add(runAncova($('#acY').value, $('#acG').value, checkedVals('acC')));
       if (isOn('binrel')) add(runBinRel(checkedVals('bR')));
+      if (isOn('cfa')) add(runCfa([0, 1, 2, 3].map(k => ({ name: $('#cfN' + k).value.trim() || `Factor ${k + 1}`, items: checkedVals('cfI' + k) })).filter(fc => fc.items.length)));
       if (isOn('lmm')) add(runLmm($('#lmY').value, checkedVals('lmX'), $('#lmG').value, $('#lmS').value, [$('#lmIA').value, $('#lmIB').value]));
       if (isOn('mod')) add(runModeration($('#moY').value, $('#moX').value, $('#moW').value));
       if (isOn('med')) add(runMediation($('#meY').value, $('#meX').value, $('#meM').value));
@@ -1324,7 +1387,7 @@
   }
   const DEMO_DEFAULTS = { comp: { y: ['ansiedad_post'], g: 'grupo' }, paired: { vars: ['ansiedad_pre', 'ansiedad_post', 'ansiedad_seguimiento'] }, chi: { a: 'sexo', b: 'fuma' },
     reg: { y: 'rendimiento', x: ['horas_sueno', 'estres', 'ansiedad_post'] }, logit: { y: 'fuma', x: ['estres', 'sexo', 'edad'] },
-    fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, efa: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'] }, mod: { y: 'rendimiento', x: 'estres', w: 'horas_sueno' }, med: { x: 'ansiedad_pre', m: 'ansiedad_post', y: 'autoestima' }, ancova: { y: 'ansiedad_post', g: 'grupo', c: ['ansiedad_pre'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
+    fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, efa: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'] }, cfa: [{ name: 'Autoestima', items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'] }], mod: { y: 'rendimiento', x: 'estres', w: 'horas_sueno' }, med: { x: 'ansiedad_pre', m: 'ansiedad_post', y: 'autoestima' }, ancova: { y: 'ansiedad_post', g: 'grupo', c: ['ansiedad_pre'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
 
   // ---------- navegación ----------
   function show(n) {

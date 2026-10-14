@@ -630,7 +630,80 @@
       icc: q === 1 ? Tau[0][0] / (Tau[0][0] + s2) : null, resid };
   }
 
+  // ---------- análisis factorial confirmatorio (ML), como lavaan::cfa ----------
+  // X: n × p (casos completos); factores: lista de listas de índices de columna (cada ítem en un solo factor; el primero, marcador = 1)
+  function ncChisqCdf(x, df, ncp) { // ji-cuadrado no central (mezcla de Poisson)
+    if (ncp <= 0) return J.chisquare.cdf(x, df);
+    const h = ncp / 2, j0 = Math.floor(h); let s = 0;
+    const term = j => Math.exp(-h + j * Math.log(h) - lfact(j)) * J.chisquare.cdf(x, df + 2 * j);
+    for (let j = j0; j < j0 + 2000; j++) { const t = term(j); s += t; if (t < 1e-14 && j > j0 + 10) break; }
+    for (let j = j0 - 1; j >= 0; j--) { const t = term(j); s += t; if (t < 1e-14) break; }
+    return s;
+  }
+  function cfa(X, factores) {
+    const N = X.length, p = X[0].length, m = factores.length, cm = Array.from({ length: p }, (_, j) => mean(X.map(r => r[j])));
+    const S = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => sum(X.map(r => (r[a] - cm[a]) * (r[b] - cm[b]))) / N)); // como lavaan (likelihood = "normal")
+    const fac = new Array(p).fill(-1); factores.forEach((it, k) => it.forEach(j => fac[j] = k));
+    // parámetros: cargas libres, varianzas y covarianzas de los factores, varianzas residuales
+    const P = [];
+    factores.forEach((it, k) => it.slice(1).forEach(j => P.push({ t: 'l', j, k })));
+    for (let k = 0; k < m; k++) for (let l = 0; l <= k; l++) P.push({ t: 'f', k, l });
+    for (let j = 0; j < p; j++) P.push({ t: 'u', j });
+    const build = th => {
+      const L = Array.from({ length: p }, () => new Array(m).fill(0)), Phi = Array.from({ length: m }, () => new Array(m).fill(0)), Psi = new Array(p).fill(0);
+      factores.forEach((it, k) => L[it[0]][k] = 1);
+      P.forEach((q, i) => { if (q.t === 'l') L[q.j][q.k] = th[i]; else if (q.t === 'f') Phi[q.k][q.l] = Phi[q.l][q.k] = th[i]; else Psi[q.j] = th[i]; });
+      const Sig = matMul(matMul(L, Phi), tr(L)).map((r, a) => r.map((v, b) => v + (a === b ? Psi[a] : 0)));
+      return { L, Phi, Psi, Sig };
+    };
+    const ldS = Math.log(det(S));
+    const F = th => { const { Sig } = build(th), d = det(Sig); if (!(d > 0)) return 1e10; const Si = inv(Sig); if (!Si) return 1e10;
+      return Math.log(d) + sum(S.map((r, a) => sum(r.map((v, b) => v * Si[b][a])))) - ldS - p; };
+    const grad = th => { const { L, Phi, Sig } = build(th), Si = inv(Sig), D = Sig.map((r, a) => r.map((v, b) => v - S[a][b]));
+      const Om = matMul(matMul(Si, D), Si), OL = matMul(Om, L), LOL = matMul(tr(L), OL), OLP = matMul(OL, Phi);
+      return P.map(q => (q.t === 'l' ? 2 * OLP[q.j][q.k] : q.t === 'f' ? (q.k === q.l ? LOL[q.k][q.k] : 2 * LOL[q.k][q.l]) : Om[q.j][q.j])); };
+    // valores iniciales
+    const th0 = P.map(q => { if (q.t === 'u') return S[q.j][q.j] / 2;
+      const it = factores[q.t === 'l' ? q.k : q.k], mk = it[0];
+      if (q.t === 'l') return S[q.j][mk] / Math.max(S[mk][mk] / 2, 1e-6);
+      if (q.k === q.l) return S[mk][mk] / 2; return 0; });
+    // BFGS con búsqueda lineal por retroceso
+    let th = th0.slice(), f0 = F(th), g = grad(th), Hn = ident(P.length), conv = false, it = 0;
+    for (; it < 2000; it++) {
+      const d = Hn.map(r => -sum(r.map((v, k) => v * g[k]))); let a = 1, th1, f1;
+      const slope = sum(d.map((v, k) => v * g[k])); if (slope >= 0) { Hn = ident(P.length); continue; }
+      for (let k = 0; k < 60; k++) { th1 = th.map((v, i) => v + a * d[i]); f1 = F(th1); if (f1 <= f0 + 1e-4 * a * slope) break; a /= 2; }
+      const g1 = grad(th1), s = th1.map((v, i) => v - th[i]), yv = g1.map((v, i) => v - g[i]), sy = sum(s.map((v, i) => v * yv[i]));
+      if (sy > 1e-12) { const Hy = Hn.map(r => sum(r.map((v, k) => v * yv[k]))), yHy = sum(yv.map((v, i) => v * Hy[i]));
+        Hn = Hn.map((r, i) => r.map((v, j) => v + (sy + yHy) * s[i] * s[j] / (sy * sy) - (Hy[i] * s[j] + s[i] * Hy[j]) / sy)); }
+      const df_ = Math.abs(f0 - f1); th = th1; f0 = f1; g = g1;
+      if (Math.max(...g.map(Math.abs)) < 1e-9 || (df_ < 1e-14 && Math.max(...g.map(Math.abs)) < 1e-6)) { conv = true; break; }
+    }
+    const B = build(th), Si = inv(B.Sig);
+    // errores típicos con la información esperada: I_ab = ½ tr(Σ⁻¹ ∂Σ/∂a Σ⁻¹ ∂Σ/∂b)
+    const dS = P.map((_, i) => { const h = 1e-6 * Math.max(1, Math.abs(th[i])), a = th.slice(), b = th.slice(); a[i] += h; b[i] -= h; const A = build(a).Sig, Bm = build(b).Sig; return A.map((r, x) => r.map((v, y) => (v - Bm[x][y]) / (2 * h))); });
+    const SdS = dS.map(D => matMul(Si, D));
+    const I = P.map((_, a) => P.map((__, b) => .5 * sum(SdS[a].map((r, x) => sum(r.map((v, y) => v * SdS[b][y][x])))) * N));
+    const Ii = inv(I), se = Ii ? Ii.map((r, i) => Math.sqrt(r[i])) : P.map(() => NaN);
+    const chi = N * f0, df = p * (p + 1) / 2 - P.length, pval = df > 0 ? pChi(chi, df) : NaN;
+    const chiB = N * (sum(S.map((r, i) => Math.log(r[i]))) - ldS), dfB = p * (p - 1) / 2;
+    const cfi = 1 - Math.max(chi - df, 0) / Math.max(chiB - dfB, chi - df, 1e-12), tli = df > 0 ? ((chiB / dfB) - (chi / df)) / ((chiB / dfB) - 1) : NaN;
+    const rmsea = df > 0 ? Math.sqrt(Math.max(0, (chi - df) / (N * df))) : NaN;
+    const ncpAt = target => { if (ncChisqCdf(chi, df, 0) < target) return 0; let lo = 0, hi = Math.max(10, chi * 4); while (ncChisqCdf(chi, df, hi) > target) hi *= 2;
+      for (let k = 0; k < 200; k++) { const mid = (lo + hi) / 2; if (ncChisqCdf(chi, df, mid) > target) lo = mid; else hi = mid; } return (lo + hi) / 2; };
+    const rmseaCI = df > 0 ? [Math.sqrt(ncpAt(.95) / (N * df)), Math.sqrt(ncpAt(.05) / (N * df))] : [NaN, NaN];
+    let srs = 0, cnt = 0; for (let a = 0; a < p; a++) for (let b = 0; b <= a; b++) { srs += ((S[a][b] - B.Sig[a][b]) / Math.sqrt(S[a][a] * S[b][b])) ** 2; cnt++; }
+    const srmr = Math.sqrt(srs / cnt);
+    const est = P.map((q, i) => ({ ...q, est: th[i], se: se[i], z: th[i] / se[i], p: pZ(th[i] / se[i]) }));
+    const std = Array.from({ length: p }, (_, j) => B.L[j][fac[j]] * Math.sqrt(B.Phi[fac[j]][fac[j]]) / Math.sqrt(B.Sig[j][j]));
+    const facCor = B.Phi.map((r, k) => r.map((v, l) => v / Math.sqrt(B.Phi[k][k] * B.Phi[l][l])));
+    const rel = factores.map((it, k) => { const sl = sum(it.map(j => Math.abs(B.L[j][k]))) ** 2 * B.Phi[k][k], su = sum(it.map(j => B.Psi[j])); // |λ|: los ítems inversos cuentan como recodificados
+      return { omega: sl / (sl + su), ave: mean(it.map(j => std[j] ** 2)) }; });
+    return { N, p, m, est, L: B.L, Phi: B.Phi, Psi: B.Psi, std, facCor, rel, chi, df, pval, cfi, tli, rmsea, rmseaCI, srmr, chiB, dfB, conv, iter: it,
+      heywood: B.Psi.map((v, j) => v < 0 ? j : -1).filter(j => j >= 0) };
+  }
+
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
-    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
+    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
 })(typeof window !== 'undefined' ? window : this);
