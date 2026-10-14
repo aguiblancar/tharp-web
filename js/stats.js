@@ -363,7 +363,55 @@
     return Object.assign(out, { sse: full.sse, dfE, mse, resid: full.e, r2: full.r2 });
   }
 
+  // ---------- ANCOVA de un factor (SC tipo III, codificación de efectos) ----------
+  function ancova(y, g, L, C) { // g: índice de nivel por caso; C: n × q covariables
+    const n = y.length, q = C[0].length;
+    const eff = (i, j) => (g[i] === j ? 1 : g[i] === L - 1 ? -1 : 0);
+    const G = Array.from({ length: L - 1 }, (_, j) => y.map((_, i) => eff(i, j)));
+    const cov = Array.from({ length: q }, (_, c) => C.map(r => r[c]));
+    const build = sets => y.map((_, i) => [1].concat(...sets.map(s => s.map(col => col[i]))));
+    const full = olsCore(build([G, cov]), y); if (!full) return null;
+    const dfE = n - full.p, mse = full.sse / dfE;
+    const term = (sets, df) => { const red = olsCore(build(sets), y); if (!red) return null; const ss = red.sse - full.sse, F = (ss / df) / mse;
+      return { ss, df, ms: ss / df, F, p: pF(F, df, dfE), peta2: ss / (ss + full.sse) }; };
+    const factor = term([cov], L - 1);
+    const covs = cov.map((_, c) => term([G, cov.filter((__, k) => k !== c)], 1));
+    // homogeneidad de pendientes: añadir las interacciones factor × covariable
+    const inter = []; G.forEach(gc => cov.forEach(cc => inter.push(gc.map((v, i) => v * cc[i]))));
+    const fi = olsCore(build([G, cov, inter]), y); let slopes = null;
+    if (fi) { const dfi = inter.length, dfr = n - fi.p, F = ((full.sse - fi.sse) / dfi) / (fi.sse / dfr); slopes = { F, df1: dfi, df2: dfr, p: pF(F, dfi, dfr) }; }
+    // medias ajustadas (en la media de las covariables) y comparaciones por pares
+    const cm = cov.map(mean), V = full.Ai.map(r => r.map(v => v * mse));
+    const lvec = j => [1].concat(Array.from({ length: L - 1 }, (_, k) => (j === k ? 1 : j === L - 1 ? -1 : 0)), cm);
+    const est = l => sum(l.map((v, k) => v * full.b[k])), se = l => Math.sqrt(sum(l.map((a, r) => sum(l.map((b, c) => a * V[r][c] * b)))));
+    const tc = tcrit(dfE), adj = Array.from({ length: L }, (_, j) => { const l = lvec(j), m = est(l), s = se(l); return { mean: m, se: s, ci: [m - tc * s, m + tc * s] }; });
+    const pairs = [];
+    for (let a = 0; a < L; a++) for (let b = a + 1; b < L; b++) {
+      const l = lvec(a).map((v, k) => v - lvec(b)[k]), d = est(l), s = se(l), t = d / s;
+      pairs.push({ i: a, j: b, diff: d, se: s, t, p: pT(t, dfE) });
+    }
+    holm(pairs.map(o => o.p)).forEach((p, k) => pairs[k].padj = p);
+    return { factor, covs, slopes, adj, pairs, dfE, mse, sse: full.sse, resid: full.e, b: full.b, r2: full.r2 };
+  }
+
+  // ---------- variables dicotómicas relacionadas: McNemar y Q de Cochran ----------
+  function binomTwoSided(x, n) { // binomial exacta con p = 0.5 (como binom.test de R)
+    const lf = [0]; for (let i = 1; i <= n; i++) lf[i] = lf[i - 1] + Math.log(i);
+    const pr = k => Math.exp(lf[n] - lf[k] - lf[n - k] - n * Math.LN2), d = pr(x); let p = 0;
+    for (let k = 0; k <= n; k++) { const v = pr(k); if (v <= d * (1 + 1e-7)) p += v; }
+    return Math.min(1, p);
+  }
+  function mcnemar(b, c) { // b: 0→1, c: 1→0 (casos discordantes)
+    const nd = b + c, chi = nd ? (Math.abs(b - c) - 1) ** 2 / nd : 0;
+    return { b, c, chi, df: 1, p: nd ? pChi(chi, 1) : 1, pExact: nd ? binomTwoSided(Math.min(b, c), nd) : 1 };
+  }
+  function cochranQ(M) { // M: n × k con 0/1
+    const k = M[0].length, Cj = Array.from({ length: k }, (_, j) => sum(M.map(r => r[j]))), Ri = M.map(sum), N = sum(Ri);
+    const den = k * N - sum(Ri.map(r => r * r)), Q = den ? (k - 1) * (k * sum(Cj.map(c => c * c)) - N * N) / den : 0;
+    return { Q, df: k - 1, p: den ? pChi(Q, k - 1) : 1, props: Cj.map(c => c / M.length), n: M.length };
+  }
+
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
-    tTestPaired, wilcoxonSigned, rmAnova, friedman, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
+    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
 })(typeof window !== 'undefined' ? window : this);

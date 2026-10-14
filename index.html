@@ -318,7 +318,7 @@ footer a:hover{text-decoration:underline}
     <h2 style="margin-top:10px">De tu archivo a los resultados, en tres pasos.</h2>
     <div class="grid3">
       <div class="card"><span class="num">01</span><h3>Sube tus datos</h3><p>Excel, CSV o archivos de SPSS (.sav) y JASP (.jasp), con sus etiquetas y valores perdidos. Tharp detecta las variables, sus tipos y los participantes.</p></div>
-      <div class="card"><span class="num">02</span><h3>Elige qué necesitas</h3><p>Descriptivos, correlaciones, comparación de grupos, medidas pre/post o de varios momentos, chi-cuadrado, regresión lineal y logística, ANOVA factorial o alfa de Cronbach.</p></div>
+      <div class="card"><span class="num">02</span><h3>Elige qué necesitas</h3><p>Descriptivos, correlaciones, comparación de grupos, medidas pre/post o de varios momentos, chi-cuadrado, McNemar, regresión lineal y logística, ANOVA factorial, ANCOVA o alfa de Cronbach.</p></div>
       <div class="card"><span class="num">03</span><h3>Descarga los resultados</h3><p>Tablas APA, gráficos y un borrador del apartado de resultados en Word, y el script de R que reproduce cada análisis.</p></div>
     </div>
   </div>
@@ -362,7 +362,7 @@ footer a:hover{text-decoration:underline}
     <h2 style="margin-top:10px">Un resultado solo vale si puedes confiar en él.</h2>
     <p class="lead" style="margin-top:14px">Cada prueba de Tharp se compara automáticamente con R y con las librerías estadísticas de referencia de Python antes de cada versión. Si un número no coincide, no se publica.</p>
     <div class="stats">
-      <div><b>126</b><span>comprobaciones automáticas frente a R, scipy, statsmodels, pingouin y scikit-posthocs</span></div>
+      <div><b>152</b><span>comprobaciones automáticas frente a R, scipy, statsmodels, pingouin y scikit-posthocs</span></div>
       <div><b>4</b><span>tipos de archivo cuyo script R se ejecuta en R para comprobar que da los mismos resultados</span></div>
       <div><b>0</b><span>datos enviados a servidores: todo se calcula en tu navegador</span></div>
       <div><b>100 %</b><span>de los análisis con su código R para reproducirlos</span></div>
@@ -371,8 +371,8 @@ footer a:hover{text-decoration:underline}
       <p><b>Comparación de grupos:</b> t de Student y de Welch, U de Mann-Whitney, ANOVA de un factor y de Welch, Kruskal-Wallis, con post hoc de Tukey, Games-Howell o Dunn-Holm.</p>
       <p><b>Supuestos:</b> Shapiro-Wilk (algoritmo de Royston, como R), Levene centrado en la media (como SPSS), Breusch-Pagan, Durbin-Watson, VIF y distancia de Cook.</p>
       <p><b>Medidas relacionadas:</b> t para muestras relacionadas y Wilcoxon (2 momentos); ANOVA de medidas repetidas con prueba de esfericidad de Mauchly y corrección de Greenhouse-Geisser, o Friedman (3 o más), con comparaciones por pares de Holm.</p>
-      <p><b>Asociación:</b> Pearson y Spearman, chi-cuadrado con residuos tipificados corregidos, prueba exacta de Fisher y V de Cramér.</p>
-      <p><b>Modelos:</b> regresión lineal (con errores robustos HC3 si hay heterocedasticidad), regresión logística binaria y ANOVA factorial con sumas de cuadrados de tipo III, como SPSS.</p>
+      <p><b>Asociación:</b> Pearson y Spearman, chi-cuadrado con residuos tipificados corregidos, prueba exacta de Fisher y V de Cramér; McNemar y Q de Cochran para respuestas sí/no relacionadas.</p>
+      <p><b>Modelos:</b> regresión lineal (con errores robustos HC3 si hay heterocedasticidad), regresión logística binaria, ANOVA factorial y ANCOVA con sumas de cuadrados de tipo III, homogeneidad de pendientes y medias ajustadas.</p>
       <p><b>Fiabilidad:</b> alfa de Cronbach, alfa estandarizado, correlación ítem-total corregida y alfa si se elimina el ítem, con ítems inversos.</p>
     </div>
   </div>
@@ -591,7 +591,7 @@ footer a:hover{text-decoration:underline}
     } else {
       const r = result();
       // análisis que la app ya realiza (el resto se recomienda, pero se avisa de que aún no está disponible)
-      r.inApp = ['Estadísticos descriptivos','Prueba t de muestras independientes','Prueba t de muestras relacionadas','ANOVA de un factor','U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis','Chi-cuadrado de independencia','Correlación de Pearson','Correlación de Spearman','Chi-cuadrado + V de Cramér','Regresión lineal','Regresión logística binaria','ANOVA de medidas repetidas','Prueba de Friedman'].includes(r.name);
+      r.inApp = ['Estadísticos descriptivos','Prueba t de muestras independientes','Prueba t de muestras relacionadas','ANOVA de un factor','U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis','Chi-cuadrado de independencia','Correlación de Pearson','Correlación de Spearman','Chi-cuadrado + V de Cramér','Regresión lineal','Regresión logística binaria','ANOVA de medidas repetidas','Prueba de Friedman','Prueba de McNemar','Q de Cochran'].includes(r.name);
       html += '<div class="result"><div class="eyebrow">Tu análisis recomendado</div><h3>'+r.name+'</h3>';
       html += '<h4>Por qué</h4><ul>'+r.why.map(w=>'<li>'+w+'</li>').join('')+'</ul>';
       html += '<h4>Supuestos que debes comprobar</h4><ul>'+r.assum.map(w=>'<li>'+w+'</li>').join('')+'</ul>';

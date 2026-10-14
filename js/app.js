@@ -204,6 +204,15 @@
        <label class="field"><span>Factor 2</span>${sel('fB', f6, pick(dF.b, f6[1] && f6[1].name))}</label></div>`,
       !(nums.length >= 1 && f6.length >= 2) ? 'Necesitas una variable cuantitativa y dos categóricas de 2 a 6 niveles.' : '');
     const dA = D.alpha || {};
+    const dA2 = D.ancova || {};
+    h += card('ancova', !!D.ancova && nums.length >= 2 && facs.length >= 1, 'ANCOVA (comparación de grupos controlando covariables)', 'Compara grupos ajustando por una o más covariables (por ejemplo, la puntuación previa): medias ajustadas, homogeneidad de pendientes y comparaciones por pares.',
+      `<label class="field"><span>Variable dependiente</span>${sel('acY', nums, pick(dA2.y, nums[0] && nums[0].name))}</label>
+       <label class="field"><span>Factor (grupos)</span>${sel('acG', facs, pick(dA2.g, facs[0] && facs[0].name))}</label>
+       <div class="field"><span>Covariables (cuantitativas)</span>${chips('acC', nums, v => (dA2.c ? dA2.c.includes(v.name) : false))}</div>`,
+      !(nums.length >= 2 && facs.length >= 1) ? 'Necesitas una variable dependiente, un factor y al menos una covariable cuantitativa.' : '');
+    h += card('binrel', false && bins.length >= 2, 'Cambio en variables sí/no (McNemar / Q de Cochran)', 'Las mismas personas responden una pregunta dicotómica en dos o más momentos: McNemar (2) o Q de Cochran (3 o más).',
+      `<div class="field"><span>Momentos (variables con las mismas dos categorías, en el orden de las columnas)</span>${chips('bR', bins, () => false)}</div>`,
+      bins.length < 2 ? 'Necesitas al menos dos variables categóricas con exactamente 2 categorías (por ejemplo, sí/no antes y después).' : '');
     h += card('alpha', !!D.alpha && nums.length >= 2, 'Fiabilidad de una escala (alfa de Cronbach)', 'Consistencia interna de un cuestionario: alfa, correlación ítem-total y alfa si se elimina cada ítem.',
       `<div class="field"><span>Ítems de la escala</span>${chips('aI', nums, v => (dA.items ? dA.items.includes(v.name) : false))}</div>
        <div class="field"><span>Ítems inversos (se recodifican)</span>${chips('aR', nums, v => (dA.rev ? dA.rev.includes(v.name) : false))}</div>`,
@@ -666,6 +675,102 @@
     return sec;
   }
 
+  function runAncova(yName, gName, covNames) {
+    const sec = { title: `${yName} según ${gName}, controlando ${covNames.join(', ') || '—'}`, test: 'ANCOVA (SC tipo III)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    covNames = covNames.filter(n => n !== yName);
+    if (!covNames.length) { sec.error = 'Selecciona al menos una covariable distinta de la variable dependiente.'; return sec; }
+    const yv = numOf(vByName(yName)), gc = catOf(vByName(gName)), cv = covNames.map(n => numOf(vByName(n)));
+    const idx = ST.rows.map((_, i) => i).filter(i => yv[i] !== null && gc[i] !== null && cv.every(c => c[i] !== null));
+    const lv = [...new Set(idx.map(i => gc[i]))].sort(cmp), L = lv.length, n = idx.length;
+    if (L < 2) { sec.error = 'El factor necesita al menos 2 grupos con datos.'; return sec; }
+    if (lv.some(l => idx.filter(i => gc[i] === l).length < 3)) { sec.error = 'Algún grupo tiene menos de 3 casos completos: no se puede estimar la ANCOVA. Agrupa categorías o elige otro factor.'; return sec; }
+    if (n < L + covNames.length + 3) { sec.error = `Hay pocos casos completos (${n}) para este modelo.`; return sec; }
+    const y = idx.map(i => yv[i]), g = idx.map(i => lv.indexOf(gc[i])), C = idx.map(i => cv.map(c => c[i]));
+    const r = S.ancova(y, g, L, C);
+    if (!r || !r.factor) { sec.error = 'No se pudo estimar el modelo: probablemente una covariable es constante o redundante.'; return sec; }
+    const lev = S.levene(lv.map((_, j) => r.resid.filter((_, i) => g[i] === j))), sw = S.shapiro(r.resid), cl = list(covNames.map(esc));
+    sec.decision = `Se ajustó una ANCOVA para comparar ${esc(yName)} entre los ${L} grupos de ${esc(gName)} controlando ${cl}, con ${n} casos completos y sumas de cuadrados de tipo III.`;
+    sec.why.push(`Variable dependiente: ${esc(yName)} → cuantitativa. Factor: ${esc(gName)} (${L} grupos). Covariable${covNames.length > 1 ? 's' : ''}: ${cl}.`);
+    sec.why.push('La ANCOVA compara los grupos como si todos tuvieran el mismo valor en las covariables: elimina su influencia y suele aumentar la potencia (por ejemplo, al ajustar por la puntuación previa en un diseño pre/post).');
+    sec.why.push('Se informan las medias ajustadas (estimadas en la media de las covariables), que son las que compara el contraste.');
+    if (r.slopes) sec.checks.push(chk(r.slopes.p >= .05 ? 'ok' : 'no', `Homogeneidad de las pendientes de regresión (interacción factor × covariable): <i>F</i>(${r.slopes.df1}, ${r.slopes.df2}) = ${f(r.slopes.F)}, ${pt(r.slopes.p)}. ${r.slopes.p >= .05 ? 'Se cumple: la relación de la covariable con la variable dependiente es similar en todos los grupos.' : 'No se cumple: la relación con la covariable difiere entre grupos y la ANCOVA no es adecuada. Considera un modelo con interacción (moderación).'}`));
+    if (r.slopes && r.slopes.p < .05) sec.warn = 'No se cumple la homogeneidad de las pendientes: las medias ajustadas pueden ser engañosas. Interpreta con cautela o consulta a un estadístico.';
+    sec.checks.push(chk(lev.p >= .05 ? 'ok' : 'no', `Homogeneidad de varianzas de los residuos (Levene): <i>F</i>(${lev.df1}, ${lev.df2}) = ${f(lev.F)}, ${pt(lev.p)}.${lev.p >= .05 ? ' Se cumple.' : ' No se cumple: interpreta con cautela si los grupos tienen tamaños distintos.'}`));
+    if (sw) sec.checks.push(chk(sw.p >= .05 ? 'ok' : n >= 100 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}.${sw.p >= .05 ? '' : n >= 100 ? ' Con muestras grandes el modelo es robusto a desviaciones moderadas.' : ' No se cumple y la muestra es pequeña.'}`));
+    sec.checks.push(chk('info', 'Linealidad: se asume una relación lineal entre cada covariable y la variable dependiente dentro de cada grupo.'));
+    sec.alt = 'Si no se cumple la homogeneidad de pendientes, un modelo de regresión con la interacción grupo × covariable.';
+    const raw = lv.map((_, j) => S.describe(y.filter((_, i) => g[i] === j)));
+    sec.tables.push(apaTable(`Medias observadas y ajustadas de ${yName} por ${gName}`, [esc(gName), '<i>n</i>', '<i>M</i>', '<i>DT</i>', '<i>M</i> ajustada', '<i>EE</i>', 'IC 95 % (<i>M</i> ajustada)'],
+      lv.map((l, j) => [esc(l), raw[j].n, f(raw[j].mean), f(raw[j].sd), f(r.adj[j].mean), f(r.adj[j].se), `[${f(r.adj[j].ci[0])}, ${f(r.adj[j].ci[1])}]`]),
+      `Medias ajustadas en la media de ${cl} (${covNames.map((nm, c) => `${esc(nm)} = ${f(S.mean(C.map(x => x[c])))}`).join('; ')}).`));
+    sec.tables.push(apaTable('Resultado de la ANCOVA', ['Fuente', '<i>SC</i>', '<i>gl</i>', '<i>MC</i>', '<i>F</i>', '<i>p</i>', 'η²<sub>p</sub>'],
+      covNames.map((nm, c) => [esc(nm), f(r.covs[c].ss), 1, f(r.covs[c].ms), f(r.covs[c].F), pv(r.covs[c].p), nz(r.covs[c].peta2.toFixed(3))])
+        .concat([[esc(gName), f(r.factor.ss), r.factor.df, f(r.factor.ms), f(r.factor.F), pv(r.factor.p), nz(r.factor.peta2.toFixed(3))], ['Error', f(r.sse), r.dfE, f(r.mse), '', '', '']]),
+      'SC de tipo III. η²<sub>p</sub> = eta cuadrado parcial.'));
+    sec.charts.push(fig(`${yName} por ${gName}: medias ajustadas e IC 95 %`, CH.meansCI(lv.map((l, j) => ({ name: l, x: y.filter((_, i) => g[i] === j), mean: r.adj[j].mean, ci: r.adj[j].ci })), yName + ' (ajustada)', { points: false })));
+    const st = `<i>F</i>(${r.factor.df}, ${r.dfE}) = ${f(r.factor.F)}, ${pt(r.factor.p)}, η²<sub>p</sub> = ${nz(r.factor.peta2.toFixed(3))}`;
+    let t = `Se realizó un análisis de covarianza (ANCOVA) para comparar ${esc(yName)} según ${esc(gName)}, controlando ${cl}. `;
+    t += list(covNames.map((nm, c) => `${esc(nm)} ${r.covs[c].p < .05 ? 'se relacionó significativamente' : 'no se relacionó significativamente'} con ${esc(yName)}, <i>F</i>(1, ${r.dfE}) = ${f(r.covs[c].F)}, ${pt(r.covs[c].p)}`)) + '. ';
+    t += r.factor.p < .05 ? `Tras ajustar por ${covNames.length > 1 ? 'las covariables' : 'la covariable'}, se encontraron diferencias estadísticamente significativas entre los grupos, ${st} (medias ajustadas: ${lv.map((l, j) => `${esc(l)} = ${f(r.adj[j].mean)}`).join('; ')}).`
+      : `Tras ajustar por ${covNames.length > 1 ? 'las covariables' : 'la covariable'}, no se encontraron diferencias estadísticamente significativas entre los grupos, ${st}.`;
+    if (r.factor.p < .05 && L > 2) {
+      const sig = r.pairs.filter(o => o.padj < .05);
+      t += sig.length ? ` Las comparaciones por pares de las medias ajustadas (corrección de Holm) mostraron diferencias entre ${list(sig.map(o => `${esc(lv[o.i])} y ${esc(lv[o.j])} (${pt(o.padj)})`))}.` : ' Las comparaciones por pares de las medias ajustadas (corrección de Holm) no detectaron diferencias entre pares concretos.';
+    }
+    if (r.factor.p < .05) sec.tables.push(apaTable('Comparaciones por pares de las medias ajustadas (corrección de Holm)', ['Comparación', 'Diferencia', '<i>EE</i>', '<i>t</i>', '<i>gl</i>', '<i>p</i> ajustada'],
+      r.pairs.map(o => [`${esc(lv[o.i])} − ${esc(lv[o.j])}`, f(o.diff), f(o.se), f(o.t), r.dfE, pv(o.padj)])));
+    sec.text.push(t);
+    const Y = rn(yName), G = rn(gName), Cs = covNames.map(rn);
+    sec.code = `# ANCOVA: ${yName} ~ ${gName} + ${covNames.join(' + ')}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- lm(${Y} ~ ${G} + ${Cs.join(' + ')}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::eta_squared(car::Anova(modelo, type = 3), partial = TRUE)\n` +
+      `anova(modelo, lm(${Y} ~ ${G} * (${Cs.join(' + ')}), data = datos))  # homogeneidad de pendientes\ncar::leveneTest(residuals(modelo) ~ modelo$model[[${rq(gName)}]], center = mean)\nshapiro.test(residuals(modelo))\nemmeans::emmeans(modelo, pairwise ~ ${G}, adjust = "holm")`;
+    return sec;
+  }
+
+  function runBinRel(names) {
+    const k = names.length, sec = { title: `${names.join(', ')} (cambio en una variable sí/no)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (k < 2) { sec.error = 'Selecciona al menos dos variables (momentos).'; return sec; }
+    const cs = names.map(n => catOf(vByName(n))), lv = [...new Set(cs.flat().filter(x => x !== null))].sort(cmp);
+    if (lv.length !== 2) { sec.error = `Las variables deben tener las mismas dos categorías (se han encontrado ${lv.length}: ${list(lv.slice(0, 6).map(esc))}).`; return sec; }
+    const idx = ST.rows.map((_, i) => i).filter(i => cs.every(c => c[i] !== null)), n = idx.length, ev = lv[1];
+    if (n < 5) { sec.error = 'Hay muy pocos casos con todas las respuestas.'; return sec; }
+    const M = idx.map(i => cs.map(c => (c[i] === ev ? 1 : 0))), props = names.map((_, j) => S.mean(M.map(r => r[j])));
+    sec.why.push(`Las mismas ${n} personas responden «${esc(lv[0])}» o «${esc(ev)}» en ${k} momentos: ${list(names.map(esc))}.`);
+    sec.why.push('Con respuestas dicotómicas relacionadas no sirve el chi-cuadrado de independencia: hay que comparar los cambios dentro de cada persona.');
+    sec.checks.push(chk('info', 'Independencia entre personas: cada fila debe ser un participante distinto.'));
+    sec.tables.push(apaTable(`Porcentaje de «${ev}» en cada momento`, ['Momento', '<i>n</i>', `«${esc(ev)}»`, '%'], names.map((nm, j) => [esc(nm), n, S.sum(M.map(r => r[j])), f(props[j] * 100, 1)])));
+    sec.charts.push(fig(`Porcentaje de «${ev}» en cada momento`, CH.barsCat(names, props.map(p => +(p * 100).toFixed(1)), '%')));
+    const Q = names.map(rq).join(', ');
+    if (k === 2) {
+      const b = M.filter(r => r[0] === 0 && r[1] === 1).length, c = M.filter(r => r[0] === 1 && r[1] === 0).length, r = S.mcnemar(b, c), exact = b + c < 25, P = exact ? r.pExact : r.p;
+      sec.test = 'Prueba de McNemar' + (exact ? ' (exacta)' : '');
+      sec.decision = `Se eligió la prueba de McNemar porque son dos respuestas dicotómicas de las mismas personas${exact ? '; como hay pocos casos que cambian (menos de 25), se usa su versión exacta (binomial)' : ''}.`;
+      sec.alt = 'Q de Cochran si hubiera tres o más momentos.';
+      const a = M.filter(x => x[0] === 0 && x[1] === 0).length, d = M.filter(x => x[0] === 1 && x[1] === 1).length;
+      sec.tables.push(apaTable(`Tabla de cambios entre ${names[0]} y ${names[1]}`, [`${esc(names[0])} \\ ${esc(names[1])}`, esc(lv[0]), esc(ev)], [[esc(lv[0]), a, b], [esc(ev), c, d]], `Casos que cambian: ${b} de «${esc(lv[0])}» a «${esc(ev)}» y ${c} de «${esc(ev)}» a «${esc(lv[0])}».`));
+      sec.tables.push(apaTable('Resultado de la prueba de McNemar', ['', 'χ²', '<i>gl</i>', '<i>p</i>', '<i>p</i> exacta', '<i>n</i>'], [[`${esc(names[0])} → ${esc(names[1])}`, f(r.chi), 1, pv(r.p), pv(r.pExact), n]], 'χ² con corrección por continuidad. <i>p</i> exacta: prueba binomial sobre los casos discordantes.'));
+      const st = exact ? `prueba de McNemar exacta, ${pt(P)}` : `χ²(1, <i>N</i> = ${n}) = ${f(r.chi)}, ${pt(P)}`;
+      sec.text.push(`Se aplicó la prueba de McNemar para comparar la proporción de «${esc(ev)}» entre ${esc(names[0])} (${f(props[0] * 100, 1)} %) y ${esc(names[1])} (${f(props[1] * 100, 1)} %). ` +
+        (P < .05 ? `El cambio fue estadísticamente significativo, ${st}: ${b} personas pasaron a «${esc(ev)}» y ${c} dejaron de estarlo.` : `El cambio no fue estadísticamente significativo, ${st}.`));
+      sec.code = `# McNemar: ${names[0]} → ${names[1]}\ntabla <- table(datos[[${rq(names[0])}]], datos[[${rq(names[1])}]])\ntabla\nmcnemar.test(tabla, correct = TRUE)\nbinom.test(tabla[1, 2], tabla[1, 2] + tabla[2, 1])  # versión exacta`;
+    } else {
+      const r = S.cochranQ(M); sec.test = 'Q de Cochran';
+      sec.decision = `Se eligió la Q de Cochran porque son ${k} respuestas dicotómicas de las mismas personas.`;
+      sec.alt = 'McNemar para comparar solo dos momentos.';
+      sec.tables.push(apaTable('Resultado de la Q de Cochran', ['', '<i>Q</i>', '<i>gl</i>', '<i>p</i>', '<i>n</i>'], [[list(names.map(esc)), f(r.Q), r.df, pv(r.p), n]]));
+      let t = `Se aplicó la Q de Cochran para comparar la proporción de «${esc(ev)}» en ${list(names.map((nm, j) => `${esc(nm)} (${f(props[j] * 100, 1)} %)`))}. `;
+      if (r.p < .05) {
+        const pairs = []; for (let a = 0; a < k; a++) for (let b2 = a + 1; b2 < k; b2++) { const b = M.filter(x => x[a] === 0 && x[b2] === 1).length, c = M.filter(x => x[a] === 1 && x[b2] === 0).length; pairs.push({ a, b: b2, r: S.mcnemar(b, c) }); }
+        S.holm(pairs.map(o => o.r.p)).forEach((p, i) => pairs[i].padj = p);
+        const sig = pairs.filter(o => o.padj < .05);
+        t += `Las diferencias fueron estadísticamente significativas, <i>Q</i>(${r.df}) = ${f(r.Q)}, ${pt(r.p)}.` + (sig.length ? ` Las comparaciones por pares (McNemar con corrección de Holm) mostraron diferencias entre ${list(sig.map(o => `${esc(names[o.a])} y ${esc(names[o.b])} (${pt(o.padj)})`))}.` : ' Las comparaciones por pares (McNemar con corrección de Holm) no detectaron diferencias entre pares concretos.');
+        sec.tables.push(apaTable('Comparaciones por pares (McNemar, corrección de Holm)', ['Comparación', 'χ²', '<i>p</i> ajustada'], pairs.map(o => [`${esc(names[o.a])} − ${esc(names[o.b])}`, f(o.r.chi), pv(o.padj)])));
+      } else t += `Las diferencias no fueron estadísticamente significativas, <i>Q</i>(${r.df}) = ${f(r.Q)}, ${pt(r.p)}.`;
+      sec.text.push(t);
+      sec.code = `# Q de Cochran: ${names.join(', ')}\nmedidas <- c(${Q})\nd <- datos[complete.cases(datos[, medidas]), medidas]\nd01 <- as.data.frame(lapply(d, function(x) as.integer(x == ${rq(ev)})))\nd01$id <- factor(seq_len(nrow(d01)))\nlargo <- data.frame(id = rep(d01$id, ${k}), momento = factor(rep(medidas, each = nrow(d01)), levels = medidas), valor = unlist(d01[, medidas], use.names = FALSE))\nrstatix::cochran_qtest(largo, valor ~ momento | id)\nrstatix::pairwise_mcnemar_test(largo, valor ~ momento | id, p.adjust.method = "holm")`;
+    }
+    return sec;
+  }
+
   function runFactorial(yName, aName, bName) {
     const sec = { title: `${yName} según ${aName} × ${bName}`, test: 'ANOVA factorial (SC tipo III)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (aName === bName) { sec.error = 'Elige dos factores distintos.'; return sec; }
@@ -775,6 +880,8 @@
       if (isOn('reg')) add(runRegression($('#rY').value, checkedVals('rX')));
       if (isOn('logit')) add(runLogistic($('#lY').value, checkedVals('lX')));
       if (isOn('fact')) add(runFactorial($('#fY').value, $('#fA').value, $('#fB').value));
+      if (isOn('ancova')) add(runAncova($('#acY').value, $('#acG').value, checkedVals('acC')));
+      if (isOn('binrel')) add(runBinRel(checkedVals('bR')));
       if (isOn('alpha')) add(runAlpha(checkedVals('aI'), checkedVals('aR')));
     } catch (e) { console.error(e); alert('Ha ocurrido un error inesperado en el análisis: ' + e.message); return; }
     if (!secs.length) { alert('Selecciona al menos un análisis.'); return; }
@@ -944,7 +1051,7 @@
   }
   const DEMO_DEFAULTS = { comp: { y: ['ansiedad_post'], g: 'grupo' }, paired: { vars: ['ansiedad_pre', 'ansiedad_post', 'ansiedad_seguimiento'] }, chi: { a: 'sexo', b: 'fuma' },
     reg: { y: 'rendimiento', x: ['horas_sueno', 'estres', 'ansiedad_post'] }, logit: { y: 'fuma', x: ['estres', 'sexo', 'edad'] },
-    fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
+    fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, ancova: { y: 'ansiedad_post', g: 'grupo', c: ['ansiedad_pre'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
 
   // ---------- navegación ----------
   function show(n) {
