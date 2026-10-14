@@ -19,6 +19,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="img/favicon-32.png" sizes="32x32" type="image/png"><link rel="icon" href="img/favicon-64.png" sizes="64x64" type="image/png">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
 <link rel="stylesheet" href="fonts.css">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
@@ -429,7 +430,7 @@ footer a:hover{text-decoration:underline}
     <div class="privacy">
       <div><b>Cálculo en tu navegador</b><p>El archivo se procesa en tu propio equipo. No se sube a ningún servidor.</p></div>
       <div><b>Nada se guarda</b><p>Al cerrar la pestaña, los datos desaparecen. No hay cuentas ni archivos almacenados.</p></div>
-      <div><b>Sin cookies ni seguimiento</b><p>Ni cookies, ni analítica, ni recursos de terceros: todo se sirve desde tharp.es.</p></div>
+      <div><b>Sin cookies</b><p>Solo contamos visitas de forma anónima y agregada, sin cookies ni datos personales. Tus archivos nunca se envían.</p></div>
       <div><b>Pensado para el RGPD</b><p>Si los datos no se transmiten, no hay cesión a terceros ni transferencias internacionales.</p></div>
     </div>
   </div>
@@ -468,7 +469,7 @@ footer a:hover{text-decoration:underline}
 <footer>
   <div class="wrap">
     <div><strong style="color:var(--ink)">Tharp</strong> · <span lang="en">From question to evidence</span> · © 2026</div>
-    <div><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/" rel="noopener">Instagram</a> · <a href="privacidad.html">Privacidad</a> · Sin cookies ni seguimiento</div>
+    <div><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/" rel="noopener">Instagram</a> · <a href="privacidad.html">Privacidad</a> · Sin cookies</div>
   </div>
 </footer>
 
@@ -590,6 +591,7 @@ footer a:hover{text-decoration:underline}
       html += '<div class="finder-foot">'+(done?'<button class="link" id="back">← Atrás</button>':'<span></span>')+'<span style="color:var(--muted);font-size:.9rem">Paso '+(done+1)+'</span></div>';
     } else {
       const r = result();
+      try { window.umami && window.umami.track('buscador_resultado', { prueba: r.name }); } catch (e) { /* estadística opcional */ }
       // análisis que la app ya realiza (el resto se recomienda, pero se avisa de que aún no está disponible)
       r.inApp = ['Estadísticos descriptivos','Prueba t de muestras independientes','Prueba t de muestras relacionadas','ANOVA de un factor','U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis','Chi-cuadrado de independencia','Correlación de Pearson','Correlación de Spearman','Chi-cuadrado + V de Cramér','Regresión lineal','Regresión logística binaria','ANOVA de medidas repetidas','Prueba de Friedman','Prueba de McNemar','Q de Cochran'].includes(r.name);
       html += '<div class="result"><div class="eyebrow">Tu análisis recomendado</div><h3>'+r.name+'</h3>';

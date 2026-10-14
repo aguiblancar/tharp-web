@@ -22,6 +22,9 @@
   const cmp = (a, b) => { const na = Number(a), nb = Number(b); return (a !== '' && b !== '' && !isNaN(na) && !isNaN(nb)) ? na - nb : a.localeCompare(b, 'es', { numeric: true, sensitivity: 'base' }); };
   const list = a => (a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' y ' + a[a.length - 1]);
 
+  // estadísticas de uso anónimas (Umami, sin cookies): solo tipos de archivo y de análisis, nunca datos ni nombres de variables
+  const track = (ev, data) => { try { if (window.umami) window.umami.track(ev, data); } catch (e) { /* nunca debe afectar al análisis */ } };
+
   // ---------- lectura de datos ----------
   const MISSING = new Set(['', 'na', 'n/a', 'nan', 'null', '.', '-', '#n/a', 'ns/nc', 'nsnc', '#¡valor!', '#value!']);
   function norm(v) {
@@ -102,6 +105,7 @@
     Object.assign(ST, { fileName, headers, rows, defaults: defaults || null });
     ST.vars = headers.map((name, i) => detect(name, i, rows.map(r => r[i]), hints && hints[String(aoa[0][i])])).filter(v => !(v.valid === 0 && /^var_\d+$/.test(v.name)));
     renderVars(); show(2);
+    track('datos_cargados', { formato: fileName === 'tharp_datos_ejemplo.csv' && defaults ? 'ejemplo' : (fileName.split('.').pop() || '').toLowerCase() });
   }
 
   // ---------- detección de variables ----------
@@ -676,7 +680,7 @@
   }
 
   function runAncova(yName, gName, covNames) {
-    const sec = { title: `${yName} según ${gName}, controlando ${covNames.join(', ') || '—'}`, test: 'ANCOVA (SC tipo III)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const sec = { title: covNames.length ? `${yName} según ${gName}, controlando ${covNames.join(', ')}` : `ANCOVA: ${yName} según ${gName}`, test: 'ANCOVA (SC tipo III)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     covNames = covNames.filter(n => n !== yName);
     if (!covNames.length) { sec.error = 'Selecciona al menos una covariable distinta de la variable dependiente.'; return sec; }
     const yv = numOf(vByName(yName)), gc = catOf(vByName(gName)), cv = covNames.map(n => numOf(vByName(n)));
@@ -886,6 +890,7 @@
     } catch (e) { console.error(e); alert('Ha ocurrido un error inesperado en el análisis: ' + e.message); return; }
     if (!secs.length) { alert('Selecciona al menos un análisis.'); return; }
     ST.sections = secs; ST.log = log; renderResults(); show(4);
+    track('analisis_ejecutados', { n: secs.length, pruebas: secs.filter(x => !x.error).map(x => x.test || '').join(' | ').slice(0, 480) });
   }
   function renderResults() {
     $('#log').innerHTML = ST.log.map(l => `<li>${l}</li>`).join('');
@@ -907,7 +912,7 @@
       </div>`;
     }).join('');
     $$('[data-copy]').forEach(b => b.onclick = () => { const t = $('#txt' + b.dataset.copy).innerText; navigator.clipboard.writeText(t).then(() => { b.textContent = 'Copiado ✓'; setTimeout(() => b.textContent = 'Copiar texto', 1500); }); });
-    $$('[data-png]').forEach(b => b.onclick = () => { const [si, ci] = b.dataset.png.split('-').map(Number), c = ST.sections[si].charts[ci]; svgToPng(c.svg, c.title); });
+    $$('[data-png]').forEach(b => b.onclick = () => { const [si, ci] = b.dataset.png.split('-').map(Number), c = ST.sections[si].charts[ci]; svgToPng(c.svg, c.title); track('descarga_png'); });
   }
 
   // ---------- exportación ----------
@@ -980,7 +985,7 @@
       }
       const doc = new D.Document({ creator: 'Tharp', title: 'Resultados del análisis estadístico',
         styles: { default: { document: { run: { font: 'Times New Roman', size: 24 } } } }, sections: [{ children: kids }] });
-      download('tharp_resultados.docx', await D.Packer.toBlob(doc));
+      download('tharp_resultados.docx', await D.Packer.toBlob(doc)); track('descarga_word');
     } catch (e) { console.error(e); alert('No se pudo generar el Word: ' + e.message); }
     finally { btn.textContent = label; btn.disabled = false; }
   }
@@ -1018,7 +1023,7 @@
     if (cats.length) s += `\n# Variables categóricas como factor (mismo orden de categorías que en Tharp)\n${cats.map(fac).join('\n')}\n`;
     if (isSav) s += `datos <- as.data.frame(haven::zap_labels(datos))\n`;
     s += '\n' + ST.sections.filter(x => !x.error).map(x => x.code).join('\n\n') + '\n';
-    download('tharp_analisis.R', new Blob([s], { type: 'text/plain' }));
+    download('tharp_analisis.R', new Blob([s], { type: 'text/plain' })); track('descarga_r');
   }
 
   // ---------- datos de ejemplo ----------
