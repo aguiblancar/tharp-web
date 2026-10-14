@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tharp · Análisis estadístico automático para tu TFM, tesis o artículo</title>
+<meta name="description" content="Sube tus datos (Excel, CSV, SPSS o JASP) y Tharp comprueba los supuestos, elige la prueba adecuada y genera tablas APA, gráficos, el apartado de resultados redactado y el código R. Gratis y sin subir tus datos a ningún servidor.">
+<link rel="canonical" href="https://tharp.es/">
+<meta name="theme-color" content="#07131f">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Tharp">
+<meta property="og:locale" content="es_ES">
+<meta property="og:url" content="https://tharp.es/">
+<meta property="og:title" content="Tharp · From question to evidence">
+<meta property="og:description" content="Análisis estadístico automático para investigación: supuestos, pruebas, tablas APA, gráficos y resultados redactados. Gratis y privado.">
+<meta property="og:image" content="https://tharp.es/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="stylesheet" href="fonts.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+ {"@type":"Organization","@id":"https://tharp.es/#org","name":"Tharp","url":"https://tharp.es/","logo":"https://tharp.es/img/logo-512.png","email":"info@tharp.es","sameAs":["https://www.instagram.com/tharpstats/"]},
+ {"@type":"WebApplication","name":"Tharp","url":"https://tharp.es/app.html","applicationCategory":"EducationalApplication","operatingSystem":"Navegador web","inLanguage":"es","description":"Análisis estadístico automático para investigación: comprobación de supuestos, pruebas estadísticas, tablas APA, gráficos, redacción de resultados y código R reproducible.","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"publisher":{"@id":"https://tharp.es/#org"}},
+ {"@type":"FAQPage","mainEntity":[
+  {"@type":"Question","name":"¿Tharp es gratis?","acceptedAnswer":{"@type":"Answer","text":"Sí. Esta primera versión es gratuita: puedes analizar tus datos sin registrarte."}},
+  {"@type":"Question","name":"¿Mis datos se suben a algún servidor?","acceptedAnswer":{"@type":"Answer","text":"No. Todo el cálculo se hace en tu navegador. El archivo no sale de tu ordenador y nada se guarda cuando cierras la pestaña."}},
+  {"@type":"Question","name":"¿Qué archivos puedo usar?","acceptedAnswer":{"@type":"Answer","text":"Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp), con sus etiquetas de valor y sus valores perdidos."}},
+  {"@type":"Question","name":"¿Los resultados son fiables?","acceptedAnswer":{"@type":"Answer","text":"Cada prueba está validada automáticamente contra R y las librerías estadísticas de Python, y Tharp genera el script de R para que puedas reproducir cada resultado."}},
+  {"@type":"Question","name":"¿Puedo usarlo para mi TFM o mi tesis?","acceptedAnswer":{"@type":"Answer","text":"Sí. Tharp genera tablas y texto en formato APA y un documento Word editable. Revisa siempre los resultados: la interpretación final es tuya."}}
+ ]}
+]}
+</script>
+<style>
+:root{
+  --night:#07131f; --ink:#0b2540; --ink-2:#123a5e; --sea:#1d6f8f; --wave:#2a8db5; --teal:#2bb3a6; --foam:#8fe0dc;
+  --sand:#f6f3ec; --paper:#ffffff; --text:#14202b; --muted:#566676; --line:#e3e0d7;
+  --warn-bg:#fff5e0; --warn:#8a5a00;
+  --radius:14px; --max:1140px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--text);background:var(--sand);line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+img{max-width:100%;display:block}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 20px}
+h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:650;line-height:1.12;letter-spacing:-.01em;margin:0}
+h2{font-size:clamp(1.8rem,3.6vw,2.7rem)}
+.eyebrow{font-size:.78rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--sea)}
+.lead{font-size:1.15rem;color:var(--muted);max-width:660px}
+section{padding:96px 0}
+@media(max-width:600px){section{padding:68px 0}}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 24px;border-radius:999px;font-weight:600;text-decoration:none;border:0;cursor:pointer;font-size:1rem;font-family:inherit;transition:transform .15s,background .15s}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:var(--foam);color:var(--night)}
+.btn-primary:hover{background:#a9eae6}
+.btn-ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35)}
+.btn-dark{background:var(--ink);color:#fff}
+.btn-dark:hover{background:var(--ink-2)}
+.btn-line{background:transparent;border:1px solid var(--line);color:var(--ink)}
+
+/* nav */
+nav{position:absolute;top:0;left:0;right:0;z-index:5}
+nav .wrap{display:flex;align-items:center;justify-content:space-between;height:76px}
+.logo{display:flex;align-items:center;gap:11px;color:#fff;text-decoration:none;font-family:Fraunces,serif;font-size:1.5rem;font-weight:650}
+.logo img{width:36px;height:36px}
+.navlinks{display:flex;gap:26px;align-items:center}
+.navlinks a{color:rgba(255,255,255,.82);text-decoration:none;font-size:.95rem}
+.navlinks a:hover{color:#fff}
+@media(max-width:820px){.navlinks a:not(.btn){display:none}}
+
+/* hero */
+.hero{position:relative;background:radial-gradient(1100px 620px at 78% 0%,#16496e 0%,var(--ink) 48%,var(--night) 100%);color:#fff;padding:150px 0 100px;overflow:hidden}
+.hero svg.contours{position:absolute;inset:0;width:100%;height:100%;opacity:.2;pointer-events:none}
+.hero .wrap{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+@media(max-width:960px){.hero .wrap{grid-template-columns:1fr}.hero-card{display:none}}
+.badge{display:inline-block;padding:6px 12px;border-radius:999px;background:rgba(143,224,220,.12);color:var(--foam);font-size:.82rem;font-weight:500;border:1px solid rgba(143,224,220,.3)}
+.hero h1{font-size:clamp(2.7rem,6.4vw,4.9rem);margin:22px 0 10px}
+.hero h1 em{font-style:normal;color:var(--foam)}
+.hero .sub{font-family:Fraunces,serif;font-size:clamp(1.2rem,2.2vw,1.55rem);color:rgba(255,255,255,.92);margin:0 0 18px}
+.hero p.desc{font-size:1.12rem;color:rgba(255,255,255,.76);max-width:600px;margin:0 0 32px}
+.hero .ctas{display:flex;gap:12px;flex-wrap:wrap}
+.trust{display:flex;gap:10px 22px;flex-wrap:wrap;margin-top:34px;font-size:.9rem;color:rgba(255,255,255,.72)}
+.trust span::before{content:"✓";color:var(--foam);margin-right:7px;font-weight:700}
+.hero-card{background:#fff;color:var(--text);border-radius:16px;box-shadow:0 30px 80px -30px rgba(0,0,0,.6);overflow:hidden;font-size:.92rem}
+.hero-card .hd{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line)}
+.hero-card .hd b{font-family:Fraunces,serif;font-size:1.05rem}
+.hero-card .bd{padding:18px 20px}
+.mini{width:100%;border-collapse:collapse;margin:6px 0 14px;font-size:.86rem}
+.mini caption{text-align:left;font-size:.84rem;margin-bottom:6px}
+.mini caption i{display:block;font-style:italic}
+.mini th,.mini td{padding:5px 6px;text-align:center}
+.mini th:first-child,.mini td:first-child{text-align:left}
+.mini thead th{border-top:1.5px solid #000;border-bottom:1px solid #000;font-weight:500}
+.mini tbody tr:last-child td{border-bottom:1.5px solid #000}
+.apa-text{background:#f4f8f8;border-left:3px solid var(--teal);padding:10px 12px;border-radius:6px;font-family:Georgia,serif;font-size:.9rem;line-height:1.5}
+.chk{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chk span{font-size:.76rem;padding:4px 9px;border-radius:999px;background:#e6f6f4;color:#11756c;font-weight:600}
+
+/* before / after */
+.ba{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:46px}
+@media(max-width:860px){.ba{grid-template-columns:1fr}}
+.ba > div{border-radius:var(--radius);padding:30px;border:1px solid var(--line);background:var(--paper)}
+.ba .with{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ba h3{font-size:1.35rem;margin-bottom:14px}
+.ba ol{margin:0;padding-left:22px}
+.ba li{margin:7px 0}
+.ba .without li{color:var(--muted)}
+.ba .with li::marker{color:var(--foam)}
+.ba .note{margin-top:16px;font-size:.88rem;color:rgba(255,255,255,.65)}
+
+/* steps */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:48px}
+@media(max-width:860px){.grid3{grid-template-columns:1fr}}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:28px}
+.card h3{font-size:1.3rem;margin:14px 0 8px}
+.card p{margin:0;color:var(--muted)}
+.num{font-family:JetBrains Mono,monospace;font-size:.85rem;color:var(--sea);font-weight:500}
+
+.split{display:grid;grid-template-columns:1fr 1.1fr;gap:56px;align-items:center}
+@media(max-width:900px){.split{grid-template-columns:1fr;gap:36px}}
+.shot{border-radius:var(--radius);border:1px solid var(--line);box-shadow:0 24px 60px -28px rgba(11,37,64,.45);overflow:hidden;background:#fff}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 20px 50px -25px rgba(11,37,64,.35);overflow:hidden}
+.panel-head{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;font-size:.9rem}
+.panel-head b{font-family:Fraunces,serif;font-size:1.08rem}
+.tag{font-size:.75rem;padding:3px 9px;border-radius:999px;background:#e6f6f4;color:#11756c;font-weight:600}
+.panel-body{padding:22px}
+.panel ul{margin:8px 0 16px;padding-left:20px}
+.panel li{margin:4px 0}
+code,pre{font-family:JetBrains Mono,monospace;font-size:.85rem}
+pre{background:#0d1f33;color:#d7f3ef;padding:14px 16px;border-radius:10px;overflow-x:auto;margin:0}
+.alt{background:#f2f7fa;border-left:3px solid var(--sea);padding:10px 14px;border-radius:6px;font-size:.95rem}
+.checks{list-style:none;padding:0;margin:26px 0 0}
+.checks li{padding-left:30px;position:relative;margin:12px 0}
+.checks li::before{content:"";position:absolute;left:0;top:5px;width:18px;height:18px;border-radius:50%;background:var(--teal) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") center/14px no-repeat}
+
+/* rigor */
+.rigor{background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:44px}
+@media(max-width:900px){.stats{grid-template-columns:1fr 1fr}}
+.stats div{padding:22px;border-radius:12px;background:var(--sand)}
+.stats b{display:block;font-family:Fraunces,serif;font-size:2.2rem;color:var(--ink);line-height:1.1}
+.stats span{color:var(--muted);font-size:.95rem}
+.methods{margin-top:34px;columns:2;column-gap:40px;color:var(--muted);font-size:.97rem}
+@media(max-width:700px){.methods{columns:1}}
+.methods p{margin:0 0 10px;break-inside:avoid}
+.methods b{color:var(--text)}
+
+/* finder */
+#finder{background:var(--ink);color:#fff}
+#finder .lead{color:rgba(255,255,255,.72)}
+#finder .eyebrow{color:var(--foam)}
+.finder{margin-top:40px;background:#fff;color:var(--text);border-radius:18px;padding:34px;max-width:820px}
+@media(max-width:600px){.finder{padding:22px}}
+.progress{height:4px;background:#eef1f3;border-radius:4px;margin-bottom:26px;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--teal);width:0;transition:width .3s}
+.q h3{font-size:1.45rem;margin-bottom:6px}
+.q .hint{color:var(--muted);margin:0 0 20px;font-size:.95rem}
+.opts{display:grid;gap:10px}
+.opt{text-align:left;padding:15px 18px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;font:inherit;transition:border-color .15s,background .15s}
+.opt:hover{border-color:var(--teal);background:#f3fbfa}
+.opt b{display:block;font-weight:600}
+.opt small{color:var(--muted)}
+.finder-foot{display:flex;justify-content:space-between;margin-top:22px}
+.link{background:none;border:0;color:var(--sea);font:inherit;cursor:pointer;padding:0;font-weight:500}
+.result h3{font-size:2rem;margin:6px 0 18px;color:var(--ink)}
+.result h4{margin:22px 0 6px;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sea)}
+.result ul{margin:0;padding-left:20px}
+.warn{background:var(--warn-bg);color:var(--warn);padding:12px 16px;border-radius:10px;margin-top:18px;font-size:.95rem}
+.upsell{margin-top:26px;padding:20px;border-radius:12px;background:var(--sand);display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+
+/* audiences */
+.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:48px}
+@media(max-width:860px){.modes{grid-template-columns:1fr}}
+.mode{border-radius:var(--radius);padding:30px;background:var(--paper);border:1px solid var(--line)}
+.mode .who{font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sea)}
+.mode blockquote{margin:12px 0 14px;font-family:Fraunces,serif;font-size:1.3rem;line-height:1.3;color:var(--ink)}
+.mode p{margin:0;color:var(--muted)}
+
+/* story */
+.story{background:var(--night);color:#fff;position:relative;overflow:hidden}
+.story .wrap{position:relative}
+.story .split{grid-template-columns:1fr 1fr;align-items:start}
+.story .eyebrow{color:var(--foam)}
+.story h2{margin:10px 0 22px}
+.story p{color:rgba(255,255,255,.78);margin:0 0 16px}
+.story p strong{color:#fff}
+.quote{font-family:Fraunces,serif;font-size:clamp(1.3rem,2.4vw,1.75rem);line-height:1.35;margin:0 0 10px;color:#fff}
+.quote-by{color:var(--foam);font-size:.92rem;margin-bottom:34px}
+.timeline{list-style:none;margin:0;padding:0;border-left:1px solid rgba(143,224,220,.35)}
+.timeline li{position:relative;padding:0 0 22px 24px;color:rgba(255,255,255,.8)}
+.timeline li::before{content:"";position:absolute;left:-5px;top:7px;width:9px;height:9px;border-radius:50%;background:var(--foam)}
+.timeline b{display:block;font-family:JetBrains Mono,monospace;font-weight:500;color:var(--foam);font-size:.88rem}
+.ridge{display:block;width:100%;height:auto;margin-top:8px;opacity:.9}
+
+/* privacy */
+.privacy{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:44px}
+@media(max-width:900px){.privacy{grid-template-columns:1fr 1fr}}
+@media(max-width:520px){.privacy{grid-template-columns:1fr}}
+.privacy div{padding:22px;border-top:2px solid var(--teal);background:var(--paper);border-radius:0 0 12px 12px}
+.privacy b{display:block;margin-bottom:6px}
+.privacy p{margin:0;color:var(--muted);font-size:.95rem}
+
+/* faq */
+.faq{max-width:820px;margin-top:36px}
+.faq details{background:var(--paper);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;padding:0 22px}
+.faq summary{cursor:pointer;padding:18px 0;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"+";color:var(--sea);font-size:1.3rem;line-height:1}
+.faq details[open] summary::after{content:"−"}
+.faq details p{margin:0 0 18px;color:var(--muted)}
+
+/* pilot */
+.pilot{background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:56px;text-align:center}
+@media(max-width:600px){.pilot{padding:32px 22px}}
+.pilot h2{max-width:760px;margin:12px auto 16px}
+.pilot .lead{margin:0 auto 30px}
+footer{padding:40px 0 60px;color:var(--muted);font-size:.9rem}
+footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:28px}
+footer a{text-decoration:none}
+footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a href="./" class="logo" aria-label="Tharp, inicio"><img src="img/logo.svg" alt="" width="36" height="36">Tharp</a>
+    <div class="navlinks">
+      <a href="#como">Cómo funciona</a>
+      <a href="#rigor">Rigor</a>
+      <a href="#finder">¿Qué prueba uso?</a>
+      <a href="#marie-tharp">Marie Tharp</a>
+      <a href="app.html" class="btn btn-primary" style="padding:9px 18px">Analizar mis datos</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <svg class="contours" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <g fill="none" stroke="#8fe0dc" stroke-width="1.2">
+      <path d="M-50 520 C 150 420, 300 600, 520 480 S 860 330, 1250 460"/>
+      <path d="M-50 560 C 160 460, 320 640, 540 520 S 880 370, 1250 500"/>
+      <path d="M-50 600 C 170 500, 340 680, 560 560 S 900 410, 1250 540"/>
+      <path d="M-50 640 C 180 540, 360 720, 580 600 S 920 450, 1250 580"/>
+      <path d="M-50 300 C 200 220, 380 360, 620 260 S 960 120, 1250 220" stroke="#fff" stroke-opacity=".5"/>
+      <path d="M-50 340 C 210 260, 400 400, 640 300 S 980 160, 1250 260" stroke="#fff" stroke-opacity=".5"/>
+      <path d="M-50 380 C 220 300, 420 440, 660 340 S 1000 200, 1250 300" stroke="#fff" stroke-opacity=".5"/>
+    </g>
+  </svg>
+  <div class="wrap">
+    <div>
+      <span class="badge">Primera versión · Gratis · Sin registro</span>
+      <h1 lang="en">From question <em>to evidence.</em></h1>
+      <p class="sub">Análisis estadístico para tu TFM, tu tesis o tu artículo, hecho en minutos.</p>
+      <p class="desc">Sube tus datos y Tharp hace el trabajo mecánico: comprueba los supuestos, elige la prueba adecuada y te entrega las tablas APA, los gráficos y el apartado de resultados redactado. Con el porqué de cada decisión y el código R para reproducirlo.</p>
+      <div class="ctas">
+        <a href="app.html" class="btn btn-primary">Analizar mis datos gratis →</a>
+        <a href="#como" class="btn btn-ghost">Ver cómo funciona</a>
+      </div>
+      <div class="trust"><span>Tus datos no salen de tu navegador</span><span>Validado contra R</span><span>Excel, CSV, SPSS y JASP</span></div>
+    </div>
+    <div class="hero-card" aria-label="Ejemplo de resultado generado por Tharp">
+      <div class="hd"><b>ansiedad_post según grupo</b><span class="tag">Resultado real con datos de ejemplo</span></div>
+      <div class="bd">
+        <table class="mini">
+          <caption><b>Tabla 3</b><i>Resultado del ANOVA de un factor</i></caption>
+          <thead><tr><th>Fuente</th><th><i>gl</i></th><th><i>F</i></th><th><i>p</i></th><th>η²</th></tr></thead>
+          <tbody><tr><td>grupo</td><td>2</td><td>8.45</td><td>&lt; .001</td><td>.050</td></tr><tr><td>Error</td><td>321</td><td></td><td></td><td></td></tr></tbody>
+        </table>
+        <div class="apa-text">Se encontraron diferencias estadísticamente significativas entre los grupos, <i>F</i>(2, 321) = 8.45, <i>p</i> &lt; .001, η² = .050. Las comparaciones post hoc (Tukey HSD) mostraron diferencias entre Control (<i>M</i> = 25.58, <i>DT</i> = 6.77) y Mindfulness (<i>M</i> = 21.56, <i>DT</i> = 7.38), <i>p</i> &lt; .001.</div>
+        <div class="chk"><span>✓ Normalidad</span><span>✓ Homogeneidad (Levene)</span><span>✓ Post hoc de Tukey</span><span>✓ Código R</span></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section id="ahorro">
+  <div class="wrap">
+    <div class="eyebrow">El problema</div>
+    <h2 style="margin-top:10px">Ya sabes qué quieres saber.<br>Lo que te quita las tardes es todo lo demás.</h2>
+    <div class="ba">
+      <div class="without">
+        <h3>Con SPSS o JASP</h3>
+        <ol>
+          <li>Comprobar la normalidad de cada grupo</li>
+          <li>Comprobar la homogeneidad de varianzas</li>
+          <li>Decidir la prueba y, si fallan los supuestos, repetir con la alternativa</li>
+          <li>Pedir el post hoc y el tamaño del efecto</li>
+          <li>Copiar cada tabla a Word y darle formato APA a mano</li>
+          <li>Exportar y pegar los gráficos</li>
+          <li>Redactar los resultados con cada estadístico bien escrito</li>
+        </ol>
+      </div>
+      <div class="with">
+        <h3>Con Tharp</h3>
+        <ol>
+          <li>Subes tu archivo</li>
+          <li>Marcas qué quieres analizar</li>
+          <li>Descargas el Word con tablas APA, gráficos y resultados redactados</li>
+        </ol>
+        <p class="note">Y en cada análisis puedes ver por qué se eligió esa prueba, qué supuestos se comprobaron y el código R equivalente.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="como" style="padding-top:0">
+  <div class="wrap">
+    <div class="eyebrow">Cómo funciona</div>
+    <h2 style="margin-top:10px">De tu archivo a los resultados, en tres pasos.</h2>
+    <div class="grid3">
+      <div class="card"><span class="num">01</span><h3>Sube tus datos</h3><p>Excel, CSV o archivos de SPSS (.sav) y JASP (.jasp), con sus etiquetas y valores perdidos. Tharp detecta las variables, sus tipos y los participantes.</p></div>
+      <div class="card"><span class="num">02</span><h3>Elige qué necesitas</h3><p>Descriptivos, correlaciones, comparación de grupos, medidas pre/post, chi-cuadrado, regresión lineal y logística, ANOVA factorial o alfa de Cronbach.</p></div>
+      <div class="card"><span class="num">03</span><h3>Descarga los resultados</h3><p>Tablas APA, gráficos y un borrador del apartado de resultados en Word, y el script de R que reproduce cada análisis.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap split">
+    <div>
+      <div class="eyebrow">Trazabilidad</div>
+      <h2 style="margin-top:10px">Automático, pero nunca una caja negra.</h2>
+      <p class="lead" style="margin-top:16px">Tú tienes la última palabra. Si Tharp hace una prueba t, puedes ver exactamente por qué, con qué datos y con qué código. Así puedes defender tu análisis ante tu tutor o un revisor.</p>
+      <ul class="checks">
+        <li>Por qué se eligió esa prueba, y su alternativa</li>
+        <li>Supuestos comprobados, con su resultado</li>
+        <li>Registro de cada decisión: casos excluidos, valores perdidos, recodificaciones</li>
+        <li>Análisis de sensibilidad con la prueba alternativa</li>
+        <li>Código R reproducible de cada análisis</li>
+        <li>Avisos claros cuando un resultado no es fiable</li>
+      </ul>
+    </div>
+    <div class="panel" aria-label="Ejemplo de explicación de un análisis">
+      <div class="panel-head"><b>¿Por qué este análisis?</b><span class="tag">Ejemplo</span></div>
+      <div class="panel-body">
+        <div>Se eligió la <strong>prueba t de Welch para muestras independientes</strong> porque:</div>
+        <ul>
+          <li>Variable dependiente: <em>ansiedad</em> → cuantitativa</li>
+          <li>Variable de agrupación: <em>sexo</em> → 2 grupos independientes</li>
+          <li>Normalidad aceptable (Shapiro-Wilk, <i>p</i> = .21 y <i>p</i> = .34)</li>
+          <li>Varianzas distintas (Levene, <i>p</i> = .03): corrección de Welch</li>
+        </ul>
+        <div class="alt"><strong>Alternativa:</strong> U de Mann-Whitney si no se cumpliera la normalidad con muestras pequeñas.</div>
+        <div style="margin-top:16px"><pre>t.test(ansiedad ~ sexo, data = datos, var.equal = FALSE)</pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="rigor" class="rigor">
+  <div class="wrap">
+    <div class="eyebrow">Rigor</div>
+    <h2 style="margin-top:10px">Un resultado solo vale si puedes confiar en él.</h2>
+    <p class="lead" style="margin-top:14px">Cada prueba de Tharp se compara automáticamente con R y con las librerías estadísticas de referencia de Python antes de cada versión. Si un número no coincide, no se publica.</p>
+    <div class="stats">
+      <div><b>93</b><span>comprobaciones automáticas frente a scipy, statsmodels, pingouin y scikit-posthocs</span></div>
+      <div><b>4</b><span>tipos de archivo cuyo script R se ejecuta en R para comprobar que da los mismos resultados</span></div>
+      <div><b>0</b><span>datos enviados a servidores: todo se calcula en tu navegador</span></div>
+      <div><b>100 %</b><span>de los análisis con su código R para reproducirlos</span></div>
+    </div>
+    <div class="methods">
+      <p><b>Comparación de grupos:</b> t de Student y de Welch, U de Mann-Whitney, ANOVA de un factor y de Welch, Kruskal-Wallis, con post hoc de Tukey, Games-Howell o Dunn-Holm.</p>
+      <p><b>Supuestos:</b> Shapiro-Wilk (algoritmo de Royston, como R), Levene centrado en la media (como SPSS), Breusch-Pagan, Durbin-Watson, VIF y distancia de Cook.</p>
+      <p><b>Medidas relacionadas:</b> t para muestras relacionadas y Wilcoxon de rangos con signo, con corrección por empates.</p>
+      <p><b>Asociación:</b> Pearson y Spearman, chi-cuadrado con residuos tipificados corregidos, prueba exacta de Fisher y V de Cramér.</p>
+      <p><b>Modelos:</b> regresión lineal (con errores robustos HC3 si hay heterocedasticidad), regresión logística binaria y ANOVA factorial con sumas de cuadrados de tipo III, como SPSS.</p>
+      <p><b>Fiabilidad:</b> alfa de Cronbach, alfa estandarizado, correlación ítem-total corregida y alfa si se elimina el ítem, con ítems inversos.</p>
+    </div>
+  </div>
+</section>
+
+<section id="finder">
+  <div class="wrap">
+    <div class="eyebrow">Herramienta gratuita</div>
+    <h2 style="margin-top:10px">¿Qué prueba estadística tengo que usar?</h2>
+    <p class="lead" style="margin-top:14px">Responde unas pocas preguntas sobre tu diseño y te decimos qué análisis encaja, por qué y qué supuestos debes comprobar.</p>
+    <div class="finder" id="finderBox" aria-live="polite"></div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Para quién</div>
+    <h2 style="margin-top:10px">Pensado para quien investiga, aprende o enseña.</h2>
+    <div class="modes">
+      <div class="mode"><div class="who">Investigadores y doctorandos</div><blockquote>«Sé lo que tengo que hacer, pero quiero hacerlo más rápido.»</blockquote><p>Ve directo al análisis: tablas APA, gráficos, resultados redactados y código R, sin horas de tareas mecánicas.</p></div>
+      <div class="mode"><div class="who">Estudiantes de grado y máster</div><blockquote>«No sé qué análisis tengo que hacer.»</blockquote><p>Empieza por el buscador de pruebas y lee en cada resultado por qué se eligió y qué supuestos se comprobaron, para entender y defender tu TFG o TFM.</p></div>
+      <div class="mode"><div class="who">Docentes de metodología</div><blockquote>«Quiero enseñar el razonamiento, no los menús.»</blockquote><p>Cada análisis muestra la cadena de decisiones: tipo de variable, supuestos, prueba elegida y alternativa. Un buen punto de partida para explicarlo en clase.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="marie-tharp" class="story">
+  <div class="wrap">
+    <div class="split">
+      <div>
+        <div class="eyebrow">Por qué nos llamamos Tharp</div>
+        <h2>Marie Tharp dibujó el fondo del océano con datos que otros no supieron leer.</h2>
+        <p><strong>Marie Tharp</strong> (1920–2006) fue una geóloga y cartógrafa oceanográfica estadounidense. En los años cincuenta, en el Observatorio Geológico Lamont de la Universidad de Columbia, recibía miles de mediciones de profundidad tomadas con sonar desde barcos en los que, por ser mujer, durante años no se le permitió embarcar.</p>
+        <p>Perfil a perfil, convirtió esos números en un mapa. Y vio algo que nadie esperaba: un valle profundo que recorría el centro de la dorsal mesoatlántica. Cuando se lo enseñó a su colega Bruce Heezen, él lo descartó como «cosas de chicas».</p>
+        <p>Los datos le dieron la razón. Su hallazgo fue una de las piezas clave para que se aceptaran la tectónica de placas y la deriva continental, y en 1977 publicó con Heezen el mapa del fondo oceánico mundial. En 1997 la Biblioteca del Congreso de EE. UU. la reconoció como una de las cuatro grandes cartógrafas y cartógrafos del siglo XX.</p>
+        <p><strong>Tharp lleva su nombre</strong> porque compartimos su forma de trabajar: mirar los datos con rigor, hacer visible el razonamiento y dejar que la evidencia hable, venga de quien venga.</p>
+      </div>
+      <div>
+        <p class="quote">«Tenía un lienzo en blanco que llenar de posibilidades extraordinarias, un fascinante rompecabezas que encajar: cartografiar el inmenso fondo oculto del océano.»</p>
+        <div class="quote-by">Marie Tharp, 1999</div>
+        <ul class="timeline">
+          <li><b>1948</b>Entra en el Observatorio Geológico Lamont (Universidad de Columbia).</li>
+          <li><b>1952</b>Descubre el valle del rift en el centro de la dorsal mesoatlántica.</li>
+          <li><b>1957</b>Publica con Heezen el primer mapa fisiográfico del Atlántico Norte.</li>
+          <li><b>1977</b>Publica el mapa del fondo oceánico mundial.</li>
+          <li><b>1997</b>La Biblioteca del Congreso la reconoce entre los grandes cartógrafos del siglo XX.</li>
+        </ul>
+        <svg class="ridge" viewBox="0 0 520 120" aria-hidden="true">
+          <g fill="none" stroke-linecap="round">
+            <path d="M0 40 C60 42 110 46 160 60 S220 30 250 34 S258 92 262 92 S272 34 282 34 S330 58 380 54 S470 42 520 44" stroke="#8fe0dc" stroke-width="2"/>
+            <path d="M0 60 C60 62 110 66 160 78 S220 52 250 56 S258 106 262 106 S272 56 282 56 S330 78 380 74 S470 62 520 64" stroke="#2a8db5" stroke-width="1.4"/>
+            <path d="M0 80 C60 82 110 86 160 96 S220 74 250 78 S258 116 262 116 S272 78 282 78 S330 96 380 92 S470 82 520 84" stroke="#1d6f8f" stroke-width="1.2"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="privacidad">
+  <div class="wrap">
+    <div class="eyebrow">Privacidad desde el diseño</div>
+    <h2 style="margin-top:10px">Tus datos de investigación no salen de tu ordenador.</h2>
+    <p class="lead" style="margin-top:14px">Sabemos que trabajas con datos sensibles: participantes, pacientes, alumnos. Por eso Tharp está construido para no necesitarlos.</p>
+    <div class="privacy">
+      <div><b>Cálculo en tu navegador</b><p>El archivo se procesa en tu propio equipo. No se sube a ningún servidor.</p></div>
+      <div><b>Nada se guarda</b><p>Al cerrar la pestaña, los datos desaparecen. No hay cuentas ni archivos almacenados.</p></div>
+      <div><b>Sin cookies ni seguimiento</b><p>Ni cookies, ni analítica, ni recursos de terceros: todo se sirve desde tharp.es.</p></div>
+      <div><b>Pensado para el RGPD</b><p>Si los datos no se transmiten, no hay cesión a terceros ni transferencias internacionales.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="eyebrow">Preguntas frecuentes</div>
+    <h2 style="margin-top:10px">Lo que nos suelen preguntar.</h2>
+    <div class="faq">
+      <details><summary>¿Tharp es gratis?</summary><p>Sí. Esta primera versión es gratuita y no necesitas registrarte: entras, subes tu archivo y analizas.</p></details>
+      <details><summary>¿Mis datos se suben a algún servidor?</summary><p>No. Todo el cálculo se hace en tu navegador, con el código de la página. El archivo no sale de tu ordenador y nada se guarda cuando cierras la pestaña.</p></details>
+      <details><summary>¿Qué archivos puedo usar?</summary><p>Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp). De SPSS y JASP se respetan las etiquetas de valor, los tipos de medida y los valores perdidos definidos por el usuario. La primera fila debe tener los nombres de las variables y cada fila, un participante.</p></details>
+      <details><summary>¿Los resultados son fiables?</summary><p>Cada prueba está validada automáticamente contra R y las librerías estadísticas de Python, y cada análisis incluye el script de R para que tú (o tu tutor) podáis reproducirlo. Aun así, revisa siempre los resultados: Tharp automatiza el cálculo, pero la interpretación es tuya.</p></details>
+      <details><summary>¿Sustituye a SPSS, JASP o R?</summary><p>Para los análisis más habituales en un TFG, TFM, tesis o artículo, te ahorra hacerlos a mano. Para análisis que Tharp todavía no incluye (por ejemplo, ANOVA de medidas repetidas, modelos mixtos o análisis factorial) seguirás necesitando otro programa; el buscador de pruebas te avisa cuando es así.</p></details>
+      <details><summary>¿Puedo usarlo en mi TFM o mi tesis?</summary><p>Sí. Tharp genera tablas y texto en formato APA y un documento de Word editable. Si tu centro lo pide, puedes citar el software e incluir el script de R como anexo.</p></details>
+    </div>
+  </div>
+</section>
+
+<section id="piloto" style="padding-top:0">
+  <div class="wrap">
+    <div class="pilot">
+      <div class="eyebrow">Programa piloto · Gratuito</div>
+      <h2>¿Investigas o enseñas metodología? Ayúdanos a hacer Tharp.</h2>
+      <p class="lead">Buscamos investigadores, doctorandos y docentes que lo prueben con sus propios datos y nos cuenten qué les falta. Te enseñamos la herramienta en 10 minutos y tu opinión decide qué construimos después.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        <a class="btn btn-dark" href="mailto:info@tharp.es?subject=Programa%20piloto%20Tharp&body=Hola%2C%20me%20interesa%20probar%20Tharp.%0A%0ASoy%20(investigador%2Fa%20%2F%20doctorando%2Fa%20%2F%20docente)%3A%0AUniversidad%20o%20centro%3A%0A">Quiero participar</a>
+        <a class="btn btn-line" href="app.html">Probarlo ahora</a>
+      </div>
+      <p style="margin:22px 0 0;color:var(--muted);font-size:.92rem">O escríbenos a <a href="mailto:info@tharp.es">info@tharp.es</a> · Síguenos en Instagram: <a href="https://www.instagram.com/tharpstats/" rel="noopener">@tharpstats</a></p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div><strong style="color:var(--ink)">Tharp</strong> · <span lang="en">From question to evidence</span> · © 2026</div>
+    <div><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/" rel="noopener">Instagram</a> · <a href="privacidad.html">Privacidad</a> · Sin cookies ni seguimiento</div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  const box = document.getElementById('finderBox');
+  const state = {};
+  const history = [];
+
+  // Árbol de decisión
+  const Q = {
+    goal: {t:'¿Qué quieres hacer con tus datos?', h:'Piensa en tu pregunta de investigación.', o:[
+      ['compare','Comparar grupos','¿Hay diferencias entre grupos o momentos?'],
+      ['relate','Relacionar variables','¿Están asociadas dos variables?'],
+      ['predict','Predecir una variable','¿Qué variables explican o predicen un resultado?'],
+      ['describe','Describir mis datos','Medias, frecuencias, distribución…']]},
+    dv: {t:'¿Cómo es tu variable dependiente (la que mides)?', h:'Ej.: ansiedad, nota, satisfacción, aprobado/suspenso.', o:[
+      ['quant','Cuantitativa','Puntuaciones, tiempos, edad, escalas con muchos valores'],
+      ['ord','Ordinal','Categorías con orden: bajo / medio / alto, Likert de un ítem'],
+      ['cat','Categórica','Categorías sin orden: sí/no, tipo de tratamiento']]},
+    groups: {t:'¿Cuántos grupos o momentos comparas?', h:'Ej.: hombres/mujeres = 2; tres tratamientos = 3 o más.', o:[
+      ['2','2 grupos o momentos',''],['3','3 o más','']]},
+    design: {t:'¿Los grupos son independientes o relacionados?', h:'Relacionados = las mismas personas medidas varias veces (pre/post) o parejas emparejadas.', o:[
+      ['ind','Independientes','Cada persona pertenece a un solo grupo'],
+      ['rel','Relacionados','Las mismas personas en varios momentos o condiciones']]},
+    vars: {t:'¿Qué tipo de variables quieres relacionar?', h:'', o:[
+      ['qq','Las dos cuantitativas','Ej.: horas de estudio y nota'],
+      ['oo','Al menos una es ordinal','Ej.: nivel de estudios y satisfacción'],
+      ['cc','Las dos categóricas','Ej.: sexo y opción de voto']]},
+    pdv: {t:'¿Cómo es la variable que quieres predecir?', h:'', o:[
+      ['quant','Cuantitativa','Ej.: nota final, nivel de estrés'],
+      ['bin','Dicotómica (2 categorías)','Ej.: aprueba/suspende, sí/no'],
+      ['ord','Ordinal','Ej.: nivel bajo / medio / alto']]}
+  };
+
+  function next(){
+    const s = state;
+    if(!s.goal) return 'goal';
+    if(s.goal==='describe') return null;
+    if(s.goal==='compare'){
+      if(!s.dv) return 'dv';
+      if(!s.groups) return 'groups';
+      if(!s.design) return 'design';
+      return null;
+    }
+    if(s.goal==='relate'){ return s.vars ? null : 'vars'; }
+    if(s.goal==='predict'){ return s.pdv ? null : 'pdv'; }
+  }
+
+  const DVN = {quant:'cuantitativa',ord:'ordinal',cat:'categórica'};
+  function result(){
+    const s = state; let r;
+    const why = [];
+    if(s.goal==='describe'){
+      r = {name:'Estadísticos descriptivos', why:['Tu objetivo es describir la muestra, no contrastar una hipótesis'],
+        assum:['Elegir la medida según el tipo de variable: media y DT para cuantitativas, mediana y rango intercuartílico si la distribución es asimétrica, frecuencias y porcentajes para categóricas'],
+        alt:'Acompaña la descripción con histogramas, diagramas de caja o gráficos de barras.',
+        code:'summary(datos)\npsych::describe(datos)'};
+      return r;
+    }
+    if(s.goal==='compare'){
+      why.push('Quieres comparar grupos o momentos');
+      why.push('Variable dependiente '+DVN[s.dv]);
+      why.push(s.groups==='2'?'Comparas 2 grupos o momentos':'Comparas 3 o más grupos o momentos');
+      why.push(s.design==='ind'?'Los grupos son independientes':'Las medidas están relacionadas (mismas personas)');
+      const k = s.dv+'|'+s.groups+'|'+s.design;
+      const T = {
+        'quant|2|ind':['Prueba t de muestras independientes',['Normalidad de la VD en cada grupo (o n ≥ 30 por grupo)','Homogeneidad de varianzas (Levene); si no se cumple, usa la corrección de Welch','Independencia de las observaciones'],'U de Mann-Whitney si no se cumple la normalidad con muestras pequeñas.','t.test(vd ~ grupo, data = datos, var.equal = FALSE)'],
+        'quant|2|rel':['Prueba t de muestras relacionadas',['Normalidad de las diferencias entre las dos medidas','Las parejas de medidas corresponden a la misma persona'],'Prueba de rangos con signo de Wilcoxon si las diferencias no son normales.','t.test(datos$post, datos$pre, paired = TRUE)'],
+        'quant|3|ind':['ANOVA de un factor',['Normalidad de la VD en cada grupo','Homogeneidad de varianzas (Levene); si no se cumple, usa el ANOVA de Welch','Independencia de las observaciones','Si es significativo, comparaciones post hoc (Tukey, Games-Howell)'],'Kruskal-Wallis si no se cumplen los supuestos.','modelo <- aov(vd ~ grupo, data = datos)\nsummary(modelo)\nTukeyHSD(modelo)'],
+        'quant|3|rel':['ANOVA de medidas repetidas',['Normalidad en cada momento','Esfericidad (Mauchly); si no se cumple, corrección de Greenhouse-Geisser'],'Prueba de Friedman si no se cumplen los supuestos.','afex::aov_ez(id = "id", dv = "vd", within = "momento", data = datos_largo)'],
+        'ord|2|ind':['U de Mann-Whitney',['Observaciones independientes','VD al menos ordinal'],'Si la VD fuera cuantitativa y normal, la prueba t sería más potente.','wilcox.test(vd ~ grupo, data = datos)'],
+        'ord|2|rel':['Prueba de rangos con signo de Wilcoxon',['Medidas emparejadas','VD al menos ordinal'],'Prueba de los signos si las diferencias no son simétricas.','wilcox.test(datos$post, datos$pre, paired = TRUE)'],
+        'ord|3|ind':['Prueba H de Kruskal-Wallis',['Observaciones independientes','VD al menos ordinal','Si es significativa, comparaciones post hoc de Dunn'],'ANOVA de un factor si la VD es cuantitativa y se cumplen sus supuestos.','kruskal.test(vd ~ grupo, data = datos)'],
+        'ord|3|rel':['Prueba de Friedman',['Las mismas personas en todas las condiciones','VD al menos ordinal'],'ANOVA de medidas repetidas si la VD es cuantitativa y se cumplen sus supuestos.','friedman.test(vd ~ momento | id, data = datos_largo)'],
+        'cat|2|ind':['Chi-cuadrado de independencia',['Observaciones independientes','Frecuencias esperadas ≥ 5 en al menos el 80 % de las casillas'],'Prueba exacta de Fisher si las frecuencias esperadas son bajas.','chisq.test(table(datos$grupo, datos$vd))'],
+        'cat|3|ind':['Chi-cuadrado de independencia',['Observaciones independientes','Frecuencias esperadas ≥ 5 en al menos el 80 % de las casillas','Analiza los residuos tipificados para ver dónde están las diferencias'],'Prueba exacta de Fisher (o simulación de Monte Carlo) si las frecuencias esperadas son bajas.','chisq.test(table(datos$grupo, datos$vd))'],
+        'cat|2|rel':['Prueba de McNemar',['VD dicotómica medida dos veces en las mismas personas'],'Prueba binomial exacta si hay pocos casos discordantes.','mcnemar.test(table(datos$pre, datos$post))'],
+        'cat|3|rel':['Q de Cochran',['VD dicotómica (sí/no) medida en las mismas personas en 3 o más momentos'],'Si la VD tiene más de dos categorías, considera modelos mixtos (GLMM).','DescTools::CochranQTest(respuesta ~ momento | id, data = datos_largo)']
+      };
+      const t = T[k];
+      r = {name:t[0], why, assum:t[1], alt:t[2], code:t[3]};
+      if(k==='cat|3|rel') r.warn = 'La Q de Cochran solo sirve si tu variable es dicotómica. Si tiene más categorías, consulta a un estadístico antes de continuar.';
+      return r;
+    }
+    if(s.goal==='relate'){
+      why.push('Quieres estudiar la asociación entre dos variables');
+      if(s.vars==='qq'){ why.push('Las dos variables son cuantitativas');
+        return {name:'Correlación de Pearson', why, assum:['Relación lineal (revisa el diagrama de dispersión)','Normalidad bivariada aproximada','Sin valores atípicos influyentes'], alt:'Correlación de Spearman si la relación no es lineal o hay atípicos.', code:'cor.test(datos$x, datos$y, method = "pearson")'}; }
+      if(s.vars==='oo'){ why.push('Al menos una variable es ordinal');
+        return {name:'Correlación de Spearman', why, assum:['Relación monótona (siempre crece o siempre decrece)','Variables al menos ordinales'], alt:'Tau-b de Kendall si hay muchos empates o la muestra es pequeña.', code:'cor.test(datos$x, datos$y, method = "spearman")'}; }
+      why.push('Las dos variables son categóricas');
+      return {name:'Chi-cuadrado + V de Cramér', why, assum:['Observaciones independientes','Frecuencias esperadas ≥ 5 en al menos el 80 % de las casillas'], alt:'Prueba exacta de Fisher en tablas 2×2 con frecuencias bajas.', code:'tabla <- table(datos$x, datos$y)\nchisq.test(tabla)\nrcompanion::cramerV(tabla)'};
+    }
+    if(s.goal==='predict'){
+      why.push('Quieres explicar o predecir una variable a partir de otras');
+      if(s.pdv==='quant'){ why.push('La variable resultado es cuantitativa');
+        return {name:'Regresión lineal', why, assum:['Linealidad','Independencia de los residuos (Durbin-Watson)','Homocedasticidad','Normalidad de los residuos','Ausencia de multicolinealidad (VIF)'], alt:'Regresión robusta o transformaciones si los residuos no se comportan bien.', code:'modelo <- lm(vd ~ x1 + x2, data = datos)\nsummary(modelo)\nplot(modelo)'}; }
+      if(s.pdv==='bin'){ why.push('La variable resultado es dicotómica');
+        return {name:'Regresión logística binaria', why, assum:['Observaciones independientes','Linealidad entre los predictores continuos y el logit','Ausencia de multicolinealidad','Suficientes casos por predictor (orientativo: ≥ 10 eventos por predictor)'], alt:'Regresión logística penalizada (Firth) si hay pocos eventos.', code:'modelo <- glm(vd ~ x1 + x2, data = datos, family = binomial)\nsummary(modelo)\nexp(coef(modelo))'}; }
+      why.push('La variable resultado es ordinal');
+      return {name:'Regresión logística ordinal', why, assum:['Supuesto de odds proporcionales (prueba de Brant)','Ausencia de multicolinealidad'], alt:'Regresión multinomial si no se cumplen las odds proporcionales.', code:'modelo <- MASS::polr(vd ~ x1 + x2, data = datos, Hess = TRUE)\nsummary(modelo)', warn:'La regresión ordinal tiene supuestos delicados. Si no tienes claro cómo interpretarla, consulta a un estadístico.'};
+    }
+  }
+
+  function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+  function steps(){ const s=state; if(!s.goal) return 3; return {compare:4,relate:2,predict:2,describe:1}[s.goal]; }
+
+  function render(){
+    const key = next();
+    const done = history.length;
+    const pct = key ? Math.round(done/steps()*100) : 100;
+    let html = '<div class="progress"><i style="width:'+pct+'%"></i></div>';
+    if(key){
+      const q = Q[key];
+      html += '<div class="q"><h3>'+q.t+'</h3>'+(q.h?'<p class="hint">'+q.h+'</p>':'<p class="hint"></p>')+'<div class="opts">';
+      q.o.forEach(o=>{ html += '<button class="opt" data-k="'+key+'" data-v="'+o[0]+'"><b>'+o[1]+'</b>'+(o[2]?'<small>'+o[2]+'</small>':'')+'</button>'; });
+      html += '</div></div>';
+      html += '<div class="finder-foot">'+(done?'<button class="link" id="back">← Atrás</button>':'<span></span>')+'<span style="color:var(--muted);font-size:.9rem">Paso '+(done+1)+'</span></div>';
+    } else {
+      const r = result();
+      // análisis que la app ya realiza (el resto se recomienda, pero se avisa de que aún no está disponible)
+      r.inApp = ['Estadísticos descriptivos','Prueba t de muestras independientes','Prueba t de muestras relacionadas','ANOVA de un factor','U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis','Chi-cuadrado de independencia','Correlación de Pearson','Correlación de Spearman','Chi-cuadrado + V de Cramér','Regresión lineal','Regresión logística binaria'].includes(r.name);
+      html += '<div class="result"><div class="eyebrow">Tu análisis recomendado</div><h3>'+r.name+'</h3>';
+      html += '<h4>Por qué</h4><ul>'+r.why.map(w=>'<li>'+w+'</li>').join('')+'</ul>';
+      html += '<h4>Supuestos que debes comprobar</h4><ul>'+r.assum.map(w=>'<li>'+w+'</li>').join('')+'</ul>';
+      html += '<h4>Alternativa</h4><div class="alt">'+r.alt+'</div>';
+      html += '<h4>Código R</h4><pre>'+esc(r.code)+'</pre>';
+      if(r.warn) html += '<div class="warn">⚠️ '+r.warn+'</div>';
+      html += '<p style="color:var(--muted);font-size:.88rem;margin-top:18px">Es una orientación general según tu diseño. La decisión final depende de tu pregunta de investigación y de tus datos.</p>';
+      const auto = ['U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis'].includes(r.name);
+      if (r.inApp) html += '<div class="upsell"><div><strong>'+(auto ? 'Tharp hace esta comparación con tus datos' : 'Tharp hace este análisis con tus datos')+'</strong><br><span style="color:var(--muted)">'+(auto ? 'Ten en cuenta que Tharp elige entre la prueba paramétrica y esta alternativa no paramétrica según se cumplan o no los supuestos, no según el nivel de medida.' : 'Comprueba los supuestos, aplica la alternativa si hace falta y redacta los resultados.')+' Tus datos no salen de tu navegador.</span></div><a class="btn btn-dark" href="app.html">Analizar mis datos →</a></div>';
+      else html += '<div class="upsell"><div><strong>Este análisis todavía no está en Tharp</strong><br><span style="color:var(--muted)">Estamos trabajando en ello. Mientras tanto, puedes hacerlo en R con el código de arriba, o en JASP o SPSS.</span></div><a class="btn btn-line" href="mailto:info@tharp.es?subject=Quiero%20este%20an%C3%A1lisis%20en%20Tharp&body='+encodeURIComponent('Me gustaría poder hacer en Tharp: '+r.name)+'">Pedir este análisis</a></div>';
+      html += '<div class="finder-foot"><button class="link" id="back">← Atrás</button><button class="link" id="restart">Empezar de nuevo</button></div></div>';
+    }
+    box.innerHTML = html;
+    box.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>{ state[b.dataset.k]=b.dataset.v; history.push(b.dataset.k); render(); }));
+    const back = document.getElementById('back'); if(back) back.addEventListener('click',()=>{ const k=history.pop(); delete state[k]; render(); });
+    const rs = document.getElementById('restart'); if(rs) rs.addEventListener('click',()=>{ Object.keys(state).forEach(k=>delete state[k]); history.length=0; render(); });
+  }
+  render();
+})();
+</script>
+</body>
+</html>
