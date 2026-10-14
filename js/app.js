@@ -217,6 +217,12 @@
     h += card('binrel', false && bins.length >= 2, 'Cambio en variables sí/no (McNemar / Q de Cochran)', 'Las mismas personas responden una pregunta dicotómica en dos o más momentos: McNemar (2) o Q de Cochran (3 o más).',
       `<div class="field"><span>Momentos (variables con las mismas dos categorías, en el orden de las columnas)</span>${chips('bR', bins, () => false)}</div>`,
       bins.length < 2 ? 'Necesitas al menos dos variables categóricas con exactamente 2 categorías (por ejemplo, sí/no antes y después).' : '');
+    const dE = D.efa || {};
+    h += card('efa', !!D.efa && nums.length >= 3, 'Análisis factorial exploratorio', 'Estructura interna de un cuestionario: KMO, Bartlett, análisis paralelo, cargas factoriales, comunalidades y varianza explicada.',
+      `<div class="field"><span>Ítems</span>${chips('eI', nums, v => (dE.items ? dE.items.includes(v.name) : false))}</div>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Número de factores</span><select id="eN"><option value="auto">Automático (análisis paralelo)</option>${[1, 2, 3, 4, 5, 6, 7, 8].map(k => `<option value="${k}">${k}</option>`).join('')}</select></label>
+       <label class="field"><span>Rotación</span><select id="eR"><option value="oblimin">Oblimin (factores correlacionados, recomendada)</option><option value="varimax">Varimax (factores independientes)</option></select></label></div>`,
+      nums.length < 3 ? 'Necesitas al menos tres ítems cuantitativos.' : '');
     h += card('alpha', !!D.alpha && nums.length >= 2, 'Fiabilidad de una escala (alfa de Cronbach)', 'Consistencia interna de un cuestionario: alfa, correlación ítem-total y alfa si se elimina cada ítem.',
       `<div class="field"><span>Ítems de la escala</span>${chips('aI', nums, v => (dA.items ? dA.items.includes(v.name) : false))}</div>
        <div class="field"><span>Ítems inversos (se recodifican)</span>${chips('aR', nums, v => (dA.rev ? dA.rev.includes(v.name) : false))}</div>`,
@@ -602,6 +608,73 @@
     return { idx, cols, X };
   }
 
+  function runEfa(names, nSel, rot) {
+    const sec = { title: 'Análisis factorial exploratorio', test: '', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const vars = names.map(vByName).filter(v => v && v.type === 'num'), p = vars.length;
+    if (p < 3) { sec.error = 'Selecciona al menos tres ítems cuantitativos.'; return sec; }
+    const cols = vars.map(numOf), idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null)), n = idx.length;
+    if (n < p + 2) { sec.error = `Hay muy pocos casos completos (${n}) para ${p} ítems.`; return sec; }
+    const X = idx.map(i => cols.map(c => c[i]));
+    if (vars.some((_, j) => S.sd(X.map(r => r[j])) === 0)) { sec.error = 'Algún ítem tiene el mismo valor en todos los casos. Exclúyelo.'; return sec; }
+    const R = S.corMatrix(X), adec = S.kmoBartlett(R, n);
+    if (!adec || !isFinite(adec.kmo)) { sec.error = 'La matriz de correlaciones es singular: algún ítem es combinación exacta de otros (por ejemplo, un total de la escala). Exclúyelo.'; return sec; }
+    const eig = S.eigSym(R).values, pa = S.parallelAnalysis(n, p, eig, 100);
+    let m = nSel === 'auto' ? pa.nfactors : +nSel, auto = nSel === 'auto';
+    if (m < 1) { m = 1; sec.checks.push(chk('no', 'El análisis paralelo no indica ningún factor por encima del azar: los ítems apenas comparten varianza. Se muestra la solución de un factor solo como referencia.')); }
+    if (m > p - 1) m = p - 1;
+    const r = S.efa(X, m, rot), names2 = vars.map(v => v.name), F = Array.from({ length: m }, (_, j) => `F${j + 1}`);
+    const kq = r.adec.kmo, kl = kq >= .9 ? 'excelente' : kq >= .8 ? 'muy buena' : kq >= .7 ? 'buena' : kq >= .6 ? 'aceptable' : kq >= .5 ? 'pobre' : 'inaceptable';
+    sec.test = `Análisis factorial exploratorio (ejes principales${m > 1 ? `, rotación ${rot}` : ''})`;
+    sec.decision = `Se realizó un análisis factorial exploratorio de ${p} ítems con ${n} casos completos, extrayendo ${m} factor${m > 1 ? 'es' : ''} ${auto ? 'según el análisis paralelo' : '(número elegido por ti)'} por ejes principales${m > 1 ? ` con rotación ${rot}` : ''}.`;
+    sec.why.push('El análisis factorial exploratorio estudia qué dimensiones subyacen a un conjunto de ítems: qué ítems «van juntos» porque miden lo mismo.');
+    sec.why.push('Se usa la extracción por ejes principales, que no exige normalidad multivariante y es robusta con escalas tipo Likert.');
+    sec.why.push(auto ? 'El número de factores lo decide el análisis paralelo de Horn: se retienen los factores cuyos autovalores superan el percentil 95 de los obtenidos con datos aleatorios del mismo tamaño. Es más fiable que el criterio de autovalor mayor que 1.' : 'Has fijado tú el número de factores; el análisis paralelo se muestra como referencia.');
+    if (m > 1) sec.why.push(rot === 'oblimin' ? 'Rotación oblimin: permite que los factores correlacionen, lo habitual en constructos psicológicos y educativos.' : 'Rotación varimax: obliga a que los factores sean independientes entre sí.');
+    sec.checks.push(chk(kq >= .6 ? 'ok' : 'no', `Adecuación muestral (KMO) = ${nz(kq.toFixed(3))}: ${kl}.${kq < .6 ? ' Por debajo de .60 el análisis factorial no es recomendable.' : ''}`));
+    const lowMsa = vars.filter((_, j) => r.adec.msa[j] < .5);
+    if (lowMsa.length) sec.checks.push(chk('no', `Ítems con adecuación individual (MSA) < .50: ${list(lowMsa.map(v => esc(v.name)))}. Considera eliminarlos.`));
+    const B = r.adec.bartlett;
+    sec.checks.push(chk(B.p < .05 ? 'ok' : 'no', `Esfericidad de Bartlett: χ²(${B.df}) = ${f(B.chi)}, ${pt(B.p)}. ${B.p < .05 ? 'Los ítems están suficientemente correlacionados.' : 'Los ítems no están correlacionados: el análisis factorial no tiene sentido.'}`));
+    sec.checks.push(chk(n >= 200 ? 'ok' : n >= 100 ? 'info' : 'no', `Tamaño muestral: ${n} casos (${f(n / p, 1)} por ítem).${n >= 200 ? '' : n >= 100 ? ' Aceptable; con comunalidades altas los resultados son estables.' : ' Pequeño: los resultados pueden ser inestables.'}`));
+    const prim = r.L.map(row => { const a = row.map(Math.abs), mx = Math.max(...a); return { j: a.indexOf(mx), mx, cross: a.filter(v => v >= .32).length > 1 }; });
+    const weak = vars.filter((_, i) => prim[i].mx < .4), cross = vars.filter((_, i) => prim[i].cross && prim[i].mx >= .4), hey = vars.filter((_, i) => r.h2[i] > 1);
+    sec.checks.push(weak.length ? chk('no', `Ítems sin ninguna carga ≥ .40: ${list(weak.map(v => esc(v.name)))}. No se asocian claramente a ningún factor.`) : chk('ok', 'Todos los ítems tienen al menos una carga ≥ .40.'));
+    if (cross.length) sec.checks.push(chk('info', `Ítems con cargas cruzadas (≥ .32 en más de un factor): ${list(cross.map(v => esc(v.name)))}.`));
+    if (hey.length) sec.warn = `Caso Heywood: ${list(hey.map(v => esc(v.name)))} ${hey.length > 1 ? 'tienen' : 'tiene'} una comunalidad mayor que 1, lo que indica un problema en la solución (demasiados factores o muestra pequeña). Prueba con menos factores.`;
+    if (!r.converged) sec.checks.push(chk('no', 'La extracción no convergió del todo en 50 iteraciones: interpreta con cautela.'));
+    const neg = vars.filter((_, i) => r.L[i][prim[i].j] < -.3);
+    if (neg.length) sec.checks.push(chk('info', `Cargas negativas en ${list(neg.map(v => esc(v.name)))}: probablemente son ítems inversos; recodifícalos antes de calcular puntuaciones o la fiabilidad.`));
+    sec.tables.push(apaTable('Adecuación de los datos al análisis factorial', ['KMO', 'χ² de Bartlett', '<i>gl</i>', '<i>p</i>', '<i>n</i>', 'Ítems'], [[nz(kq.toFixed(3)), f(B.chi), B.df, pv(B.p), n, p]]));
+    const kk = Math.min(p, 10);
+    sec.tables.push(apaTable('Autovalores y análisis paralelo', ['Factor', 'Autovalor', '% varianza', 'Percentil 95 aleatorio', 'Retener'],
+      eig.slice(0, kk).map((e, j) => [j + 1, f(e), f(e / p * 100, 1), f(pa.p95[j]), e > pa.p95[j] && j < pa.nfactors ? 'Sí' : 'No']), 'Autovalores de la matriz de correlaciones. Análisis paralelo con 100 conjuntos de datos aleatorios.'));
+    const bold = v => (Math.abs(v) >= .4 ? `<b>${r2s(v)}</b>` : r2s(v));
+    sec.tables.push(apaTable(`Cargas factoriales${m > 1 ? (rot === 'oblimin' ? ' (matriz de configuración)' : ' rotadas') : ''}`, ['Ítem'].concat(F).concat(['<i>h</i>²', '<i>u</i>²']),
+      names2.map((nm, i) => [esc(nm)].concat(r.L[i].map(bold)).concat([nz(r.h2[i].toFixed(2)), nz(r.u2[i].toFixed(2))])),
+      `Extracción por ejes principales${m > 1 ? `, rotación ${rot}` : ''}. En negrita, cargas ≥ .40. <i>h</i>² = comunalidad; <i>u</i>² = unicidad.`));
+    let cum = 0;
+    sec.tables.push(apaTable('Varianza explicada', ['Factor', 'SC de las cargas', '% varianza'].concat(m > 1 && rot !== 'oblimin' ? ['% acumulado'] : []),
+      F.map((fn, j) => { cum += r.prop[j]; return [fn, f(r.ss[j]), f(r.prop[j] * 100, 1)].concat(m > 1 && rot !== 'oblimin' ? [f(cum * 100, 1)] : []); }),
+      m > 1 && rot === 'oblimin' ? 'Con rotación oblicua los factores comparten varianza y los porcentajes no se suman.' : ''));
+    if (m > 1 && rot === 'oblimin') sec.tables.push(apaTable('Correlaciones entre factores', [''].concat(F), F.map((fn, a) => [fn].concat(F.map((_, b) => (a === b ? '—' : b < a ? r2s(r.Phi[a][b]) : ''))))));
+    sec.charts.push(fig('Gráfico de sedimentación y análisis paralelo', CH.scree(eig.slice(0, Math.min(p, 15)), pa.p95.slice(0, Math.min(p, 15))), CH.legend(['Datos observados', 'Aleatorio (percentil 95)'])));
+    const total = rot === 'oblimin' && m > 1 ? null : S.sum(r.prop);
+    let t = `Se realizó un análisis factorial exploratorio con extracción por ejes principales${m > 1 ? ` y rotación ${rot}` : ''} sobre los ${p} ítems (<i>n</i> = ${n}). La medida de adecuación muestral de Kaiser-Meyer-Olkin fue ${kl} (KMO = ${nz(kq.toFixed(2))}) y la prueba de esfericidad de Bartlett ${B.p < .05 ? 'fue' : 'no fue'} significativa, χ²(${B.df}) = ${f(B.chi)}, ${pt(B.p)}. `;
+    t += auto ? `El análisis paralelo indicó retener ${m} factor${m > 1 ? 'es' : ''}` : `Se extrajeron ${m} factor${m > 1 ? 'es' : ''}`;
+    t += total !== null ? `, que ${m > 1 ? 'explicaron' : 'explicó'} el ${f(total * 100, 1)} % de la varianza. ` : '. ';
+    t += F.map((fn, j) => { const its = vars.filter((_, i) => prim[i].j === j && prim[i].mx >= .4); if (!its.length) return `Ningún ítem cargó de forma destacada en el factor ${j + 1}.`;
+      const ld = its.map(v => Math.abs(r.L[names2.indexOf(v.name)][j])), ng = its.filter(v => r.L[names2.indexOf(v.name)][j] < 0);
+      return `${m > 1 ? `El factor ${j + 1} agrupó` : 'El factor agrupó'} ${its.length === 1 ? 'el ítem' : 'los ítems'} ${list(its.map(v => esc(v.name)))} (cargas ${its.length === 1 ? 'de' : 'entre'} ${nz(Math.min(...ld).toFixed(2))}${its.length > 1 ? ` y ${nz(Math.max(...ld).toFixed(2))}` : ''}${ng.length ? ` en valor absoluto; ${list(ng.map(v => esc(v.name)))} con carga negativa, propia de un ítem inverso` : ''}).`; }).join(' ');
+    if (m > 1 && rot === 'oblimin') { const cs = []; for (let a = 0; a < m; a++) for (let b = a + 1; b < m; b++) cs.push(r.Phi[a][b]); t += ` Las correlaciones entre factores oscilaron entre ${r2s(Math.min(...cs))} y ${r2s(Math.max(...cs))}.`; }
+    if (weak.length) t += ` ${list(weak.map(v => esc(v.name)))} no ${weak.length > 1 ? 'mostraron' : 'mostró'} cargas ≥ .40 en ningún factor.`;
+    sec.text.push(t);
+    sec.alt = 'Análisis factorial confirmatorio (por ejemplo, con lavaan en R) para contrastar una estructura teórica definida a priori. Con ítems ordinales de pocas categorías, puede usarse la matriz de correlaciones policóricas.';
+    const Q = names2.map(rq).join(', ');
+    sec.code = `# Análisis factorial exploratorio\nitems <- datos[complete.cases(datos[, c(${Q})]), c(${Q})]\npsych::KMO(items)\npsych::cortest.bartlett(cor(items), n = nrow(items))\npsych::fa.parallel(items, fm = "pa", fa = "pc", n.iter = 100, quant = .95)\n` +
+      `afe <- psych::fa(items, nfactors = ${m}, fm = "pa", rotate = "${m > 1 ? rot : 'none'}")\nprint(afe$loadings, cutoff = .3, sort = TRUE)\nafe$communality` + (m > 1 && rot === 'oblimin' ? '\nafe$Phi' : '');
+    return sec;
+  }
+
   function runAlpha(names, reversed) {
     const sec = { title: 'Fiabilidad: alfa de Cronbach', test: 'Alfa de Cronbach', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     const vars = names.map(vByName).filter(v => v && v.type === 'num');
@@ -612,7 +685,7 @@
     const lo = Math.min(...items.flat()), hi = Math.max(...items.flat()), rev = vars.map(v => reversed.includes(v.name));
     items = items.map((it, j) => (rev[j] ? it.map(x => lo + hi - x) : it));
     if (items.some(it => S.sd(it) === 0)) { sec.error = 'Algún ítem tiene varianza 0 (todas las respuestas iguales). Exclúyelo.'; return sec; }
-    const r = S.cronbach(items), n = r.n, a = r.alpha;
+    const r = S.cronbach(items), n = r.n, a = r.alpha, om = S.omegaTotal(items[0].map((_, i) => items.map(it => it[i]))).omega;
     const qual = a >= .9 ? 'excelente' : a >= .8 ? 'buena' : a >= .7 ? 'aceptable' : a >= .6 ? 'cuestionable' : a >= .5 ? 'pobre' : 'inaceptable';
     sec.decision = `Se calcula el alfa de Cronbach de ${vars.length} ítems con ${n} casos completos${rev.some(Boolean) ? `, invirtiendo ${list(vars.filter((_, j) => rev[j]).map(v => esc(v.name)))}` : ''}.`;
     sec.why.push('El alfa de Cronbach estima la consistencia interna: si los ítems de una escala miden un mismo constructo.');
@@ -625,17 +698,19 @@
     sec.checks.push(neg.length || low.length ? chk('no', `Ítems con correlación ítem-total corregida baja (< .30): ${list(neg.concat(low).map(v => esc(v.name)))}.`) : chk('ok', 'Todos los ítems tienen una correlación ítem-total corregida ≥ .30.'));
     if (better.length) sec.checks.push(chk('info', `Eliminar ${list(better.map(v => esc(v.name)))} aumentaría el alfa. Valóralo según el contenido del ítem, no solo por el número.`));
     sec.checks.push(chk(vars.length >= 3 ? 'ok' : 'no', `Número de ítems: ${vars.length}.${vars.length < 3 ? ' Con 2 ítems el alfa es poco informativo; considera la correlación de Spearman-Brown.' : ''}`));
-    sec.checks.push(chk('info', 'El alfa asume que todos los ítems miden un único factor con cargas similares (tau-equivalencia). Si no es así, el omega de McDonald es más adecuado.'));
-    sec.tables.push(apaTable('Fiabilidad de la escala', ['α de Cronbach', 'α estandarizado', '<i>r</i> media inter-ítem', 'Ítems', '<i>n</i>', '<i>M</i> (total)', '<i>DT</i> (total)'],
-      [[nz(a.toFixed(3)), nz(r.alphaStd.toFixed(3)), r2s(r.rbar), r.k, n, f(r.totalMean), f(r.totalSd)]]));
+    sec.checks.push(chk('info', `El alfa asume que todos los ítems miden un único factor con cargas similares (tau-equivalencia). Por eso se informa también el omega de McDonald (ω = ${nz(om.toFixed(3))}), que no lo exige${Math.abs(om - a) > .03 ? '; aquí difieren, así que conviene informar sobre todo el omega' : '; aquí ambos coinciden prácticamente'}.`));
+    sec.tables.push(apaTable('Fiabilidad de la escala', ['α de Cronbach', 'α estandarizado', 'ω de McDonald', '<i>r</i> media inter-ítem', 'Ítems', '<i>n</i>', '<i>M</i> (total)', '<i>DT</i> (total)'],
+      [[nz(a.toFixed(3)), nz(r.alphaStd.toFixed(3)), nz(om.toFixed(3)), r2s(r.rbar), r.k, n, f(r.totalMean), f(r.totalSd)]], 'ω de McDonald (total) estimado con un modelo de un factor por ejes principales.'));
     sec.tables.push(apaTable('Estadísticos de los ítems', ['Ítem', '<i>M</i>', '<i>DT</i>', 'Correlación ítem-total corregida', 'α si se elimina el ítem'],
       vars.map((v, j) => [esc(v.name) + (rev[j] ? ' (invertido)' : ''), f(r.stats[j].mean), f(r.stats[j].sd), r2s(r.stats[j].rit), isFinite(r.stats[j].alphaDel) ? nz(r.stats[j].alphaDel.toFixed(3)) : '—'])));
-    let t = `La consistencia interna de la escala formada por ${vars.length} ítems fue ${qual}, α = ${nz(a.toFixed(2))} (<i>n</i> = ${n}).`;
+    let t = `La consistencia interna de la escala formada por ${vars.length} ítems fue ${qual}, α = ${nz(a.toFixed(2))}, ω = ${nz(om.toFixed(2))} (<i>n</i> = ${n}).`;
     t += ` Las correlaciones ítem-total corregidas oscilaron entre ${r2s(Math.min(...r.stats.map(s => s.rit)))} y ${r2s(Math.max(...r.stats.map(s => s.rit)))}.`;
     if (rev.some(Boolean)) t += ` ${list(vars.filter((_, j) => rev[j]).map(v => esc(v.name)))} se ${rev.filter(Boolean).length > 1 ? 'recodificaron' : 'recodificó'} de forma inversa antes del análisis.`;
     sec.text.push(t);
     const keys = vars.filter((_, j) => rev[j]).map(v => rq(v.name));
-    sec.code = `# Fiabilidad (alfa de Cronbach)\npsych::alpha(datos[, c(${vars.map(v => rq(v.name)).join(', ')})]${keys.length ? `, keys = c(${keys.join(', ')})` : ''})`;
+    sec.code = `# Fiabilidad (alfa de Cronbach y omega de McDonald)\npsych::alpha(datos[, c(${vars.map(v => rq(v.name)).join(', ')})]${keys.length ? `, keys = c(${keys.join(', ')})` : ''})\n` +
+      `it <- datos[complete.cases(datos[, c(${vars.map(v => rq(v.name)).join(', ')})]), c(${vars.map(v => rq(v.name)).join(', ')})]\n` + (keys.length ? `for (k in c(${keys.join(', ')})) it[[k]] <- ${lo} + ${hi} - it[[k]]  # ítems inversos\n` : '') +
+      `l <- as.numeric(psych::fa(it, nfactors = 1, fm = "pa")$loadings); l <- l * sign(sum(l))\nsum(l)^2 / (sum(l)^2 + sum(1 - l^2))  # omega total`;
     return sec;
   }
 
@@ -886,6 +961,7 @@
       if (isOn('fact')) add(runFactorial($('#fY').value, $('#fA').value, $('#fB').value));
       if (isOn('ancova')) add(runAncova($('#acY').value, $('#acG').value, checkedVals('acC')));
       if (isOn('binrel')) add(runBinRel(checkedVals('bR')));
+      if (isOn('efa')) add(runEfa(checkedVals('eI'), $('#eN').value, $('#eR').value));
       if (isOn('alpha')) add(runAlpha(checkedVals('aI'), checkedVals('aR')));
     } catch (e) { console.error(e); alert('Ha ocurrido un error inesperado en el análisis: ' + e.message); return; }
     if (!secs.length) { alert('Selecciona al menos un análisis.'); return; }
@@ -1056,7 +1132,7 @@
   }
   const DEMO_DEFAULTS = { comp: { y: ['ansiedad_post'], g: 'grupo' }, paired: { vars: ['ansiedad_pre', 'ansiedad_post', 'ansiedad_seguimiento'] }, chi: { a: 'sexo', b: 'fuma' },
     reg: { y: 'rendimiento', x: ['horas_sueno', 'estres', 'ansiedad_post'] }, logit: { y: 'fuma', x: ['estres', 'sexo', 'edad'] },
-    fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, ancova: { y: 'ansiedad_post', g: 'grupo', c: ['ansiedad_pre'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
+    fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, efa: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'] }, ancova: { y: 'ansiedad_post', g: 'grupo', c: ['ansiedad_pre'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
 
   // ---------- navegación ----------
   function show(n) {

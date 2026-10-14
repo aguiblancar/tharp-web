@@ -411,7 +411,114 @@
     return { Q, df: k - 1, p: den ? pChi(Q, k - 1) : 1, props: Cj.map(c => c / M.length), n: M.length };
   }
 
+  // ---------- álgebra para el análisis factorial ----------
+  const matMul = (A, B) => A.map(r => B[0].map((_, j) => { let s = 0; for (let k = 0; k < r.length; k++) s += r[k] * B[k][j]; return s; }));
+  const tr = A => A[0].map((_, j) => A.map(r => r[j]));
+  const ident = n => Array.from({ length: n }, (_, i) => Array.from({ length: n }, (_, j) => (i === j ? 1 : 0)));
+  function eigSym(A0) { // Jacobi para matrices simétricas: valores propios en orden decreciente y vectores en columnas
+    const n = A0.length, A = A0.map(r => r.slice()), V = ident(n);
+    for (let sweep = 0; sweep < 100; sweep++) {
+      let off = 0; for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) off += A[i][j] * A[i][j];
+      if (off < 1e-22) break;
+      for (let p = 0; p < n; p++) for (let q = p + 1; q < n; q++) {
+        if (Math.abs(A[p][q]) < 1e-300) continue;
+        const th = (A[q][q] - A[p][p]) / (2 * A[p][q]), t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1)), c = 1 / Math.sqrt(t * t + 1), s = t * c;
+        for (let k = 0; k < n; k++) { const akp = A[k][p], akq = A[k][q]; A[k][p] = c * akp - s * akq; A[k][q] = s * akp + c * akq; }
+        for (let k = 0; k < n; k++) { const apk = A[p][k], aqk = A[q][k]; A[p][k] = c * apk - s * aqk; A[q][k] = s * apk + c * aqk; }
+        for (let k = 0; k < n; k++) { const vkp = V[k][p], vkq = V[k][q]; V[k][p] = c * vkp - s * vkq; V[k][q] = s * vkp + c * vkq; }
+      }
+    }
+    const ord = A.map((r, i) => i).sort((a, b) => A[b][b] - A[a][a]);
+    return { values: ord.map(i => A[i][i]), vectors: V.map(r => ord.map(i => r[i])) };
+  }
+  function corMatrix(X) { // X: n × p
+    const p = X[0].length, cols = Array.from({ length: p }, (_, j) => X.map(r => r[j]));
+    return cols.map((a, i) => cols.map((b, j) => (i === j ? 1 : pearson(a, b).r)));
+  }
+  function kmoBartlett(R, n) {
+    const p = R.length, Ri = inv(R); if (!Ri) return null;
+    const A = R.map((r, i) => r.map((_, j) => -Ri[i][j] / Math.sqrt(Ri[i][i] * Ri[j][j])));
+    let r2 = 0, a2 = 0; const msa = [];
+    for (let i = 0; i < p; i++) { let ri = 0, ai = 0; for (let j = 0; j < p; j++) if (i !== j) { ri += R[i][j] ** 2; ai += A[i][j] ** 2; } msa.push(ri / (ri + ai)); r2 += ri; a2 += ai; }
+    const ld = eigSym(R).values.reduce((s, v) => s + Math.log(v), 0), chi = -((n - 1) - (2 * p + 5) / 6) * ld, df = p * (p - 1) / 2;
+    return { kmo: r2 / (r2 + a2), msa, bartlett: { chi, df, p: pChi(chi, df) } };
+  }
+  function paFactor(R, m, minErr = 0.001, maxIter = 50) { // ejes principales, con el mismo criterio de parada que psych::fa(fm = "pa")
+    const p = R.length, Ri = inv(R), M = R.map(r => r.slice());
+    for (let i = 0; i < p; i++) M[i][i] = Ri ? 1 - 1 / Ri[i][i] : 1;           // comunalidades iniciales: correlación múltiple al cuadrado
+    let comm = M.reduce((s, r, i) => s + r[i], 0), err = comm, L = null, it = 0;
+    while (err > minErr && it < maxIter) {
+      const e = eigSym(M); L = M.map((_, i) => Array.from({ length: m }, (_, j) => e.vectors[i][j] * Math.sqrt(Math.max(e.values[j], 0))));
+      const nw = L.map(r => sum(r.map(v => v * v))), c1 = sum(nw);
+      nw.forEach((v, i) => M[i][i] = v); err = Math.abs(comm - c1); comm = c1; it++;
+    }
+    return { L, iter: it, converged: err <= minErr };
+  }
+  function svdSmall(B) { // B cuadrada pequeña: B = U diag(d) V'
+    const e = eigSym(matMul(tr(B), B)), V = e.vectors, d = e.values.map(v => Math.sqrt(Math.max(v, 0)));
+    const BV = matMul(B, V), U = BV.map(r => r.map((v, j) => (d[j] > 1e-15 ? v / d[j] : 0)));
+    return { U, d, V };
+  }
+  function varimax(L0, eps = 1e-5) { // como stats::varimax de R (normalización de Kaiser)
+    const p = L0.length, m = L0[0].length; if (m < 2) return { L: L0, T: ident(m) };
+    const sc = L0.map(r => Math.sqrt(sum(r.map(v => v * v)))), x = L0.map((r, i) => r.map(v => v / sc[i]));
+    let TT = ident(m), d = 0;
+    for (let it = 0; it < 1000; it++) {
+      const z = matMul(x, TT), cs = Array.from({ length: m }, (_, j) => sum(z.map(r => r[j] ** 2)) / p);
+      const B = matMul(tr(x), z.map(r => r.map((v, j) => v ** 3 - v * cs[j]))), s = svdSmall(B);
+      TT = matMul(s.U, tr(s.V)); const dp = d; d = sum(s.d); if (d < dp * (1 + eps)) break;
+    }
+    return { L: matMul(x, TT).map((r, i) => r.map(v => v * sc[i])), T: TT };
+  }
+  function oblimin(A, eps = 1e-5, maxit = 1000) { // GPArotation::GPFoblq con criterio oblimin (gamma = 0, sin normalizar)
+    const m = A[0].length; if (m < 2) return { L: A, Phi: [[1]] };
+    const vgQ = L => { const L2 = L.map(r => r.map(v => v * v)), X = L2.map(r => r.map((_, j) => sum(r) - r[j]));
+      return { Gq: L.map((r, i) => r.map((v, j) => v * X[i][j])), f: sum(L2.map((r, i) => sum(r.map((v, j) => v * X[i][j])))) / 4 }; };
+    let T = ident(m), Ti = inv(T), L = matMul(A, tr(Ti)), V = vgQ(L);
+    let G = tr(matMul(matMul(tr(L), V.Gq), Ti)).map(r => r.map(v => -v)), f = V.f, al = 1;
+    for (let it = 0; it <= maxit; it++) {
+      const cs = Array.from({ length: m }, (_, j) => sum(T.map((r, i) => r[j] * G[i][j])));
+      const Gp = G.map((r, i) => r.map((v, j) => v - T[i][j] * cs[j])), s = Math.sqrt(sum(Gp.map(r => sum(r.map(v => v * v)))));
+      if (s < eps) break;
+      al *= 2; let Tt, Lt, Vt;
+      for (let i = 0; i <= 10; i++) {
+        const X = T.map((r, a) => r.map((v, b) => v - al * Gp[a][b])), v = Array.from({ length: m }, (_, j) => 1 / Math.sqrt(sum(X.map(r => r[j] ** 2))));
+        Tt = X.map(r => r.map((x, j) => x * v[j])); Lt = matMul(A, tr(inv(Tt))); Vt = vgQ(Lt);
+        if (f - Vt.f > .5 * s * s * al) break; al /= 2;
+      }
+      T = Tt; f = Vt.f; L = Lt; G = tr(matMul(matMul(tr(Lt), Vt.Gq), inv(Tt))).map(r => r.map(v => -v));
+    }
+    return { L, Phi: matMul(tr(T), T) };
+  }
+  function efa(X, m, rotation = 'oblimin') { // X: n × p casos completos
+    const n = X.length, R = corMatrix(X), adec = kmoBartlett(R, n), eig = eigSym(R).values;
+    const ext = paFactor(R, m); let L = ext.L, Phi = ident(m);
+    if (m > 1) { if (rotation === 'varimax') L = varimax(L).L; else if (rotation === 'oblimin') { const o = oblimin(L); L = o.L; Phi = o.Phi; } }
+    // como psych: factores ordenados por varianza explicada y con signo positivo de la suma de cargas
+    const ev = Array.from({ length: m }, (_, j) => { const LtL = matMul(tr(L), L), PL = matMul(Phi, LtL); return PL[j][j]; });
+    const ord = ev.map((v, j) => j).sort((a, b) => ev[b] - ev[a]);
+    L = L.map(r => ord.map(j => r[j])); Phi = ord.map(a => ord.map(b => Phi[a][b]));
+    const sg = Array.from({ length: m }, (_, j) => (sum(L.map(r => r[j])) < 0 ? -1 : 1));
+    L = L.map(r => r.map((v, j) => v * sg[j])); Phi = Phi.map((r, a) => r.map((v, b) => v * sg[a] * sg[b]));
+    const LPL = matMul(matMul(L, Phi), tr(L)), h2 = LPL.map((r, i) => r[i]), p = R.length;
+    const ss = Array.from({ length: m }, (_, j) => matMul(Phi, matMul(tr(L), L))[j][j]);
+    let rms = 0; for (let i = 0; i < p; i++) for (let j = 0; j < p; j++) if (i !== j) rms += (R[i][j] - LPL[i][j]) ** 2;
+    return { L, Phi, h2, u2: h2.map(v => 1 - v), ss, prop: ss.map(v => v / p), adec, eig, n, p, m, rotation, rmsr: Math.sqrt(rms / (p * (p - 1))), converged: ext.converged };
+  }
+  function parallelAnalysis(n, p, eigObs, reps = 100, seed = 20261015) { // Horn con autovalores de componentes y percentil 95
+    let s = seed >>> 0; const rnd = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const nr = () => { let u = 0; while (!u) u = rnd(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd()); };
+    const sims = Array.from({ length: p }, () => []);
+    for (let r = 0; r < reps; r++) { const X = Array.from({ length: n }, () => Array.from({ length: p }, nr)); eigSym(corMatrix(X)).values.forEach((v, j) => sims[j].push(v)); }
+    const p95 = sims.map(a => quantile(sorted(a), .95)); let k = 0; while (k < p && eigObs[k] > p95[k]) k++;
+    return { p95, nfactors: k };
+  }
+  function omegaTotal(X) { // ω de McDonald a partir de un modelo de un factor (ejes principales)
+    const R = corMatrix(X), l = paFactor(R, 1).L.map(r => r[0]), sl = sum(l) * (sum(l) < 0 ? -1 : 1), u = sum(l.map(v => 1 - v * v));
+    return { omega: sl * sl / (sl * sl + u), loadings: l.map(v => v * (sum(l) < 0 ? -1 : 1)) };
+  }
+
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
-    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
+    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
 })(typeof window !== 'undefined' ? window : this);

@@ -170,5 +170,19 @@
     return s + '</svg>';
   }
 
-  root.TharpCharts = { histogram, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
+  // gráfico de sedimentación: autovalores observados frente al percentil 95 del análisis paralelo
+  function scree(obs, ref) {
+    const W = 640, H = 320, m = { l: 48, r: 16, t: 16, b: 44 }, pw = W - m.l - m.r, ph = H - m.t - m.b, k = obs.length;
+    const yt = ticks(0, Math.max(...obs, ...(ref || [0]), 1), 5), sx = i => m.l + (k === 1 ? pw / 2 : i / (k - 1) * pw), sy = v => m.t + ph - v / yt[yt.length - 1] * ph;
+    let s = svgOpen(W, H, 'Gráfico de sedimentación') + yAxis(yt, sy, m.l, W - m.r);
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(1)}" y2="${sy(1)}" stroke="${COL.axis}" stroke-dasharray="2 4" stroke-opacity=".6"><title>Autovalor = 1</title></line>`;
+    const path = (v, col, dash) => `<polyline points="${v.map((y, i) => sx(i).toFixed(1) + ',' + sy(y).toFixed(1)).join(' ')}" fill="none" stroke="${col}" stroke-width="2"${dash ? ' stroke-dasharray="6 5"' : ''}/>`;
+    if (ref) { s += path(ref, COL.s[1], true); ref.forEach((y, i) => s += `<circle cx="${sx(i).toFixed(1)}" cy="${sy(y).toFixed(1)}" r="3" fill="${COL.s[1]}"><title>Aleatorio (p95), ${i + 1}: ${fmt(y)}</title></circle>`); }
+    s += path(obs, COL.s[0]); obs.forEach((y, i) => s += `<circle cx="${sx(i).toFixed(1)}" cy="${sy(y).toFixed(1)}" r="4.5" fill="${COL.s[0]}" stroke="${COL.surface}" stroke-width="1.5"><title>Factor ${i + 1}: autovalor ${fmt(y)}</title></circle>`);
+    obs.forEach((_, i) => { if (k <= 15 || i % 2 === 0) s += `<text x="${sx(i)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${i + 1}</text>`; });
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${H - m.b}" y2="${H - m.b}" stroke="${COL.axis}"/>`;
+    s += `<text x="${m.l + pw / 2}" y="${H - 6}" text-anchor="middle" fill="${COL.axis}">Factor</text><text transform="translate(14 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" fill="${COL.axis}">Autovalor</text>`;
+    return s + '</svg>';
+  }
+  root.TharpCharts = { scree, histogram, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
 })(window);

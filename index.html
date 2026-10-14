@@ -319,7 +319,7 @@ footer a:hover{text-decoration:underline}
     <h2 style="margin-top:10px">De tu archivo a los resultados, en tres pasos.</h2>
     <div class="grid3">
       <div class="card"><span class="num">01</span><h3>Sube tus datos</h3><p>Excel, CSV o archivos de SPSS (.sav) y JASP (.jasp), con sus etiquetas y valores perdidos. Tharp detecta las variables, sus tipos y los participantes.</p></div>
-      <div class="card"><span class="num">02</span><h3>Elige qué necesitas</h3><p>Descriptivos, correlaciones, comparación de grupos, medidas pre/post o de varios momentos, chi-cuadrado, McNemar, regresión lineal y logística, ANOVA factorial, ANCOVA o alfa de Cronbach.</p></div>
+      <div class="card"><span class="num">02</span><h3>Elige qué necesitas</h3><p>Descriptivos, correlaciones, comparación de grupos, medidas pre/post o de varios momentos, chi-cuadrado, McNemar, regresión lineal y logística, ANOVA factorial, ANCOVA, análisis factorial o fiabilidad (alfa y omega).</p></div>
       <div class="card"><span class="num">03</span><h3>Descarga los resultados</h3><p>Tablas APA, gráficos y un borrador del apartado de resultados en Word, y el script de R que reproduce cada análisis.</p></div>
     </div>
   </div>
@@ -363,7 +363,7 @@ footer a:hover{text-decoration:underline}
     <h2 style="margin-top:10px">Un resultado solo vale si puedes confiar en él.</h2>
     <p class="lead" style="margin-top:14px">Cada prueba de Tharp se compara automáticamente con R y con las librerías estadísticas de referencia de Python antes de cada versión. Si un número no coincide, no se publica.</p>
     <div class="stats">
-      <div><b>152</b><span>comprobaciones automáticas frente a R, scipy, statsmodels, pingouin y scikit-posthocs</span></div>
+      <div><b>184</b><span>comprobaciones automáticas frente a R, scipy, statsmodels, pingouin y scikit-posthocs</span></div>
       <div><b>4</b><span>tipos de archivo cuyo script R se ejecuta en R para comprobar que da los mismos resultados</span></div>
       <div><b>0</b><span>datos enviados a servidores: todo se calcula en tu navegador</span></div>
       <div><b>100 %</b><span>de los análisis con su código R para reproducirlos</span></div>
@@ -374,7 +374,7 @@ footer a:hover{text-decoration:underline}
       <p><b>Medidas relacionadas:</b> t para muestras relacionadas y Wilcoxon (2 momentos); ANOVA de medidas repetidas con prueba de esfericidad de Mauchly y corrección de Greenhouse-Geisser, o Friedman (3 o más), con comparaciones por pares de Holm.</p>
       <p><b>Asociación:</b> Pearson y Spearman, chi-cuadrado con residuos tipificados corregidos, prueba exacta de Fisher y V de Cramér; McNemar y Q de Cochran para respuestas sí/no relacionadas.</p>
       <p><b>Modelos:</b> regresión lineal (con errores robustos HC3 si hay heterocedasticidad), regresión logística binaria, ANOVA factorial y ANCOVA con sumas de cuadrados de tipo III, homogeneidad de pendientes y medias ajustadas.</p>
-      <p><b>Fiabilidad:</b> alfa de Cronbach, alfa estandarizado, correlación ítem-total corregida y alfa si se elimina el ítem, con ítems inversos.</p>
+      <p><b>Cuestionarios y escalas:</b> análisis factorial exploratorio (KMO, Bartlett, análisis paralelo, ejes principales con rotación oblimin o varimax), alfa de Cronbach y omega de McDonald, con ítems inversos.</p>
     </div>
   </div>
 </section>
@@ -445,7 +445,7 @@ footer a:hover{text-decoration:underline}
       <details><summary>¿Mis datos se suben a algún servidor?</summary><p>No. Todo el cálculo se hace en tu navegador, con el código de la página. El archivo no sale de tu ordenador y nada se guarda cuando cierras la pestaña.</p></details>
       <details><summary>¿Qué archivos puedo usar?</summary><p>Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp). De SPSS y JASP se respetan las etiquetas de valor, los tipos de medida y los valores perdidos definidos por el usuario. La primera fila debe tener los nombres de las variables y cada fila, un participante.</p></details>
       <details><summary>¿Los resultados son fiables?</summary><p>Cada prueba está validada automáticamente contra R y las librerías estadísticas de Python, y cada análisis incluye el script de R para que cualquiera (tú, tu tutor o un revisor) pueda reproducirlo. Aun así, revisa siempre los resultados: Tharp automatiza el cálculo, pero la interpretación es tuya.</p></details>
-      <details><summary>¿Sustituye a SPSS, JASP o R?</summary><p>Para los análisis más habituales en un TFG, TFM, tesis o artículo, te ahorra hacerlos a mano. Para análisis que Tharp todavía no incluye (por ejemplo, modelos mixtos, ANCOVA o análisis factorial) seguirás necesitando otro programa; el buscador de pruebas te avisa cuando es así.</p></details>
+      <details><summary>¿Sustituye a SPSS, JASP o R?</summary><p>Para la gran mayoría de análisis de un TFG, TFM, tesis o artículo, sí. Tharp incluye: estadísticos descriptivos; correlaciones de Pearson y Spearman; pruebas t (independientes y relacionadas) y sus alternativas no paramétricas (Mann-Whitney y Wilcoxon); ANOVA de un factor, de Welch, factorial y de medidas repetidas, con sus post hoc; ANCOVA; Kruskal-Wallis y Friedman; chi-cuadrado, prueba exacta de Fisher, McNemar y Q de Cochran; regresión lineal y logística binaria; análisis factorial exploratorio; y fiabilidad con alfa de Cronbach y omega de McDonald.</p><p>Estamos incorporando moderación y mediación, modelos mixtos y análisis factorial confirmatorio. Si necesitas un análisis que aún no está, el buscador de pruebas te lo indica y puedes escribirnos: priorizamos lo que más nos pedís.</p></details>
       <details><summary>¿Puedo usarlo en mi TFM o mi tesis?</summary><p>Sí. Tharp genera tablas y texto en formato APA y un documento de Word editable. Si tu centro lo pide, puedes citar el software e incluir el script de R como anexo.</p></details>
     </div>
   </div>
