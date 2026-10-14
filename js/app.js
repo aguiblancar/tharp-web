@@ -217,6 +217,20 @@
     h += card('binrel', false && bins.length >= 2, 'Cambio en variables sí/no (McNemar / Q de Cochran)', 'Las mismas personas responden una pregunta dicotómica en dos o más momentos: McNemar (2) o Q de Cochran (3 o más).',
       `<div class="field"><span>Momentos (variables con las mismas dos categorías, en el orden de las columnas)</span>${chips('bR', bins, () => false)}</div>`,
       bins.length < 2 ? 'Necesitas al menos dos variables categóricas con exactamente 2 categorías (por ejemplo, sí/no antes y después).' : '');
+    const xs = nums.concat(bins), dMo = D.mod || {}, dMe = D.med || {};
+    // por defecto, variables distintas en cada papel (Y y M cuantitativas; X puede ser de 2 categorías)
+    const nmN = v => v && v.name, defMeY = nmN(nums[nums.length - 1]), defMeM = nmN(nums[nums.length - 2]), defMeX = nmN(xs.find(v => v.name !== defMeY && v.name !== defMeM));
+    const defMoY = nmN(nums[0]), defMoX = nmN(xs.find(v => v.name !== defMoY)), defMoW = nmN(xs.find(v => v.name !== defMoY && v.name !== defMoX));
+    h += card('mod', !!D.mod && nums.length >= 2, 'Moderación (efecto de interacción)', '¿El efecto de X sobre Y depende de una tercera variable? Interacción, pendientes simples, región de Johnson-Neyman y gráfico (modelo 1 de PROCESS).',
+      `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Variable dependiente (Y)</span>${sel('moY', nums, pick(dMo.y, defMoY))}</label>
+       <label class="field"><span>Predictor (X)</span>${sel('moX', xs, pick(dMo.x, defMoX))}</label>
+       <label class="field"><span>Moderador (W)</span>${sel('moW', xs, pick(dMo.w, defMoW))}</label></div>`,
+      nums.length < 2 ? 'Necesitas una variable dependiente cuantitativa, un predictor y un moderador (cuantitativos o de 2 categorías).' : '');
+    h += card('med', !!D.med && nums.length >= 2, 'Mediación (efecto indirecto)', '¿X influye en Y a través de un mediador M? Efectos a, b, c y c′ y efecto indirecto con intervalo bootstrap (modelo 4 de PROCESS).',
+      `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Predictor (X)</span>${sel('meX', xs, pick(dMe.x, defMeX))}</label>
+       <label class="field"><span>Mediador (M)</span>${sel('meM', nums, pick(dMe.m, defMeM))}</label>
+       <label class="field"><span>Variable dependiente (Y)</span>${sel('meY', nums, pick(dMe.y, defMeY))}</label></div>`,
+      nums.length < 2 ? 'Necesitas un predictor, un mediador cuantitativo y una variable dependiente cuantitativa.' : '');
     const dE = D.efa || {};
     h += card('efa', !!D.efa && nums.length >= 3, 'Análisis factorial exploratorio', 'Estructura interna de un cuestionario: KMO, Bartlett, análisis paralelo, cargas factoriales, comunalidades y varianza explicada.',
       `<div class="field"><span>Ítems</span>${chips('eI', nums, v => (dE.items ? dE.items.includes(v.name) : false))}</div>
@@ -608,6 +622,113 @@
     return { idx, cols, X };
   }
 
+  // variable cuantitativa o de 2 categorías codificada 0/1 (0 = primera categoría)
+  function numOrBin(v) {
+    if (v.type === 'num') return { vals: numOf(v), bin: false };
+    const lv = levelsOf(v); if (lv.length !== 2) return null;
+    return { vals: catOf(v).map(x => (x === null ? null : x === lv[1] ? 1 : 0)), bin: true, lv };
+  }
+  function rCode01(v, info) { return info.bin ? `as.numeric(datos[[${rq(v)}]] == ${rq(info.lv[1])})  # 0 = ${info.lv[0]}, 1 = ${info.lv[1]}` : `datos[[${rq(v)}]]`; }
+
+  function runModeration(yN, xN, wN) {
+    const sec = { title: `Moderación: ${xN} → ${yN}, moderado por ${wN}`, test: 'Moderación (regresión con interacción)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (new Set([yN, xN, wN]).size < 3) { sec.error = 'La variable dependiente, el predictor y el moderador deben ser distintos.'; return sec; }
+    const yv = numOf(vByName(yN)), xi = numOrBin(vByName(xN)), wi = numOrBin(vByName(wN));
+    if (!xi || !wi) { sec.error = 'El predictor y el moderador deben ser cuantitativos o tener exactamente 2 categorías.'; return sec; }
+    const idx = ST.rows.map((_, i) => i).filter(i => yv[i] !== null && xi.vals[i] !== null && wi.vals[i] !== null), n = idx.length;
+    if (n < 10) { sec.error = 'Hay muy pocos casos completos.'; return sec; }
+    const y = idx.map(i => yv[i]), x = idx.map(i => xi.vals[i]), w = idx.map(i => wi.vals[i]);
+    if (S.sd(x) === 0 || S.sd(w) === 0) { sec.error = 'El predictor o el moderador no varía.'; return sec; }
+    const r = S.moderation(y, x, w, null, !xi.bin, !wi.bin);
+    if (!r) { sec.error = 'No se pudo estimar el modelo (colinealidad perfecta).'; return sec; }
+    const sdW = S.sd(w), mW = S.mean(w), sdX = S.sd(x), mX = S.mean(x);
+    const wPts = wi.bin ? [{ v: 0, lab: `${wN} = ${wi.lv[0]}` }, { v: 1, lab: `${wN} = ${wi.lv[1]}` }] : [{ v: mW - sdW, lab: `${wN} bajo (−1 DT = ${f(mW - sdW)})` }, { v: mW, lab: `${wN} medio (${f(mW)})` }, { v: mW + sdW, lab: `${wN} alto (+1 DT = ${f(mW + sdW)})` }];
+    const sl = wPts.map(pt0 => Object.assign(r.slope(pt0.v), { lab: pt0.lab }));
+    const xLab = xi.bin ? `${xN} (0 = ${xi.lv[0]}, 1 = ${xi.lv[1]})` : `${xN} (centrada)`, wLab = wi.bin ? `${wN} (0 = ${wi.lv[0]}, 1 = ${wi.lv[1]})` : `${wN} (centrada)`;
+    sec.decision = `Se estimó un modelo de moderación (regresión con el término de interacción ${esc(xN)} × ${esc(wN)}) con ${n} casos completos${!xi.bin || !wi.bin ? '; las variables cuantitativas se centraron en su media' : ''}.`;
+    sec.why.push(`Se quiere saber si el efecto de ${esc(xN)} sobre ${esc(yN)} depende de ${esc(wN)}: eso es un efecto de moderación, que se contrasta con el término de interacción.`);
+    sec.why.push('Centrar las variables cuantitativas no cambia la interacción, pero hace interpretables los efectos principales (son el efecto de cada variable en el valor medio de la otra) y reduce la colinealidad.');
+    sec.why.push(wi.bin ? `Como el moderador tiene dos categorías, se estima el efecto de ${esc(xN)} en cada una.` : 'Las pendientes simples muestran el efecto de X para valores bajos (−1 DT), medios y altos (+1 DT) del moderador; la región de Johnson-Neyman indica a partir de qué valor exacto del moderador el efecto es significativo.');
+    const swr = S.shapiro(r.resid);
+    sec.checks.push(chk(swr && swr.p >= .05 ? 'ok' : n >= 100 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): ${swr ? `<i>W</i> = ${nz(swr.W.toFixed(3))}, ${pt(swr.p)}` : 'no calculable'}.${swr && swr.p < .05 && n >= 100 ? ' Con muestras grandes el modelo es robusto a desviaciones moderadas.' : ''}`));
+    sec.checks.push(chk(r.bp.p >= .05 ? 'ok' : 'no', `Homocedasticidad (Breusch-Pagan): χ²(${r.bp.df}) = ${f(r.bp.LM)}, ${pt(r.bp.p)}.${r.bp.p >= .05 ? ' Se cumple.' : ' No se cumple: interpreta los errores típicos con cautela.'}`));
+    sec.checks.push(chk('info', 'Linealidad: se asume que la relación entre X e Y es lineal para cada valor del moderador.'));
+    sec.alt = 'Si el moderador es categórico con más de dos grupos, un ANOVA factorial o una regresión con variables ficticias y sus interacciones.';
+    const nmT = ['(Constante)', xLab, wLab, `${xN} × ${wN}`], tc = (k) => `[${f(r.ci[k][0], 3)}, ${f(r.ci[k][1], 3)}]`;
+    sec.tables.push(apaTable(`Modelo de moderación para ${yN}`, ['Predictor', '<i>B</i>', '<i>EE</i>', '<i>t</i>', '<i>p</i>', 'IC 95 %'], nmT.map((nm, k) => [esc(nm), f(r.b[k], 3), f(r.se[k], 3), f(r.t[k]), pv(r.p[k]), tc(k)]),
+      `<i>R</i>² = ${nz(r.r2.toFixed(3))}, <i>F</i>(${r.df1}, ${r.dfr}) = ${f(r.F)}, ${pt(r.pF)}. Cambio en <i>R</i>² por la interacción: Δ<i>R</i>² = ${nz(r.dR2.toFixed(3))}, <i>F</i>(1, ${r.dfr}) = ${f(r.Fch)}, ${pt(r.pch)}.`));
+    sec.tables.push(apaTable(`Efecto de ${xN} sobre ${yN} según ${wN} (pendientes simples)`, ['Valor del moderador', 'Efecto de X', '<i>EE</i>', '<i>t</i>', '<i>p</i>', 'IC 95 %'],
+      sl.map(o => [esc(o.lab), f(o.b, 3), f(o.se, 3), f(o.t), pv(o.p), `[${f(o.ci[0], 3)}, ${f(o.ci[1], 3)}]`])));
+    // región de Johnson-Neyman dentro del rango observado
+    let jnTxt = '';
+    if (!wi.bin) {
+      const lo = Math.min(...w), hi = Math.max(...w), cuts = [lo].concat(r.jn.filter(v => v > lo && v < hi)).concat([hi]), segs = [];
+      for (let k = 0; k < cuts.length - 1; k++) { const mid = (cuts[k] + cuts[k + 1]) / 2; if (r.slope(mid).p < .05) segs.push([cuts[k], cuts[k + 1]]); }
+      const inner = r.jn.filter(v => v > lo && v < hi);
+      jnTxt = !segs.length ? `En el rango observado de ${esc(wN)} (${f(lo)} a ${f(hi)}), el efecto de ${esc(xN)} no fue significativo para ningún valor del moderador.`
+        : segs.length === 1 && segs[0][0] === lo && segs[0][1] === hi ? `El efecto de ${esc(xN)} fue significativo en todo el rango observado de ${esc(wN)} (${f(lo)} a ${f(hi)}).`
+        : `Según la técnica de Johnson-Neyman, el efecto de ${esc(xN)} fue significativo cuando ${esc(wN)} ${list(segs.map(sg => (sg[0] === lo ? `≤ ${f(sg[1])}` : sg[1] === hi ? `≥ ${f(sg[0])}` : `estaba entre ${f(sg[0])} y ${f(sg[1])}`)))}${inner.length ? '' : ''}.`;
+      sec.checks.push(chk('info', `Región de Johnson-Neyman (α = .05): ${jnTxt}`));
+    }
+    // gráfico: valores predichos de Y para X bajo/medio/alto en cada nivel del moderador
+    const xPts = xi.bin ? [{ v: 0, lab: xi.lv[0] }, { v: 1, lab: xi.lv[1] }] : [{ v: mX - sdX, lab: `${xN} bajo` }, { v: mX, lab: `${xN} medio` }, { v: mX + sdX, lab: `${xN} alto` }];
+    const pred = (xv, wv) => { const xc = xv - r.mx, wc = wv - r.mw; return r.b[0] + r.b[1] * xc + r.b[2] * wc + r.b[3] * xc * wc; };
+    sec.charts.push(fig(`Efecto de ${xN} sobre ${yN} según ${wN}`, CH.interaction(xPts.map(o => o.lab), wPts.map(o => ({ name: o.lab, means: xPts.map(xp => pred(xp.v, o.v)), ci: xPts.map(xp => [pred(xp.v, o.v), pred(xp.v, o.v)]) })), `${yN} (predicho)`), CH.legend(wPts.map(o => o.lab))));
+    const st = `<i>B</i> = ${f(r.b[3], 3)}, <i>t</i>(${r.dfr}) = ${f(r.t[3])}, ${pt(r.p[3])}, Δ<i>R</i>² = ${nz(r.dR2.toFixed(3))}`;
+    let t = `Se analizó si ${esc(wN)} moderaba la relación entre ${esc(xN)} y ${esc(yN)} mediante una regresión con el término de interacción${!xi.bin || !wi.bin ? ' (variables cuantitativas centradas)' : ''}. El modelo explicó el ${f(r.r2 * 100, 1)} % de la varianza de ${esc(yN)}, <i>F</i>(${r.df1}, ${r.dfr}) = ${f(r.F)}, ${pt(r.pF)}. `;
+    if (r.p[3] < .05) {
+      t += `La interacción ${esc(xN)} × ${esc(wN)} fue estadísticamente significativa, ${st}, lo que indica que el efecto de ${esc(xN)} depende de ${esc(wN)}. `;
+      t += 'El análisis de pendientes simples mostró que el efecto de ' + esc(xN) + ' ' + list(sl.map(o => `${o.p < .05 ? 'fue significativo' : 'no fue significativo'} ${wi.bin ? `en ${esc(o.lab.split(' = ')[1])}` : `con ${esc(wN)} ${o.lab.split(' ')[1]}`} (<i>B</i> = ${f(o.b, 2)}, ${pt(o.p)})`)) + '. ';
+      if (jnTxt) t += jnTxt;
+    } else t += `La interacción ${esc(xN)} × ${esc(wN)} no fue estadísticamente significativa, ${st}: no hay evidencia de que ${esc(wN)} modere el efecto de ${esc(xN)}.`;
+    sec.text.push(t);
+    const Y = rq(yN);
+    sec.code = `# Moderación: ${xN} → ${yN}, moderador ${wN}\nd <- data.frame(Y = datos[[${Y}]], X = ${rCode01(xN, xi)}, W = ${rCode01(wN, wi)})\nd <- d[complete.cases(d), ]\n` +
+      (xi.bin ? '' : 'd$X <- d$X - mean(d$X)  # centrada\n') + (wi.bin ? '' : 'd$W <- d$W - mean(d$W)  # centrada\n') +
+      `modelo <- lm(Y ~ X * W, data = d)\nsummary(modelo); confint(modelo)\nanova(lm(Y ~ X + W, data = d), modelo)  # cambio en R² por la interacción\n` +
+      `emmeans::emtrends(modelo, ~ W, var = "X", at = list(W = ${wi.bin ? 'c(0, 1)' : 'c(-sd(d$W), 0, sd(d$W))'}), infer = TRUE)  # pendientes simples\n# Región de Johnson-Neyman (paquete interactions): interactions::johnson_neyman(modelo, pred = X, modx = W)`;
+    return sec;
+  }
+
+  function runMediation(yN, xN, mN) {
+    const sec = { title: `Mediación: ${xN} → ${mN} → ${yN}`, test: 'Mediación simple (bootstrap)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (new Set([yN, xN, mN]).size < 3) { sec.error = 'El predictor, el mediador y la variable dependiente deben ser distintos.'; return sec; }
+    const xi = numOrBin(vByName(xN)), mv = numOf(vByName(mN)), yv = numOf(vByName(yN));
+    if (!xi) { sec.error = 'El predictor debe ser cuantitativo o tener exactamente 2 categorías.'; return sec; }
+    const idx = ST.rows.map((_, i) => i).filter(i => yv[i] !== null && mv[i] !== null && xi.vals[i] !== null), n = idx.length;
+    if (n < 20) { sec.error = 'Hay muy pocos casos completos para estimar una mediación (se recomiendan bastantes más de 20).'; return sec; }
+    const y = idx.map(i => yv[i]), x = idx.map(i => xi.vals[i]), m = idx.map(i => mv[i]);
+    if (S.sd(x) === 0 || S.sd(m) === 0) { sec.error = 'El predictor o el mediador no varía.'; return sec; }
+    const r = S.mediation(y, x, m, 5000);
+    if (!r) { sec.error = 'No se pudo estimar el modelo (colinealidad perfecta).'; return sec; }
+    const sigInd = r.ci[0] > 0 || r.ci[1] < 0, xL = xi.bin ? `${xN} (0 = ${xi.lv[0]}, 1 = ${xi.lv[1]})` : xN;
+    sec.decision = `Se estimó un modelo de mediación simple (${esc(xN)} → ${esc(mN)} → ${esc(yN)}) con ${n} casos completos; el efecto indirecto se contrastó con un intervalo de confianza bootstrap de ${r.B} remuestras.`;
+    sec.why.push(`Se quiere saber si ${esc(xN)} influye en ${esc(yN)} a través de ${esc(mN)}: el efecto indirecto es el producto de la ruta a (${esc(xN)} → ${esc(mN)}) por la ruta b (${esc(mN)} → ${esc(yN)}, controlando ${esc(xN)}).`);
+    sec.why.push('El efecto indirecto no sigue una distribución normal, por eso se contrasta con un intervalo de confianza bootstrap (método percentil): es significativo si el intervalo no incluye el 0. Es el procedimiento recomendado (Hayes, PROCESS) frente a la prueba de Sobel o los pasos de Baron y Kenny.');
+    sec.checks.push(chk('info', 'La mediación supone un orden causal (X antes que M, y M antes que Y). Con datos transversales, el análisis muestra que los datos son compatibles con ese modelo, pero no demuestra causalidad.'));
+    sec.checks.push(chk(n >= 100 ? 'ok' : 'info', `Tamaño muestral: ${n} casos.${n >= 100 ? '' : ' Con muestras pequeñas el intervalo bootstrap es amplio y la potencia, baja.'}`));
+    sec.alt = 'Mediación con varios mediadores o moderación de la mediación (modelos 7, 14 o 58 de PROCESS) si el diseño lo requiere.';
+    const st = (k, nm) => [esc(nm), f(r[k], 3), f(r.se[k], 3), f(r.t[k]), pv(r.p[k])];
+    sec.tables.push(apaTable('Rutas del modelo de mediación', ['Ruta', '<i>B</i>', '<i>EE</i>', '<i>t</i>', '<i>p</i>'],
+      [st('a', `a: ${xN} → ${mN}`), st('b', `b: ${mN} → ${yN}`), st('cp', `c′ (directo): ${xN} → ${yN}`), st('c', `c (total): ${xN} → ${yN}`)],
+      `<i>R</i>² de ${esc(mN)} = ${nz(r.r2m.toFixed(3))}; <i>R</i>² de ${esc(yN)} = ${nz(r.r2y.toFixed(3))}.${xi.bin ? ` ${esc(xL)}.` : ''}`));
+    sec.tables.push(apaTable('Efecto indirecto', ['Efecto', '<i>B</i>', '<i>EE</i> bootstrap', 'IC 95 % bootstrap', 'Estandarizado'],
+      [[`${esc(xN)} → ${esc(mN)} → ${esc(yN)}`, f(r.ab, 3), f(r.bootSe, 3), `[${f(r.ci[0], 3)}, ${f(r.ci[1], 3)}]`, f(r.abStd, 3)]],
+      `IC bootstrap percentil con ${r.B} remuestras (al ser un procedimiento aleatorio, otra ejecución o R pueden diferir en la tercera cifra decimal). Prueba de Sobel, como referencia: <i>z</i> = ${f(r.sobel.z)}, ${pt(r.sobel.p)}.`));
+    const star = p => (p < .001 ? '***' : p < .01 ? '**' : p < .05 ? '*' : '');
+    sec.charts.push(fig('Diagrama del modelo de mediación', CH.pathDiagram(xN, mN, yN, { a: `a = ${f(r.a, 2)}${star(r.p.a)}`, b: `b = ${f(r.b, 2)}${star(r.p.b)}`, c: `c′ = ${f(r.cp, 2)}${star(r.p.cp)} (c = ${f(r.c, 2)}${star(r.p.c)})` }), '<div class="small muted" style="margin:0 0 6px">Coeficientes no estandarizados. * <i>p</i> &lt; .05, ** <i>p</i> &lt; .01, *** <i>p</i> &lt; .001.</div>'));
+    let t = `Se analizó si ${esc(mN)} mediaba la relación entre ${esc(xN)} y ${esc(yN)} mediante un modelo de mediación simple con intervalos de confianza bootstrap (${r.B} remuestras). `;
+    t += `${esc(xN)} ${r.p.a < .05 ? 'predijo significativamente' : 'no predijo significativamente'} ${esc(mN)} (<i>a</i> = ${f(r.a, 2)}, ${pt(r.p.a)}), y ${esc(mN)} ${r.p.b < .05 ? 'predijo significativamente' : 'no predijo significativamente'} ${esc(yN)} controlando ${esc(xN)} (<i>b</i> = ${f(r.b, 2)}, ${pt(r.p.b)}). `;
+    t += sigInd ? `El efecto indirecto fue estadísticamente significativo, <i>ab</i> = ${f(r.ab, 3)}, IC 95 % [${f(r.ci[0], 3)}, ${f(r.ci[1], 3)}]. ` : `El efecto indirecto no fue estadísticamente significativo, <i>ab</i> = ${f(r.ab, 3)}, IC 95 % [${f(r.ci[0], 3)}, ${f(r.ci[1], 3)}]. `;
+    t += `El efecto total de ${esc(xN)} sobre ${esc(yN)} ${r.p.c < .05 ? 'fue' : 'no fue'} significativo (<i>c</i> = ${f(r.c, 2)}, ${pt(r.p.c)}) y el efecto directo, controlando ${esc(mN)}, ${r.p.cp < .05 ? 'siguió siendo significativo' : 'no fue significativo'} (<i>c′</i> = ${f(r.cp, 2)}, ${pt(r.p.cp)}).`;
+    sec.text.push(t);
+    sec.code = `# Mediación: ${xN} → ${mN} → ${yN} (bootstrap percentil)\nd <- data.frame(X = ${rCode01(xN, xi)}, M = datos[[${rq(mN)}]], Y = datos[[${rq(yN)}]])\nd <- d[complete.cases(d), ]\n` +
+      `ruta_a <- lm(M ~ X, data = d); ruta_bc <- lm(Y ~ X + M, data = d); total <- lm(Y ~ X, data = d)\nsummary(ruta_a); summary(ruta_bc); summary(total)\n` +
+      `set.seed(2026)\nindirecto <- replicate(5000, { i <- sample(nrow(d), replace = TRUE); coef(lm(M ~ X, data = d[i, ]))[["X"]] * coef(lm(Y ~ X + M, data = d[i, ]))[["M"]] })\n` +
+      `coef(ruta_a)[["X"]] * coef(ruta_bc)[["M"]]  # efecto indirecto\nquantile(indirecto, c(.025, .975))  # IC 95 % bootstrap`;
+    return sec;
+  }
+
   function runEfa(names, nSel, rot) {
     const sec = { title: 'Análisis factorial exploratorio', test: '', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     const vars = names.map(vByName).filter(v => v && v.type === 'num'), p = vars.length;
@@ -961,6 +1082,8 @@
       if (isOn('fact')) add(runFactorial($('#fY').value, $('#fA').value, $('#fB').value));
       if (isOn('ancova')) add(runAncova($('#acY').value, $('#acG').value, checkedVals('acC')));
       if (isOn('binrel')) add(runBinRel(checkedVals('bR')));
+      if (isOn('mod')) add(runModeration($('#moY').value, $('#moX').value, $('#moW').value));
+      if (isOn('med')) add(runMediation($('#meY').value, $('#meX').value, $('#meM').value));
       if (isOn('efa')) add(runEfa(checkedVals('eI'), $('#eN').value, $('#eR').value));
       if (isOn('alpha')) add(runAlpha(checkedVals('aI'), checkedVals('aR')));
     } catch (e) { console.error(e); alert('Ha ocurrido un error inesperado en el análisis: ' + e.message); return; }
@@ -1132,7 +1255,7 @@
   }
   const DEMO_DEFAULTS = { comp: { y: ['ansiedad_post'], g: 'grupo' }, paired: { vars: ['ansiedad_pre', 'ansiedad_post', 'ansiedad_seguimiento'] }, chi: { a: 'sexo', b: 'fuma' },
     reg: { y: 'rendimiento', x: ['horas_sueno', 'estres', 'ansiedad_post'] }, logit: { y: 'fuma', x: ['estres', 'sexo', 'edad'] },
-    fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, efa: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'] }, ancova: { y: 'ansiedad_post', g: 'grupo', c: ['ansiedad_pre'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
+    fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, efa: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'] }, mod: { y: 'rendimiento', x: 'estres', w: 'horas_sueno' }, med: { x: 'ansiedad_pre', m: 'ansiedad_post', y: 'autoestima' }, ancova: { y: 'ansiedad_post', g: 'grupo', c: ['ansiedad_pre'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
 
   // ---------- navegación ----------
   function show(n) {

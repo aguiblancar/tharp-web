@@ -184,5 +184,15 @@
     s += `<text x="${m.l + pw / 2}" y="${H - 6}" text-anchor="middle" fill="${COL.axis}">Factor</text><text transform="translate(14 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" fill="${COL.axis}">Autovalor</text>`;
     return s + '</svg>';
   }
-  root.TharpCharts = { scree, histogram, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
+  // diagrama de rutas de una mediación simple: X → M → Y, con el efecto directo c' (y el total c entre paréntesis)
+  function pathDiagram(xn, mn, yn, lab) {
+    const W = 640, H = 260, box = (x, y, t) => `<rect x="${x - 85}" y="${y - 24}" width="170" height="48" rx="10" fill="${COL.surface}" stroke="${COL.s[0]}" stroke-width="2"/><text x="${x}" y="${y + 5}" text-anchor="middle" fill="${COL.text}" font-weight="600">${esc(trunc(t, 20))}</text>`;
+    const arrow = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${COL.axis}" stroke-width="2" marker-end="url(#ah)"/>`;
+    let s = svgOpen(W, H, `Diagrama de mediación: ${xn}, ${mn} y ${yn}`) + `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${COL.axis}"/></marker></defs>`;
+    s += arrow(175, 185, 245, 95) + arrow(395, 95, 465, 185) + arrow(185, 214, 455, 214);
+    s += box(110, 210, xn) + box(320, 70, mn) + box(530, 210, yn);
+    s += `<text x="190" y="128" text-anchor="end" fill="${COL.text}">${esc(lab.a)}</text><text x="450" y="128" fill="${COL.text}">${esc(lab.b)}</text><text x="320" y="246" text-anchor="middle" fill="${COL.text}">${esc(lab.c)}</text>`;
+    return s + '</svg>';
+  }
+  root.TharpCharts = { pathDiagram, scree, histogram, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
 })(window);

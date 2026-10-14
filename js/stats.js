@@ -518,7 +518,43 @@
     return { omega: sl * sl / (sl * sl + u), loadings: l.map(v => v * (sum(l) < 0 ? -1 : 1)) };
   }
 
+  // ---------- moderación (modelo 1 de PROCESS) ----------
+  function moderation(y, x, w, C, centerX, centerW) { // C: n × q covariables (opcional)
+    const mx = centerX ? mean(x) : 0, mw = centerW ? mean(w) : 0, xc = x.map(v => v - mx), wc = w.map(v => v - mw);
+    const row = i => [1, xc[i], wc[i], xc[i] * wc[i]].concat(C ? C[i] : []);
+    const X = y.map((_, i) => row(i)), full = ols(X, y); if (!full) return null;
+    const red = olsCore(X.map(r => r.filter((_, k) => k !== 3)), y);
+    const dR2 = full.r2 - red.r2, Fch = dR2 / ((1 - full.r2) / full.dfr);
+    const V = full.Ai.map(r => r.map(v => v * full.s2)), tc = tcrit(full.dfr), b1 = full.b[1], b3 = full.b[3];
+    const slope = wRaw => { const wv = wRaw - mw, b = b1 + b3 * wv, se = Math.sqrt(V[1][1] + wv * wv * V[3][3] + 2 * wv * V[1][3]), t = b / se;
+      return { w: wRaw, b, se, t, p: pT(t, full.dfr), ci: [b - tc * se, b + tc * se] }; };
+    // Johnson-Neyman: valores del moderador donde el efecto de X pasa a ser (o deja de ser) significativo
+    const A = b3 * b3 - tc * tc * V[3][3], B = 2 * (b1 * b3 - tc * tc * V[1][3]), Cq = b1 * b1 - tc * tc * V[1][1], disc = B * B - 4 * A * Cq;
+    const jn = disc >= 0 && A !== 0 ? [(-B - Math.sqrt(disc)) / (2 * A), (-B + Math.sqrt(disc)) / (2 * A)].map(v => v + mw).sort((a, b) => a - b) : [];
+    return { b: full.b, se: full.se, t: full.t, p: full.pv, ci: full.ci, r2: full.r2, F: full.F, df1: full.df1, dfr: full.dfr, pF: full.pF,
+      dR2, Fch, pch: pF(Fch, 1, full.dfr), slope, jn, mx, mw, resid: full.e, bp: full.bp, n: y.length };
+  }
+
+  // ---------- mediación simple (modelo 4 de PROCESS) con bootstrap ----------
+  function mediation(y, x, m, B = 5000, seed = 20261015) {
+    const n = y.length, c1 = x.map(v => [1, v]), c2 = x.map((v, i) => [1, v, m[i]]);
+    const fa = ols(c1, m), fb = ols(c2, y), fc = ols(c1, y); if (!fa || !fb || !fc) return null;
+    const a = fa.b[1], b = fb.b[2], cp = fb.b[1], c = fc.b[1], ab = a * b;
+    const sobelSe = Math.sqrt(b * b * fa.se[1] ** 2 + a * a * fb.se[2] ** 2), sobelZ = ab / sobelSe;
+    let s = seed >>> 0; const rnd = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const boot = [];
+    for (let r = 0; r < B; r++) {
+      const idx = Array.from({ length: n }, () => Math.floor(rnd() * n));
+      const ra = olsCore(idx.map(i => c1[i]), idx.map(i => m[i])), rb = olsCore(idx.map(i => c2[i]), idx.map(i => y[i]));
+      if (ra && rb) boot.push(ra.b[1] * rb.b[2]);
+    }
+    const bs = sorted(boot), ci = [quantile(bs, .025), quantile(bs, .975)], sdy = sd(y), sdx = sd(x);
+    return { a, b, c, cp, ab, se: { a: fa.se[1], b: fb.se[2], c: fc.se[1], cp: fb.se[1] }, p: { a: fa.pv[1], b: fb.pv[2], c: fc.pv[1], cp: fb.pv[1] },
+      t: { a: fa.t[1], b: fb.t[2], c: fc.t[1], cp: fb.t[1] }, dfa: fa.dfr, dfb: fb.dfr, dfc: fc.dfr, ci, bootSe: sd(boot), B: boot.length,
+      sobel: { z: sobelZ, p: pZ(sobelZ) }, abStd: ab * sdx / sdy, r2m: fa.r2, r2y: fb.r2, n };
+  }
+
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
-    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
+    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
 })(typeof window !== 'undefined' ? window : this);
