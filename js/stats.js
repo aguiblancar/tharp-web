@@ -175,6 +175,50 @@
     return { V: Wp, z, p: pZ(z), r: Math.abs(z) / Math.sqrt(n), n };
   }
 
+  // ---------- medidas repetidas (3 o más momentos) ----------
+  function det(A) { // determinante por eliminación gaussiana con pivote parcial
+    const n = A.length, M = A.map(r => r.slice()); let d = 1;
+    for (let c = 0; c < n; c++) {
+      let piv = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+      if (M[piv][c] === 0) return 0;
+      if (piv !== c) { [M[c], M[piv]] = [M[piv], M[c]]; d = -d; }
+      d *= M[c][c];
+      for (let r = c + 1; r < n; r++) { const f = M[r][c] / M[c][c]; for (let j = c; j < n; j++) M[r][j] -= f * M[c][j]; }
+    }
+    return d;
+  }
+  function rmAnova(Y) { // Y: n casos × k momentos (casos completos)
+    const n = Y.length, k = Y[0].length, all = Y.flat(), gm = mean(all);
+    const cm = Array.from({ length: k }, (_, j) => mean(Y.map(r => r[j]))), sm = Y.map(mean);
+    const ssCond = n * sum(cm.map(m => (m - gm) ** 2)), ssSubj = k * sum(sm.map(m => (m - gm) ** 2));
+    const ssTot = sum(all.map(v => (v - gm) ** 2)), ssErr = ssTot - ssCond - ssSubj;
+    const df1 = k - 1, df2 = (k - 1) * (n - 1), F = (ssCond / df1) / (ssErr / df2);
+    // esfericidad: contrastes ortonormales de Helmert sobre la matriz de covarianzas
+    const p = k - 1, C = [];
+    for (let j = 0; j < p; j++) { const v = new Array(k).fill(0), m = j + 1; for (let i = 0; i < m; i++) v[i] = 1; v[m] = -m; const nr = Math.sqrt(m * (m + 1)); C.push(v.map(x => x / nr)); }
+    const S = Array.from({ length: k }, (_, a) => Array.from({ length: k }, (_, b) => {
+      let s = 0; for (let i = 0; i < n; i++) s += (Y[i][a] - cm[a]) * (Y[i][b] - cm[b]); return s / (n - 1); }));
+    const M = C.map(ca => C.map(cb => { let s = 0; for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) s += ca[a] * S[a][b] * cb[b]; return s; }));
+    const tr = sum(M.map((r, i) => r[i])), tr2 = sum(M.map((r, i) => sum(r.map((v, j) => v * M[j][i]))));
+    const gg = Math.min(1, tr * tr / (p * tr2));
+    let mauchly = null;
+    if (k > 2) {
+      // como mauchly.test de R: aproximación chi-cuadrado con el término de corrección de segundo orden
+      const W = det(M) / (tr / p) ** p, dfm = p * (p + 1) / 2 - 1, nu = n - 1, rho = 1 - (2 * p * p + p + 2) / (6 * p * nu);
+      const chi = -nu * rho * Math.log(W), w2 = (p + 2) * (p - 1) * (p - 2) * (2 * p ** 3 + 6 * p * p + 3 * p + 2) / (288 * (nu * p * rho) ** 2);
+      mauchly = { W, chi, df: dfm, p: pChi(chi, dfm) + w2 * (pChi(chi, dfm + 4) - pChi(chi, dfm)) };
+    }
+    return { F, df1, df2, p: pF(F, df1, df2), ssCond, ssSubj, ssErr, n, k, means: cm,
+      peta2: ssCond / (ssCond + ssErr), ges: ssCond / (ssCond + ssSubj + ssErr), gg, mauchly,
+      pGG: pF(F, df1 * gg, df2 * gg) };
+  }
+  function friedman(Y) {
+    const n = Y.length, k = Y[0].length, R = new Array(k).fill(0); let ties = 0;
+    Y.forEach(row => { const r = ranks(row); r.r.forEach((v, j) => R[j] += v); ties += r.ties; });
+    const Q0 = 12 / (n * k * (k + 1)) * sum(R.map(v => v * v)) - 3 * n * (k + 1), Q = Q0 / (1 - ties / (n * k * (k * k - 1)));
+    return { Q, df: k - 1, p: pChi(Q, k - 1), W: Q / (n * (k - 1)), meanRanks: R.map(v => v / n), n, k };
+  }
+
   // ---------- asociación ----------
   function pearson(x, y) {
     const n = x.length, mx = mean(x), my = mean(y); let sxy = 0, sxx = 0, syy = 0;
@@ -321,5 +365,5 @@
 
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
-    tTestPaired, wilcoxonSigned, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
+    tTestPaired, wilcoxonSigned, rmAnova, friedman, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
 })(typeof window !== 'undefined' ? window : this);

@@ -178,9 +178,9 @@
        <label class="field"><span>Variable de agrupación</span>${sel('compG', facs, pick(dComp.g, facs[0] && facs[0].name))}</label>`,
       !(nums.length >= 1 && facs.length >= 1) ? 'Necesitas una variable cuantitativa y una categórica con 2 a 12 grupos.' : '');
     const dP = D.paired || {};
-    h += card('paired', !!D.paired && nums.length >= 2, 'Comparación de medidas relacionadas (pre/post)', 'Las mismas personas medidas dos veces: prueba t relacionada o Wilcoxon.',
-      `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Medida 1 (p. ej., pre)</span>${sel('pA', nums, pick(dP.a, nums[0] && nums[0].name))}</label>
-       <label class="field"><span>Medida 2 (p. ej., post)</span>${sel('pB', nums, pick(dP.b, nums[1] && nums[1].name))}</label></div>`,
+    const pDef = (dP.vars || []).filter(has);
+    h += card('paired', !!D.paired && nums.length >= 2, 'Comparación de medidas relacionadas (pre/post o varios momentos)', 'Las mismas personas medidas dos o más veces: t relacionada o Wilcoxon (2 momentos); ANOVA de medidas repetidas o Friedman (3 o más).',
+      `<div class="field"><span>Momentos o condiciones (en el orden de las columnas del archivo)</span>${chips('pM', nums, v => (pDef.length ? pDef.includes(v.name) : nums.indexOf(v) < 2))}</div>`,
       nums.length < 2 ? 'Necesitas dos variables cuantitativas.' : '');
     const dC = D.chi || {};
     h += card('chi', facs.length >= 2, 'Asociación entre variables categóricas', 'Tabla de contingencia, chi-cuadrado (o Fisher) y V de Cramér.',
@@ -394,7 +394,7 @@
         else sec.tables.push(apaTable('Resultado del ANOVA de Welch', ['', '<i>F</i>', '<i>gl</i><sub>1</sub>', '<i>gl</i><sub>2</sub>', '<i>p</i>', 'η²'], [[esc(gName), f(om.F), om.df1, f(om.df2), pv(om.p), nz(cl.eta2.toFixed(3))]], 'η² calculado a partir del ANOVA clásico, como medida descriptiva del tamaño del efecto.'));
         const kw = S.kruskal(xs); sec.sens = `Análisis de sensibilidad: la prueba de Kruskal-Wallis da ${pt(kw.p)}, ${(kw.p < .05) === (om.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
         const st = `<i>F</i>(${om.df1}, ${dfF(om.df2)}) = ${f(om.F)}, ${pt(om.p)}, η² = ${nz(cl.eta2.toFixed(3))}`;
-        let t = `Se aplicó un ${sec.test} para comparar ${esc(yName)} entre los grupos de ${esc(gName)} (${groups.map(q => `${esc(q.name)}: ${MD(q)}`).join('; ')}). `;
+        let t = `Se aplicó un ${sec.test} para comparar ${esc(yName)} según ${esc(gName)} (${groups.map(q => `${esc(q.name)}: ${MD(q)}`).join('; ')}). `;
         if (om.p < .05) {
           t += `Se encontraron diferencias estadísticamente significativas, ${st}, con un tamaño del efecto ${lbl.eta(cl.eta2)}.` + posthocText(ph, phName, false);
           sec.tables.push(apaTable(`Comparaciones post hoc (${phName})`, ['Comparación', 'Diferencia de medias', '<i>p</i> ajustada'], ph.map(c => [`${esc(names[c.i])} − ${esc(names[c.j])}`, f(c.diff), pv(c.padj)])));
@@ -409,7 +409,7 @@
         sec.tables.push(apaTable('Resultado de la prueba de Kruskal-Wallis', ['', '<i>H</i>', '<i>gl</i>', '<i>p</i>', 'ε²'], [[esc(gName), f(kw.H), kw.df, pv(kw.p), nz(kw.eps2.toFixed(3))]]));
         const w = S.welchAnova(xs); sec.sens = `Análisis de sensibilidad: el ANOVA de Welch da ${pt(w.p)}, ${(w.p < .05) === (kw.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
         const st = `<i>H</i>(${kw.df}) = ${f(kw.H)}, ${pt(kw.p)}, ε² = ${nz(kw.eps2.toFixed(3))}`;
-        let t = `Dado que no se cumplía el supuesto de normalidad, se aplicó la prueba de Kruskal-Wallis para comparar ${esc(yName)} entre los grupos de ${esc(gName)} (${groups.map(q => `${esc(q.name)}: ${MdnD(q)}`).join('; ')}). `;
+        let t = `Dado que no se cumplía el supuesto de normalidad, se aplicó la prueba de Kruskal-Wallis para comparar ${esc(yName)} según ${esc(gName)} (${groups.map(q => `${esc(q.name)}: ${MdnD(q)}`).join('; ')}). `;
         if (kw.p < .05) {
           t += `Se encontraron diferencias estadísticamente significativas, ${st}.` + posthocText(ph, 'Dunn con corrección de Holm', true);
           sec.tables.push(apaTable('Comparaciones post hoc (Dunn, corrección de Holm)', ['Comparación', '<i>z</i>', '<i>p</i> ajustada'], ph.map(c => [`${esc(names[c.i])} − ${esc(names[c.j])}`, f(c.z), pv(c.padj)])));
@@ -464,6 +464,79 @@
       sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nwilcox.test(datos$${B}, datos$${A}, paired = TRUE, exact = FALSE, correct = TRUE)`;
     }
     return sec;
+  }
+
+  function runRepeated(names) {
+    const k = names.length, cols = names.map(n => numOf(vByName(n)));
+    const sec = { title: `${names.join(', ')} (medidas repetidas)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null)), n = idx.length;
+    if (n < 3) { sec.error = 'Se necesitan al menos 3 casos con todas las medidas.'; return sec; }
+    const Y = idx.map(i => cols.map(c => c[i])), ds = names.map((_, j) => S.describe(Y.map(r => r[j])));
+    if (Y.every(r => r.every(v => v === r[0]))) { sec.error = 'Todas las personas tienen el mismo valor en todos los momentos: no hay variación que analizar.'; return sec; }
+    const lv = list(names.map(esc));
+    // normalidad de los residuos del modelo de medidas repetidas (valor − media del sujeto − media del momento + media global)
+    const gm = S.mean(Y.flat()), sm = Y.map(S.mean), resid = Y.flatMap((r, i) => r.map((v, j) => v - sm[i] - ds[j].mean + gm));
+    const sw = S.shapiro(resid), normOK = n >= 30 || (sw && sw.p >= .05);
+    sec.why.push(`Se comparan ${k} medidas de las mismas personas: ${lv}.`);
+    sec.why.push('Al ser medidas relacionadas, el análisis separa la variabilidad entre personas de la debida a los momentos, lo que da más potencia que comparar grupos independientes.');
+    const swT = sw ? `Shapiro-Wilk de los residuos: <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}` : 'Shapiro-Wilk no calculable';
+    sec.checks.push(sw && sw.p >= .05 ? chk('ok', swT + '. Se cumple la normalidad.') : n >= 30 ? chk('info', swT + `. No es normal, pero con <i>n</i> = ${n} ≥ 30 el ANOVA es robusto.`) : chk('no', swT + '. No se cumple y la muestra es pequeña.'));
+    sec.tables.push(apaTable('Estadísticos descriptivos de las medidas repetidas', ['Medida', '<i>n</i>', '<i>M</i>', '<i>DT</i>', '<i>Mdn</i>', 'IC 95 % (<i>M</i>)'],
+      names.map((nm, j) => [esc(nm), n, f(ds[j].mean), f(ds[j].sd), f(ds[j].median), `[${f(ds[j].ci[0])}, ${f(ds[j].ci[1])}]`]), ST.rows.length - n ? `Se excluyeron ${ST.rows.length - n} casos sin todas las medidas.` : ''));
+    sec.charts.push(fig(`${names.join(', ')}: medias e IC 95 %`, CH.meansCI(names.map((nm, j) => ({ name: nm, x: Y.map(r => r[j]), mean: ds[j].mean, ci: ds[j].ci })), 'Puntuación', { connect: true })));
+    const pairs = []; for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) pairs.push([a, b]);
+    const posthoc = (kind, test) => { const r = pairs.map(([a, b]) => ({ a, b, r: test(Y.map(x => x[a]), Y.map(x => x[b])) })), adj = S.holm(r.map(o => o.r.p));
+      r.forEach((o, i) => o.padj = adj[i]); return r; };
+    const phText = (ph, kind, med) => { const sig = ph.filter(o => o.padj < .05);
+      if (!sig.length) return ` Las comparaciones por pares (${kind}) no detectaron diferencias significativas entre momentos concretos.`;
+      return ` Las comparaciones por pares (${kind}) mostraron diferencias significativas entre ` + list(sig.map(o => { const da = ds[o.a], db = ds[o.b], up = med ? db.median > da.median : db.mean > da.mean;
+        return `${esc(names[o.a])} y ${esc(names[o.b])} (${pt(o.padj)}; puntuaciones más ${up ? 'altas' : 'bajas'} en ${esc(names[o.b])})`; })) + (sig.length < ph.length ? '. El resto de comparaciones no fueron significativas.' : '.'); };
+    const Q = names.map(rq).join(', ');
+    let code = `# ${names.join(', ')} (medidas repetidas)\nmedidas <- c(${Q})\ndatos_mr <- datos[complete.cases(datos[, medidas]), medidas]\ndatos_mr$id <- factor(seq_len(nrow(datos_mr)))\n` +
+      `largo <- data.frame(id = rep(datos_mr$id, ${k}), momento = factor(rep(medidas, each = nrow(datos_mr)), levels = medidas), valor = unlist(datos_mr[, medidas], use.names = FALSE))\n`;
+    if (normOK) {
+      const r = S.rmAnova(Y), sph = r.mauchly, sphOK = !sph || sph.p >= .05, eps = sphOK ? 1 : r.gg, P = sphOK ? r.p : r.pGG;
+      const d1 = r.df1 * eps, d2 = r.df2 * eps;
+      sec.test = 'ANOVA de medidas repetidas' + (sphOK ? '' : ' (corrección de Greenhouse-Geisser)');
+      sec.why.push('La normalidad es aceptable (o n ≥ 30): se usa el ANOVA de medidas repetidas.');
+      if (sph) sec.checks.push(chk(sphOK ? 'ok' : 'no', `Esfericidad (Mauchly): <i>W</i> = ${nz(sph.W.toFixed(3))}, χ²(${sph.df}) = ${f(sph.chi)}, ${pt(sph.p)}. ${sphOK ? 'Se cumple.' : `No se cumple: se aplica la corrección de Greenhouse-Geisser (ε = ${nz(r.gg.toFixed(3))}) a los grados de libertad.`}`));
+      sec.decision = `Se eligió el ANOVA de medidas repetidas porque se comparan ${k} medidas de las mismas personas y la normalidad es aceptable${sph ? (sphOK ? ', con esfericidad' : '; como no se cumple la esfericidad, se corrigen los grados de libertad con Greenhouse-Geisser') : ''}.`;
+      sec.alt = 'Prueba de Friedman si no se cumpliera la normalidad con muestras pequeñas.';
+      sec.tables.push(apaTable('Resultado del ANOVA de medidas repetidas', ['Fuente', '<i>SC</i>', '<i>gl</i>', '<i>MC</i>', '<i>F</i>', '<i>p</i>', 'η²<sub>p</sub>', 'η²<sub>G</sub>'],
+        [['Momento', f(r.ssCond), dfF(d1), f(r.ssCond / d1), f(r.F), pv(P), nz(r.peta2.toFixed(3)), nz(r.ges.toFixed(3))], ['Error', f(r.ssErr), dfF(d2), f(r.ssErr / d2), '', '', '', '']],
+        (sphOK ? '' : 'Grados de libertad corregidos con Greenhouse-Geisser. ') + 'η²<sub>p</sub> = eta cuadrado parcial; η²<sub>G</sub> = eta cuadrado generalizado.'));
+      const fr = S.friedman(Y); sec.sens = `Análisis de sensibilidad: la prueba de Friedman da ${pt(fr.p)}, ${(fr.p < .05) === (P < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
+      const st = `<i>F</i>(${dfF(d1)}, ${dfF(d2)}) = ${f(r.F)}, ${pt(P)}, η²<sub>p</sub> = ${nz(r.peta2.toFixed(3))}`;
+      let t = `Se aplicó un ANOVA de medidas repetidas para comparar ${lv} (${names.map((nm, j) => `${esc(nm)}: <i>M</i> = ${f(ds[j].mean)}, <i>DT</i> = ${f(ds[j].sd)}`).join('; ')})${sphOK ? '' : ', con la corrección de Greenhouse-Geisser por no cumplirse la esfericidad'}. `;
+      if (P < .05) {
+        const ph = posthoc('t relacionadas', S.tTestPaired);
+        t += `Se encontraron diferencias estadísticamente significativas entre los momentos, ${st}.` + phText(ph, '<i>t</i> relacionadas con corrección de Holm', false);
+        sec.tables.push(apaTable('Comparaciones por pares (t relacionadas, corrección de Holm)', ['Comparación', 'Diferencia de medias', '<i>t</i>', '<i>gl</i>', '<i>p</i> ajustada'],
+          ph.map(o => [`${esc(names[o.b])} − ${esc(names[o.a])}`, f(o.r.diff), f(o.r.t), o.r.df, pv(o.padj)])));
+      } else t += `No se encontraron diferencias estadísticamente significativas entre los momentos, ${st}.`;
+      sec.text.push(t);
+      code += `rstatix::anova_test(largo, dv = valor, wid = id, within = momento, effect.size = "pes")  # incluye Mauchly y Greenhouse-Geisser\nrstatix::pairwise_t_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm")`;
+    } else {
+      const r = S.friedman(Y); sec.test = 'Prueba de Friedman';
+      sec.why.push('La normalidad no se cumple y la muestra es pequeña: se usa la prueba de Friedman, que trabaja con rangos dentro de cada persona.');
+      sec.decision = `Se eligió la prueba de Friedman porque se comparan ${k} medidas de las mismas personas y no se cumple la normalidad.`;
+      sec.alt = 'ANOVA de medidas repetidas si los datos fueran aproximadamente normales.';
+      sec.tables.push(apaTable('Resultado de la prueba de Friedman', ['', 'χ²', '<i>gl</i>', '<i>p</i>', '<i>W</i> de Kendall', '<i>n</i>'], [[lv, f(r.Q), r.df, pv(r.p), nz(r.W.toFixed(3)), n]],
+        'Rangos promedio: ' + names.map((nm, j) => `${esc(nm)} = ${f(r.meanRanks[j])}`).join('; ') + '. <i>W</i> de Kendall como tamaño del efecto.'));
+      const a = S.rmAnova(Y), aP = a.mauchly && a.mauchly.p < .05 ? a.pGG : a.p;
+      sec.sens = `Análisis de sensibilidad: el ANOVA de medidas repetidas da ${pt(aP)}, ${(aP < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
+      const st = `χ²(${r.df}) = ${f(r.Q)}, ${pt(r.p)}, <i>W</i> = ${nz(r.W.toFixed(2))}`;
+      let t = `Dado que no se cumplía el supuesto de normalidad, se aplicó la prueba de Friedman para comparar ${lv} (${names.map((nm, j) => `${esc(nm)}: <i>Mdn</i> = ${f(ds[j].median)}`).join('; ')}). `;
+      if (r.p < .05) {
+        const ph = posthoc('Wilcoxon', S.wilcoxonSigned);
+        t += `Se encontraron diferencias estadísticamente significativas, ${st}.` + phText(ph, 'Wilcoxon con corrección de Holm', true);
+        sec.tables.push(apaTable('Comparaciones por pares (Wilcoxon, corrección de Holm)', ['Comparación', '<i>z</i>', '<i>p</i> ajustada'],
+          ph.map(o => [`${esc(names[o.b])} − ${esc(names[o.a])}`, f(o.r.z), pv(o.padj)])));
+      } else t += `No se encontraron diferencias estadísticamente significativas, ${st}.`;
+      sec.text.push(t);
+      code += `friedman.test(as.matrix(datos_mr[, medidas]))\nrstatix::friedman_effsize(largo, valor ~ momento | id)\nrstatix::pairwise_wilcox_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm", exact = FALSE)`;
+    }
+    sec.code = code; return sec;
   }
 
   function runChi(aName, bName) {
@@ -696,7 +769,8 @@
       if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v)); }
       if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value));
       if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g))); }
-      if (isOn('paired')) add(runPaired($('#pA').value, $('#pB').value));
+      if (isOn('paired')) { const m = checkedVals('pM');
+        add(m.length === 2 ? runPaired(m[0], m[1]) : m.length > 2 ? runRepeated(m) : { title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));
       if (isOn('reg')) add(runRegression($('#rY').value, checkedVals('rX')));
       if (isOn('logit')) add(runLogistic($('#lY').value, checkedVals('lX')));
@@ -861,9 +935,14 @@
       rows.push([i, sexo, edad, grupo, curso, rnd() < .03 ? null : sueno, pre, post, estres, rnd() < .02 ? null : autoest, rend, rnd() < .04 ? null : satis, fuma,
         item(), item(), item(), item(true), item(), item()]);
     }
+    // seguimiento a los 3 meses, con un generador aparte para no alterar el resto de los datos de ejemplo
+    let s2 = 31415; const rnd2 = () => { s2 = (s2 * 16807) % 2147483647; return s2 / 2147483647; };
+    const n2 = () => { let u = 0; while (!u) u = rnd2(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rnd2()); };
+    rows[0].push('ansiedad_seguimiento');
+    for (let i = 1; i < rows.length; i++) { const post = rows[i][7], g = rows[i][3]; rows[i].push(rnd2() < .05 ? null : r1(clip(post + (g === 'Control' ? -.3 : .9) + n2() * 3.2, 3, 50))); }
     return rows;
   }
-  const DEMO_DEFAULTS = { comp: { y: ['ansiedad_post'], g: 'grupo' }, paired: { a: 'ansiedad_pre', b: 'ansiedad_post' }, chi: { a: 'sexo', b: 'fuma' },
+  const DEMO_DEFAULTS = { comp: { y: ['ansiedad_post'], g: 'grupo' }, paired: { vars: ['ansiedad_pre', 'ansiedad_post', 'ansiedad_seguimiento'] }, chi: { a: 'sexo', b: 'fuma' },
     reg: { y: 'rendimiento', x: ['horas_sueno', 'estres', 'ansiedad_post'] }, logit: { y: 'fuma', x: ['estres', 'sexo', 'edad'] },
     fact: { y: 'ansiedad_post', a: 'grupo', b: 'sexo' }, alpha: { items: ['ae1', 'ae2', 'ae3', 'ae4', 'ae5', 'ae6'], rev: ['ae4'] }, corr: ['edad', 'horas_sueno', 'ansiedad_pre', 'ansiedad_post', 'estres', 'autoestima', 'rendimiento', 'satisfaccion'] };
 
