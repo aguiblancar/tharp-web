@@ -180,20 +180,25 @@ pre{background:#0d1f33;color:#d7f3ef;padding:14px 16px;border-radius:10px;overfl
 .mode p{margin:0;color:var(--muted)}
 
 /* story */
-.story{background:var(--night);color:#fff;position:relative;overflow:hidden}
-.story .wrap{position:relative}
-.story .split{grid-template-columns:1fr 1fr;align-items:start}
+.story{background:var(--night);color:#fff}
+.story-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:56px;align-items:center}
+@media(max-width:900px){.story-grid{grid-template-columns:1fr;gap:32px}}
+.story-map{margin:0}
+.story-map img{width:100%;height:auto;border-radius:14px;box-shadow:0 30px 70px -30px rgba(0,0,0,.8)}
+.story-map figcaption{margin-top:10px;font-size:.82rem;color:rgba(255,255,255,.55)}
+.story-map figcaption span{white-space:nowrap}
 .story .eyebrow{color:var(--foam)}
-.story h2{margin:10px 0 22px}
-.story p{color:rgba(255,255,255,.78);margin:0 0 16px}
+.story h2{margin:10px 0 18px}
+.story p{color:rgba(255,255,255,.8);margin:0 0 16px;font-size:1.08rem}
 .story p strong{color:#fff}
-.quote{font-family:Fraunces,serif;font-size:clamp(1.3rem,2.4vw,1.75rem);line-height:1.35;margin:0 0 10px;color:#fff}
-.quote-by{color:var(--foam);font-size:.92rem;margin-bottom:34px}
-.timeline{list-style:none;margin:0;padding:0;border-left:1px solid rgba(143,224,220,.35)}
-.timeline li{position:relative;padding:0 0 22px 24px;color:rgba(255,255,255,.8)}
-.timeline li::before{content:"";position:absolute;left:-5px;top:7px;width:9px;height:9px;border-radius:50%;background:var(--foam)}
-.timeline b{display:block;font-family:JetBrains Mono,monospace;font-weight:500;color:var(--foam);font-size:.88rem}
-.ridge{display:block;width:100%;height:auto;margin-top:8px;opacity:.9}
+.story-claim{font-family:Fraunces,serif;font-size:1.3rem!important;color:var(--foam)!important;line-height:1.35}
+.story-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
+.story-facts div{border-top:1px solid rgba(143,224,220,.35);padding-top:10px}
+.story-facts b{display:block;font-family:JetBrains Mono,monospace;font-weight:500;color:var(--foam)}
+.story-facts span{font-size:.88rem;color:rgba(255,255,255,.7)}
+@media(max-width:520px){.story-facts{grid-template-columns:1fr}}
+.steps-n{display:inline-block;margin-left:8px;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;padding:3px 10px;border-radius:999px;vertical-align:middle;background:#f1ede4;color:var(--muted)}
+.with .steps-n{background:rgba(143,224,220,.16);color:var(--foam)}
 
 /* privacy */
 .privacy{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:44px}
@@ -279,11 +284,11 @@ footer a:hover{text-decoration:underline}
 
 <section id="ahorro">
   <div class="wrap">
-    <div class="eyebrow">El problema</div>
-    <h2 style="margin-top:10px">Ya sabes qué quieres saber.<br>Lo que te quita las tardes es todo lo demás.</h2>
+    <div class="eyebrow">Ahorra tiempo</div>
+    <h2 style="margin-top:10px">Lo que en SPSS es una tarde,<br>en Tharp son tres clics.</h2>
     <div class="ba">
       <div class="without">
-        <h3>Con SPSS o JASP</h3>
+        <h3>Con SPSS o JASP <span class="steps-n">7 pasos a mano</span></h3>
         <ol>
           <li>Comprobar la normalidad de cada grupo</li>
           <li>Comprobar la homogeneidad de varianzas</li>
@@ -295,7 +300,7 @@ footer a:hover{text-decoration:underline}
         </ol>
       </div>
       <div class="with">
-        <h3>Con Tharp</h3>
+        <h3>Con Tharp <span class="steps-n">3 clics</span></h3>
         <ol>
           <li>Subes tu archivo</li>
           <li>Marcas qué quieres analizar</li>
@@ -396,32 +401,21 @@ footer a:hover{text-decoration:underline}
 
 <section id="marie-tharp" class="story">
   <div class="wrap">
-    <div class="split">
+    <div class="story-grid">
+      <figure class="story-map">
+        <img src="img/atlantico-1957.jpg" alt="Diagrama fisiográfico del Atlántico Norte dibujado por Marie Tharp y Bruce Heezen en 1957, con la dorsal mesoatlántica en el centro y la península ibérica a la derecha" width="1200" height="663" loading="lazy">
+        <figcaption>Diagrama fisiográfico del Atlántico Norte, Heezen y Tharp, 1957. A la derecha, la península ibérica. <span>Dominio público.</span></figcaption>
+      </figure>
       <div>
         <div class="eyebrow">Por qué nos llamamos Tharp</div>
-        <h2>Marie Tharp dibujó el fondo del océano con datos que otros no supieron leer.</h2>
-        <p><strong>Marie Tharp</strong> (1920–2006) fue una geóloga y cartógrafa oceanográfica estadounidense. En los años cincuenta, en el Observatorio Geológico Lamont de la Universidad de Columbia, recibía miles de mediciones de profundidad tomadas con sonar desde barcos en los que, por ser mujer, durante años no se le permitió embarcar.</p>
-        <p>Perfil a perfil, convirtió esos números en un mapa. Y vio algo que nadie esperaba: un valle profundo que recorría el centro de la dorsal mesoatlántica. Cuando se lo enseñó a su colega Bruce Heezen, él lo descartó como «cosas de chicas».</p>
-        <p>Los datos le dieron la razón. Su hallazgo fue una de las piezas clave para que se aceptaran la tectónica de placas y la deriva continental, y en 1977 publicó con Heezen el mapa del fondo oceánico mundial. En 1997 la Biblioteca del Congreso de EE. UU. la reconoció como una de las cuatro grandes cartógrafas y cartógrafos del siglo XX.</p>
-        <p><strong>Tharp lleva su nombre</strong> porque compartimos su forma de trabajar: mirar los datos con rigor, hacer visible el razonamiento y dejar que la evidencia hable, venga de quien venga.</p>
-      </div>
-      <div>
-        <p class="quote">«Tenía un lienzo en blanco que llenar de posibilidades extraordinarias, un fascinante rompecabezas que encajar: cartografiar el inmenso fondo oculto del océano.»</p>
-        <div class="quote-by">Marie Tharp, 1999</div>
-        <ul class="timeline">
-          <li><b>1948</b>Entra en el Observatorio Geológico Lamont (Universidad de Columbia).</li>
-          <li><b>1952</b>Descubre el valle del rift en el centro de la dorsal mesoatlántica.</li>
-          <li><b>1957</b>Publica con Heezen el primer mapa fisiográfico del Atlántico Norte.</li>
-          <li><b>1977</b>Publica el mapa del fondo oceánico mundial.</li>
-          <li><b>1997</b>La Biblioteca del Congreso la reconoce entre los grandes cartógrafos del siglo XX.</li>
-        </ul>
-        <svg class="ridge" viewBox="0 0 520 120" aria-hidden="true">
-          <g fill="none" stroke-linecap="round">
-            <path d="M0 40 C60 42 110 46 160 60 S220 30 250 34 S258 92 262 92 S272 34 282 34 S330 58 380 54 S470 42 520 44" stroke="#8fe0dc" stroke-width="2"/>
-            <path d="M0 60 C60 62 110 66 160 78 S220 52 250 56 S258 106 262 106 S272 56 282 56 S330 78 380 74 S470 62 520 64" stroke="#2a8db5" stroke-width="1.4"/>
-            <path d="M0 80 C60 82 110 86 160 96 S220 74 250 78 S258 116 262 116 S272 78 282 78 S330 96 380 92 S470 82 520 84" stroke="#1d6f8f" stroke-width="1.2"/>
-          </g>
-        </svg>
+        <h2>Ella vio en los datos lo que nadie quería ver.</h2>
+        <p>Con miles de mediciones de sonar, <strong>Marie Tharp</strong> dibujó el primer mapa del fondo del Atlántico y descubrió la gran grieta que lo recorre. Su colega lo despachó como «cosas de chicas». Los datos le dieron la razón y cambiaron la geología.</p>
+        <p class="story-claim">Tharp lleva su nombre: del dato a la evidencia, con rigor y sin cajas negras.</p>
+        <div class="story-facts">
+          <div><b>1952</b><span>Descubre el valle del rift atlántico</span></div>
+          <div><b>1957</b><span>Publica este mapa</span></div>
+          <div><b>1997</b><span>Reconocida entre los grandes cartógrafos del siglo XX</span></div>
+        </div>
       </div>
     </div>
   </div>
