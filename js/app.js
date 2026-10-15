@@ -1218,13 +1218,25 @@
       sec.tables.push(apaTable('Coeficientes de correlación intraclase', ['Forma', 'Modelo', 'CCI', 'IC 95 %', '<i>F</i>', '<i>gl</i><sub>1</sub>', '<i>gl</i><sub>2</sub>', '<i>p</i>'],
         r.forms.map(q => [(q.type === key ? '<b>' : '') + q.type + (q.type === key ? '</b>' : ''), MW[q.type], nz(q.icc.toFixed(3)), `[${nz(q.ci[0].toFixed(3))}, ${nz(q.ci[1].toFixed(3))}]`, f(q.F), q.df1, q.df2, pv(q.p)]),
         `En negrita, la forma elegida. Nomenclatura de Shrout y Fleiss (1979); modelos e IC de McGraw y Wong (1996). <i>F</i> contrasta CCI = 0.`));
-      sec.text.push(`Se calculó el coeficiente de correlación intraclase (${MW[key].toLowerCase()}) para evaluar el acuerdo entre ${list(names.map(esc))} en ${Y.length} sujetos. El CCI fue ${nz(sel.icc.toFixed(2))}, IC 95 % [${nz(sel.ci[0].toFixed(2))}, ${nz(sel.ci[1].toFixed(2))}], <i>F</i>(${sel.df1}, ${sel.df2}) = ${f(sel.F)}, ${pt(sel.p)}, lo que indica una fiabilidad ${lvl(sel.icc)} según los criterios de Koo y Li (2016).`);
-      sec.code = `# Coeficiente de correlación intraclase\nd <- na.omit(datos[, ${Q}])\nirr::icc(d, model = "${opts.model === 'ICC1' ? 'oneway' : 'twoway'}", type = "${opts.model === 'ICC3' ? 'consistency' : 'agreement'}", unit = "${opts.unit}")\npsych::ICC(d)  # las 6 formas`;
+      const kw = S.kendallW(Y), unitsAll = ST.rows.map((_, i) => cols.map(c => c[i])).filter(u => u.filter(v => v !== null).length >= 2), ka = S.krippAlpha(unitsAll, 'interval');
+      sec.tables.push(apaTable('Otras medidas de acuerdo', ['Medida', 'Valor', 'Contraste'], [['<i>W</i> de Kendall (concordancia en el orden de los sujetos)', nz(kw.W.toFixed(3)), `χ²(${kw.df}) = ${f(kw.chi)}, ${pt(kw.p)}`], ['α de Krippendorff (intervalo)', nz(ka.alpha.toFixed(3)), `${unitsAll.length} sujetos con al menos dos valoraciones`]],
+        'La <i>W</i> de Kendall valora si los jueces ordenan igual a los sujetos (0 = nada, 1 = total), con corrección por empates. El α de Krippendorff admite valoraciones que faltan.'));
+      let ba = null;
+      if (vs.length === 2) { ba = S.blandAltman(Y.map(r => r[0]), Y.map(r => r[1])); const c2 = c => `[${f(c[0])}, ${f(c[1])}]`;
+        sec.tables.push(apaTable(`Bland-Altman: ${names[0]} − ${names[1]}`, ['', 'Estimación', 'IC 95 %'], [['Sesgo (diferencia media)', f(ba.bias), c2(ba.biasCI)], ['Límite inferior de acuerdo (−1.96 DT)', f(ba.lo), c2(ba.loCI)], ['Límite superior de acuerdo (+1.96 DT)', f(ba.hi), c2(ba.hiCI)]],
+          `DT de las diferencias = ${f(ba.sd)}; el sesgo ${ba.pBias < .05 ? 'difiere' : 'no difiere'} significativamente de 0 (${pt(ba.pBias)}). Sesgo proporcional (regresión de la diferencia sobre la media): <i>B</i> = ${f(ba.prop.b, 3)}, ${pt(ba.prop.p)}${ba.prop.p < .05 ? ', lo que indica que la discrepancia cambia con la magnitud de la medida' : ''}. IC de Bland y Altman (1999).`));
+        sec.charts.push(fig(`Bland-Altman: ${names[0]} frente a ${names[1]}`, CH.blandAltmanPlot(ba.mean, ba.diff, ba.bias, ba.lo, ba.hi, `Media de ${names[0]} y ${names[1]}`)));
+        sec.why.push('Con dos medidas cuantitativas se añade el análisis de Bland-Altman: muestra cuánto difieren en promedio (sesgo) y entre qué valores cae el 95 % de las diferencias (límites de acuerdo), algo que el CCI no informa.'); }
+      sec.text.push(`Se calculó el coeficiente de correlación intraclase (${MW[key].toLowerCase()}) para evaluar el acuerdo entre ${list(names.map(esc))} en ${Y.length} sujetos. El CCI fue ${nz(sel.icc.toFixed(2))}, IC 95 % [${nz(sel.ci[0].toFixed(2))}, ${nz(sel.ci[1].toFixed(2))}], <i>F</i>(${sel.df1}, ${sel.df2}) = ${f(sel.F)}, ${pt(sel.p)}, lo que indica una fiabilidad ${lvl(sel.icc)} según los criterios de Koo y Li (2016). La concordancia de Kendall fue <i>W</i> = ${nz(kw.W.toFixed(2))}, ${pt(kw.p)}.${ba ? ` El análisis de Bland-Altman mostró un sesgo de ${f(ba.bias)}, IC 95 % [${f(ba.biasCI[0])}, ${f(ba.biasCI[1])}], con límites de acuerdo entre ${f(ba.lo)} y ${f(ba.hi)}.` : ''}`);
+      sec.code = `# Coeficiente de correlación intraclase\nd <- na.omit(datos[, ${Q}])\nirr::icc(d, model = "${opts.model === 'ICC1' ? 'oneway' : 'twoway'}", type = "${opts.model === 'ICC3' ? 'consistency' : 'agreement'}", unit = "${opts.unit}")\npsych::ICC(d)  # las 6 formas\nirr::kendall(d, correct = TRUE)\nirr::kripp.alpha(t(as.matrix(datos[, ${Q}])), method = "interval")` + (vs.length === 2 ? `\n# Bland-Altman\ndif <- d[[1]] - d[[2]]; c(sesgo = mean(dif), inferior = mean(dif) - 1.96 * sd(dif), superior = mean(dif) + 1.96 * sd(dif))\nsummary(lm(dif ~ I((d[[1]] + d[[2]]) / 2)))  # sesgo proporcional` : '');
       return sec;
     }
     const cols = vs.map(catOf), idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null)), R = idx.map(i => cols.map(c => c[i]));
     if (R.length < 3) { sec.error = 'Se necesitan al menos 3 casos valorados por todos los jueces.'; return sec; }
     const lv = ordOf(vs.find(v => v.order) || vs[0], R.flat());
+    const ordK = vs.some(v => v.order), kaC = S.krippAlpha(ST.rows.map((_, i) => cols.map(c => c[i])).filter(u => u.filter(v => v !== null).length >= 2), ordK ? 'ordinal' : 'nominal', lv);
+    const kaTab = () => apaTable('α de Krippendorff', ['Nivel de medida', 'α'], [[ordK ? 'Ordinal' : 'Nominal', nz(kaC.alpha.toFixed(3))]], 'Admite valoraciones que faltan. Orientativo (Krippendorff): ≥ .80 fiable; .667–.80 solo para conclusiones provisionales.');
+    const kaCode = `\n# α de Krippendorff\nm <- t(sapply(datos[, ${Q}], function(x) match(as.character(x), c(${lv.map(rq).join(', ')}))))\nirr::kripp.alpha(m, method = "${ordK ? 'ordinal' : 'nominal'}")`;
     if (vs.length === 2) {
       const w = opts.weight, r = S.cohenKappa(R.map(x => x[0]), R.map(x => x[1]), lv, w), wn = { none: '', linear: ' ponderada lineal', quadratic: ' ponderada cuadrática' }[w];
       const lk = v => v < 0 ? 'peor que el azar' : v <= .2 ? 'leve' : v <= .4 ? 'aceptable' : v <= .6 ? 'moderado' : v <= .8 ? 'considerable' : 'casi perfecto';
@@ -1238,8 +1250,9 @@
       sec.tables.push(apaTable(`Kappa de Cohen${wn}`, ['κ', '<i>EE</i>', 'IC 95 %', '<i>z</i>', '<i>p</i>', 'Acuerdo observado', 'Acuerdo esperado', '<i>n</i>'],
         [[nz(r.kappa.toFixed(3)), nz(r.se.toFixed(3)), `[${nz(r.ci[0].toFixed(3))}, ${nz(r.ci[1].toFixed(3))}]`, f(r.z), pv(r.p), `${f(r.po * 100, 1)} %`, `${f(r.pe * 100, 1)} %`, r.n]],
         '<i>z</i> y <i>p</i> contrastan κ = 0 (Fleiss, Cohen y Everitt, 1969); IC con el error típico asintótico.'));
-      sec.text.push(`Se calculó la kappa de Cohen${wn} para evaluar el acuerdo entre ${esc(names[0])} y ${esc(names[1])} (${R.length} casos). El acuerdo observado fue del ${f(r.po * 100, 1)} % y la kappa fue ${nz(r.kappa.toFixed(2))}, IC 95 % [${nz(r.ci[0].toFixed(2))}, ${nz(r.ci[1].toFixed(2))}], <i>z</i> = ${f(r.z)}, ${pt(r.p)}, lo que indica un acuerdo ${lk(r.kappa)} (Landis y Koch, 1977).`);
-      sec.code = `# Kappa de Cohen\nd <- na.omit(datos[, ${Q}])\nirr::kappa2(d, weight = "${{ none: 'unweighted', linear: 'equal', quadratic: 'squared' }[w]}")\npsych::cohen.kappa(d)  # IC de kappa y kappa ponderada`;
+      sec.tables.push(kaTab());
+      sec.text.push(`Se calculó la kappa de Cohen${wn} para evaluar el acuerdo entre ${esc(names[0])} y ${esc(names[1])} (${R.length} casos). El acuerdo observado fue del ${f(r.po * 100, 1)} % y la kappa fue ${nz(r.kappa.toFixed(2))}, IC 95 % [${nz(r.ci[0].toFixed(2))}, ${nz(r.ci[1].toFixed(2))}], <i>z</i> = ${f(r.z)}, ${pt(r.p)}, lo que indica un acuerdo ${lk(r.kappa)} (Landis y Koch, 1977). El α de Krippendorff (${ordK ? 'ordinal' : 'nominal'}) fue ${nz(kaC.alpha.toFixed(2))}.`);
+      sec.code = `# Kappa de Cohen\nd <- na.omit(datos[, ${Q}])\nirr::kappa2(d, weight = "${{ none: 'unweighted', linear: 'equal', quadratic: 'squared' }[w]}")\npsych::cohen.kappa(d)  # IC de kappa y kappa ponderada` + kaCode;
       return sec;
     }
     const r = S.fleissKappa(R, lv);
@@ -1248,8 +1261,9 @@
     sec.decision = `Se calculó la kappa de Fleiss entre ${vs.length} jueces con ${R.length} casos.`;
     sec.tables.push(apaTable('Kappa de Fleiss', ['', 'κ', '<i>z</i>', '<i>p</i>'], [['Global', nz(r.kappa.toFixed(3)), f(r.z), pv(r.p)]].concat(r.byCat.map(c => [`Categoría ${esc(c.level)}`, nz(c.kappa.toFixed(3)), '', ''])),
       `<i>z</i> y <i>p</i> contrastan κ = 0. ${R.length} casos, ${vs.length} jueces.`));
-    sec.text.push(`Se calculó la kappa de Fleiss para evaluar el acuerdo entre ${vs.length} jueces (${list(names.map(esc))}) en ${R.length} casos: κ = ${nz(r.kappa.toFixed(2))}, <i>z</i> = ${f(r.z)}, ${pt(r.p)}.`);
-    sec.code = `# Kappa de Fleiss\nd <- na.omit(datos[, ${Q}])\nirr::kappam.fleiss(d, detail = TRUE)`;
+    sec.tables.push(kaTab());
+    sec.text.push(`Se calculó la kappa de Fleiss para evaluar el acuerdo entre ${vs.length} jueces (${list(names.map(esc))}) en ${R.length} casos: κ = ${nz(r.kappa.toFixed(2))}, <i>z</i> = ${f(r.z)}, ${pt(r.p)}; el α de Krippendorff (${ordK ? 'ordinal' : 'nominal'}) fue ${nz(kaC.alpha.toFixed(2))}.`);
+    sec.code = `# Kappa de Fleiss\nd <- na.omit(datos[, ${Q}])\nirr::kappam.fleiss(d, detail = TRUE)` + kaCode;
     return sec;
   }
 
@@ -1684,18 +1698,21 @@
     if (better.length) sec.checks.push(chk('info', `Eliminar ${list(better.map(v => esc(v.name)))} aumentaría el alfa. Valóralo según el contenido del ítem, no solo por el número.`));
     sec.checks.push(chk(vars.length >= 3 ? 'ok' : 'no', `Número de ítems: ${vars.length}.${vars.length < 3 ? ' Con 2 ítems el alfa es poco informativo; considera la correlación de Spearman-Brown.' : ''}`));
     sec.checks.push(chk('info', `El alfa asume que todos los ítems miden un único factor con cargas similares (tau-equivalencia). Por eso se informa también el omega de McDonald (ω = ${nz(om.toFixed(3))}), que no lo exige${Math.abs(om - a) > .03 ? '; aquí difieren, así que conviene informar sobre todo el omega' : '; aquí ambos coinciden prácticamente'}.`));
-    sec.tables.push(apaTable('Fiabilidad de la escala', ['α de Cronbach', 'α estandarizado', 'ω de McDonald', '<i>r</i> media inter-ítem', 'Ítems', '<i>n</i>', '<i>M</i> (total)', '<i>DT</i> (total)'],
-      [[nz(a.toFixed(3)), nz(r.alphaStd.toFixed(3)), nz(om.toFixed(3)), r2s(r.rbar), r.k, n, f(r.totalMean), f(r.totalSd)]], 'ω de McDonald (total) estimado con un modelo de un factor por ejes principales.'));
+    sec.tables.push(apaTable('Fiabilidad de la escala', ['α de Cronbach', 'IC 95 % (α)', 'α estandarizado', 'ω de McDonald', '<i>r</i> media inter-ítem', 'Ítems', '<i>n</i>', '<i>M</i> (total)', '<i>DT</i> (total)'],
+      [[nz(a.toFixed(3)), `[${nz(r.ci[0].toFixed(3))}, ${nz(r.ci[1].toFixed(3))}]`, nz(r.alphaStd.toFixed(3)), nz(om.toFixed(3)), r2s(r.rbar), r.k, n, f(r.totalMean), f(r.totalSd)]], 'IC del alfa por el método de Feldt (como psych). ω de McDonald (total) estimado con un modelo de un factor por ejes principales.'));
+    if (r.split) { const sp = r.split;
+      sec.tables.push(apaTable('Fiabilidad de dos mitades', ['Mitad', 'Ítems', 'α'], [['Primera', `${list(vars.slice(0, sp.k1).map(v => esc(v.name)))}`, nz(sp.alpha1.toFixed(3))], ['Segunda', `${list(vars.slice(sp.k1).map(v => esc(v.name)))}`, isFinite(sp.alpha2) ? nz(sp.alpha2.toFixed(3)) : '—']],
+        `Correlación entre las mitades = ${r2s(sp.r)}; Spearman-Brown (longitud igual) = ${nz(sp.sbEq.toFixed(3))}; Spearman-Brown (longitud desigual) = ${nz(sp.sbUneq.toFixed(3))}; coeficiente de Guttman = ${nz(sp.guttman.toFixed(3))}. Mitades en el orden de los ítems, como SPSS.`)); }
     sec.tables.push(apaTable('Estadísticos de los ítems', ['Ítem', '<i>M</i>', '<i>DT</i>', 'Correlación ítem-total corregida', 'α si se elimina el ítem'],
       vars.map((v, j) => [esc(v.name) + (rev[j] ? ' (invertido)' : ''), f(r.stats[j].mean), f(r.stats[j].sd), r2s(r.stats[j].rit), isFinite(r.stats[j].alphaDel) ? nz(r.stats[j].alphaDel.toFixed(3)) : '—'])));
-    let t = `La consistencia interna de la escala formada por ${vars.length} ítems fue ${qual}, α = ${nz(a.toFixed(2))}, ω = ${nz(om.toFixed(2))} (<i>n</i> = ${n}).`;
+    let t = `La consistencia interna de la escala formada por ${vars.length} ítems fue ${qual}, α = ${nz(a.toFixed(2))}, IC 95 % [${nz(r.ci[0].toFixed(2))}, ${nz(r.ci[1].toFixed(2))}], ω = ${nz(om.toFixed(2))} (<i>n</i> = ${n}).`;
     t += ` Las correlaciones ítem-total corregidas oscilaron entre ${r2s(Math.min(...r.stats.map(s => s.rit)))} y ${r2s(Math.max(...r.stats.map(s => s.rit)))}.`;
     if (rev.some(Boolean)) t += ` ${list(vars.filter((_, j) => rev[j]).map(v => esc(v.name)))} se ${rev.filter(Boolean).length > 1 ? 'recodificaron' : 'recodificó'} de forma inversa antes del análisis.`;
     sec.text.push(t);
     const keys = vars.filter((_, j) => rev[j]).map(v => rq(v.name));
     sec.code = `# Fiabilidad (alfa de Cronbach y omega de McDonald)\npsych::alpha(datos[, c(${vars.map(v => rq(v.name)).join(', ')})]${keys.length ? `, keys = c(${keys.join(', ')})` : ''})\n` +
       `it <- datos[complete.cases(datos[, c(${vars.map(v => rq(v.name)).join(', ')})]), c(${vars.map(v => rq(v.name)).join(', ')})]\n` + (keys.length ? `for (k in c(${keys.join(', ')})) it[[k]] <- ${lo} + ${hi} - it[[k]]  # ítems inversos\n` : '') +
-      `l <- as.numeric(psych::fa(it, nfactors = 1, fm = "pa")$loadings); l <- l * sign(sum(l))\nsum(l)^2 / (sum(l)^2 + sum(1 - l^2))  # omega total`;
+      `l <- as.numeric(psych::fa(it, nfactors = 1, fm = "pa")$loadings); l <- l * sign(sum(l))\nsum(l)^2 / (sum(l)^2 + sum(1 - l^2))  # omega total\npsych::alpha.ci(psych::alpha(it, warnings = FALSE)$total$raw_alpha, nrow(it), ncol(it))  # IC de Feldt` + (r.split ? `\nh1 <- rowSums(it[, 1:${r.split.k1}]); h2 <- rowSums(it[, -(1:${r.split.k1})]); r <- cor(h1, h2)\nc(r = r, spearman_brown = 2 * r / (1 + r), guttman = 2 * (1 - (var(h1) + var(h2)) / var(h1 + h2)))  # dos mitades` : '');
     return sec;
   }
 

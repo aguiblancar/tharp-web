@@ -675,7 +675,14 @@
       const rest = total.map((t, i) => t - it[i]);
       return { mean: mean(it), sd: sd(it), rit: pearson(it, rest).r, alphaDel: k > 2 ? alphaOf(items.filter((_, q) => q !== j)) : NaN };
     });
-    return { alpha, alphaStd, rbar, k, n, stats, totalMean: mean(total), totalSd: sd(total) };
+    // IC 95 % de Feldt (como psych::alpha.ci)
+    const d1 = n - 1, d2 = (n - 1) * (k - 1), ci = [1 - (1 - alpha) * J.centralF.inv(.975, d1, d2), 1 - (1 - alpha) * J.centralF.inv(.025, d1, d2)];
+    // dos mitades como SPSS: primera mitad de los ítems (una más si k es impar) frente a la segunda
+    let split = null;
+    if (k >= 4) { const k1 = Math.ceil(k / 2), k2 = k - k1, h1 = items.slice(0, k1), h2 = items.slice(k1), s1 = h1[0].map((_, i) => sum(h1.map(it => it[i]))), s2 = h2[0].map((_, i) => sum(h2.map(it => it[i])));
+      const r = pearson(s1, s2).r, sbEq = 2 * r / (1 + r), q = k1 * k2 / (k * k), sbUneq = (Math.sqrt(r ** 4 + 4 * r * r * (1 - r * r) * q) - r * r) / (2 * (1 - r * r) * q);
+      split = { k1, k2, r, sbEq, sbUneq, guttman: 2 * (1 - (variance(s1) + variance(s2)) / variance(total)), alpha1: k1 > 1 ? alphaOf(h1) : NaN, alpha2: k2 > 1 ? alphaOf(h2) : NaN }; }
+    return { alpha, alphaStd, rbar, k, n, stats, totalMean: mean(total), totalSd: sd(total), ci, split };
   }
 
   // ---------- regresión logística binaria (IRLS) ----------
@@ -894,6 +901,36 @@
       out.push({ type: 'ICC3k', model: 'twoway', agreement: 'consistency', unit: 'average', icc: (MSR - MSE) / MSR, F, df1: d1, df2: d2, p: pF(F, d1, d2), ci: [1 - 1 / FL, 1 - 1 / FU] });
     }
     return { n, k, MSR, MSC, MSE, MSW, forms: out };
+  }
+  // W de Kendall: concordancia de m jueces que puntúan n sujetos (con corrección por empates, como irr::kendall(correct = TRUE))
+  function kendallW(Y) { // Y: n sujetos × m jueces
+    const n = Y.length, m = Y[0].length, R = new Array(n).fill(0); let T = 0;
+    for (let j = 0; j < m; j++) { const rk = ranks(Y.map(r => r[j])); rk.r.forEach((v, i) => { R[i] += v; });
+      const cnt = new Map(); Y.forEach(r => cnt.set(r[j], (cnt.get(r[j]) || 0) + 1)); cnt.forEach(t => { if (t > 1) T += t ** 3 - t; }); }
+    const mR = mean(R), Sq = sum(R.map(v => (v - mR) ** 2)), W = 12 * Sq / (m * m * (n ** 3 - n) - m * T), chi = m * (n - 1) * W;
+    return { W, chi, df: n - 1, p: pChi(chi, n - 1), n, m };
+  }
+  // alfa de Krippendorff con matriz de coincidencias (admite valores perdidos); nivel 'nominal' | 'ordinal' | 'interval' | 'ratio'
+  function krippAlpha(units, level = 'nominal', order = null) { // units: n sujetos × m jueces con null = sin valoración
+    const vals = order || [...new Set(units.flat().filter(v => v !== null))].sort((a, b) => (typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b))));
+    const ix = new Map(vals.map((v, i) => [String(v), i])), V = vals.length, o = Array.from({ length: V }, () => new Array(V).fill(0));
+    units.forEach(u => { const r = u.filter(v => v !== null).map(v => ix.get(String(v))), mu = r.length; if (mu < 2) return;
+      for (let a = 0; a < mu; a++) for (let b = 0; b < mu; b++) if (a !== b) o[r[a]][r[b]] += 1 / (mu - 1); });
+    const nc = o.map(row => sum(row)), N = sum(nc);
+    const d2 = (c, k) => { if (level === 'nominal') return c === k ? 0 : 1;
+      if (level === 'ordinal') { const lo = Math.min(c, k), hi = Math.max(c, k); let s = 0; for (let g = lo; g <= hi; g++) s += nc[g]; return (s - (nc[c] + nc[k]) / 2) ** 2; }
+      const x = +vals[c], y = +vals[k]; return level === 'ratio' ? ((x - y) / (x + y)) ** 2 : (x - y) ** 2; };
+    let Do = 0, De = 0; for (let c = 0; c < V; c++) for (let k = 0; k < V; k++) { const dd = d2(c, k); Do += o[c][k] * dd; De += nc[c] * nc[k] * dd; }
+    Do /= N; De /= N * (N - 1);
+    return { alpha: 1 - Do / De, level, nPairable: N, values: V };
+  }
+  // Bland-Altman: sesgo, límites de acuerdo al 95 % con sus IC (Bland y Altman, 1999) y sesgo proporcional
+  function blandAltman(a, b) {
+    const d = a.map((v, i) => v - b[i]), mm = a.map((v, i) => (v + b[i]) / 2), n = d.length, bias = mean(d), s = sd(d), t = J.studentt.inv(.975, n - 1);
+    const lo = bias - 1.959963984540054 * s, hi = bias + 1.959963984540054 * s, seB = s / Math.sqrt(n), seL = Math.sqrt(3 * s * s / n);
+    const reg = ols(mm.map(v => [1, v]), d);
+    return { n, bias, sd: s, biasCI: [bias - t * seB, bias + t * seB], lo, hi, loCI: [lo - t * seL, lo + t * seL], hiCI: [hi - t * seL, hi + t * seL], diff: d, mean: mm,
+      prop: { b: reg.b[1], se: reg.se[1], t: reg.t[1], p: reg.pv[1] }, pBias: pT(bias / seB, n - 1) };
   }
   // kappa de Cohen (2 jueces), opcionalmente ponderada ('linear' | 'quadratic') para categorías ordenadas;
   // z y p con la varianza bajo H0 (Fleiss, Cohen y Everitt, 1969), IC con la varianza asintótica, como irr::kappa2 y psych::cohen.kappa
@@ -1496,5 +1533,5 @@
 
   root.TharpStats = { manova, boxM, brantTest, glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
-    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, processModel, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ordinalAssoc, fisherRxC, mantelHaenszel, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
+    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, kendallW, krippAlpha, blandAltman, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, processModel, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ordinalAssoc, fisherRxC, mantelHaenszel, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

@@ -238,5 +238,18 @@
     s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">1 − especificidad</text><text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" fill="${COL.axis}">Sensibilidad</text>`;
     return s + '</svg>';
   }
-  root.TharpCharts = { pathDiagram, scree, histogram, boxplot, qqplot, rocCurve, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
+  // gráfico de Bland-Altman: media de las dos medidas frente a su diferencia, con el sesgo y los límites de acuerdo
+  function blandAltmanPlot(mean, diff, bias, lo, hi, labX) {
+    const W = 400, H = 250, m = { l: 46, r: 108, t: 12, b: 40 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const xt = ticks(Math.min(...mean), Math.max(...mean), 5), yt = ticks(Math.min(lo, ...diff), Math.max(hi, ...diff), 5);
+    const sx = v => m.l + (v - xt[0]) / (xt[xt.length - 1] - xt[0]) * pw, sy = v => m.t + ph - (v - yt[0]) / (yt[yt.length - 1] - yt[0]) * ph;
+    let s = svgOpen(W, H, 'Gráfico de Bland-Altman') + yAxis(yt, sy, m.l, m.l + pw);
+    xt.forEach(v => { s += `<text x="${sx(v)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${fmt(v)}</text>`; });
+    [[bias, 'Sesgo', COL.s[0], ''], [lo, '−1.96 DT', COL.s[1], '5 4'], [hi, '+1.96 DT', COL.s[1], '5 4']].forEach(([v, lab, col, dash]) => {
+      s += `<line x1="${m.l}" x2="${m.l + pw}" y1="${sy(v)}" y2="${sy(v)}" stroke="${col}" stroke-width="1.5" ${dash ? `stroke-dasharray="${dash}"` : ''}/><text x="${m.l + pw + 4}" y="${sy(v) + 4}" fill="${col}" font-size="11">${lab}: ${fmt(v)}</text>`; });
+    mean.forEach((v, i) => { s += `<circle cx="${sx(v)}" cy="${sy(diff[i])}" r="2.6" fill="${COL.s[0]}" fill-opacity=".6"/>`; });
+    s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(labX, 40))}</text>`;
+    return s + '</svg>';
+  }
+  root.TharpCharts = { pathDiagram, scree, histogram, boxplot, qqplot, rocCurve, blandAltmanPlot, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
 })(window);
