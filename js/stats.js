@@ -692,6 +692,50 @@
       return { emm: e, pairs: out }; };
     return { terms, sse: full.sse, dfE, mse, resid: full.e, b: full.b, emm, pairs, covMean, n };
   }
+  // ---------- MANOVA / MANCOVA (tipo III con codificación de efectos, como car::Anova sobre un lm multivariado) ----------
+  // Ys: p arrays de variables dependientes; F, L, C como en glmFactorial. Para cada término: H = SSCP residual del modelo sin el término
+  // menos el del completo; estadísticos de Pillai, Wilks, Hotelling-Lawley y Roy con las aproximaciones F de R (summary.manova)
+  function manova(Ys, F, L, C = []) {
+    const n = Ys[0].length, p = Ys.length, k = L.length;
+    const codes = (f, lvl) => Array.from({ length: L[f] - 1 }, (_, j) => (lvl === j ? 1 : lvl === L[f] - 1 ? -1 : 0));
+    const subsets = []; for (let mask = 1; mask < (1 << k); mask++) subsets.push([...Array(k).keys()].filter(f => mask & (1 << f)));
+    subsets.sort((a, b) => a.length - b.length || a.join().localeCompare(b.join()));
+    const X = F.map((lv, i) => [1].concat(...subsets.map(sub => sub.reduce((acc, f) => { const c = codes(f, lv[f]), out = []; acc.forEach(a => c.forEach(b => out.push(a * b))); return out; }, [1]))).concat(C.map(c => c[i])));
+    const terms = subsets.map(sub => ({ factors: sub, df: sub.reduce((a, f) => a * (L[f] - 1), 1) })).concat(C.map((_, j) => ({ cov: j, df: 1 })));
+    let off = 1; terms.forEach(t => { t.cols = Array.from({ length: t.df }, (_, j) => off + j); off += t.df; });
+    const resid = Xm => { const Ai = inv(matMul(tr(Xm), Xm)); if (!Ai) return null; const P = matMul(Xm, matMul(Ai, tr(Xm)));
+      const Y = Array.from({ length: n }, (_, i) => Ys.map(y => y[i])), R = Y.map((r, i) => r.map((v, d) => v - sum(P[i].map((w, j) => w * Y[j][d]))));
+      return matMul(tr(R), R); };
+    const E = resid(X); if (!E) return null;
+    const dfE = n - X[0].length, Ei = inv(E);
+    // autovalores de E⁻¹H a partir de la forma simétrica L⁻¹ H L⁻ᵀ (Cholesky de E)
+    const chol = A => { const m = A.length, Lc = Array.from({ length: m }, () => new Array(m).fill(0));
+      for (let i = 0; i < m; i++) for (let j = 0; j <= i; j++) { let s = A[i][j]; for (let q = 0; q < j; q++) s -= Lc[i][q] * Lc[j][q]; Lc[i][j] = i === j ? Math.sqrt(Math.max(s, 1e-300)) : s / Lc[j][j]; } return Lc; };
+    const Lc = chol(E), Li = inv(Lc);
+    terms.forEach(t => {
+      const keep = X[0].map((_, j) => j).filter(j => !t.cols.includes(j)), Er = resid(X.map(r => keep.map(j => r[j])));
+      const H = Er.map((r, a) => r.map((v, b) => v - E[a][b])), M = matMul(matMul(Li, H), tr(Li)), Ms = M.map((r, a) => r.map((v, b) => (v + M[b][a]) / 2));
+      const eig = eigSym(Ms).values.map(v => Math.max(0, v)), q = t.df, s = Math.min(p, q), m = .5 * (Math.abs(p - q) - 1), nn = .5 * (dfE - p - 1);
+      const V = sum(eig.map(l => l / (1 + l))), W = eig.reduce((a, l) => a / (1 + l), 1), HL = sum(eig), Roy = Math.max(...eig);
+      const pil = { stat: V, F: ((2 * nn + s + 1) / (2 * m + s + 1) * V) / (s - V), df1: s * (2 * m + s + 1), df2: s * (2 * nn + s + 1) };
+      const t1 = dfE - .5 * (p - q + 1), t2 = (p * q - 2) / 4, t3r = p * p + q * q - 5, t3 = t3r > 0 ? Math.sqrt(((p * q) ** 2 - 4) / t3r) : 1;
+      const wil = { stat: W, F: ((Math.pow(W, -1 / t3) - 1) * (t1 * t3 - 2 * t2)) / p / q, df1: p * q, df2: t1 * t3 - 2 * t2 };
+      const hlt = { stat: HL, F: (2 * (s * nn + 1) * HL) / s / s / (2 * m + s + 1), df1: s * (2 * m + s + 1), df2: 2 * (s * nn + 1) };
+      const ro1 = Math.max(p, q), roy = { stat: Roy, F: ((dfE - ro1 + q) * Roy) / ro1, df1: ro1, df2: dfE - ro1 + q };
+      [pil, wil, hlt, roy].forEach(o => { o.p = pF(o.F, o.df1, o.df2); });
+      t.tests = { pillai: pil, wilks: wil, hotelling: hlt, roy }; t.eta2 = { pillai: V / s, wilks: 1 - Math.pow(W, 1 / s) }; t.H = H;
+    });
+    return { terms, E, dfE, n, p, Ei };
+  }
+  // prueba M de Box de igualdad de matrices de covarianzas (aproximación χ²), como heplots::boxM
+  function boxM(groups) { // groups: g arrays de casos, cada caso un array de p valores
+    const g = groups.length, p = groups[0][0].length, ns = groups.map(G => G.length), N = sum(ns);
+    const cov = G => { const m = Array.from({ length: p }, (_, d) => mean(G.map(r => r[d]))); return Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => sum(G.map(r => (r[a] - m[a]) * (r[b] - m[b]))) / (G.length - 1))); };
+    const Ss = groups.map(cov), Sp = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => sum(Ss.map((S, q) => (ns[q] - 1) * S[a][b])) / (N - g)));
+    const ld = A => Math.log(Math.max(1e-300, det(A))), M = (N - g) * ld(Sp) - sum(Ss.map((S, q) => (ns[q] - 1) * ld(S)));
+    const c1 = (sum(ns.map(x => 1 / (x - 1))) - 1 / (N - g)) * (2 * p * p + 3 * p - 1) / (6 * (p + 1) * (g - 1)), chi = M * (1 - c1), df = p * (p + 1) * (g - 1) / 2;
+    return { M, chi, df, p: pChi(chi, df) };
+  }
   function anova2(y, a, b, la, lb) { // a, b: índices de nivel por caso
     const effA = (i, j) => (a[i] === j ? 1 : a[i] === la - 1 ? -1 : 0), effB = (i, j) => (b[i] === j ? 1 : b[i] === lb - 1 ? -1 : 0);
     const n = y.length, colsA = [], colsB = [], colsAB = [];
@@ -1395,7 +1439,7 @@
       heywood: B.Psi.map((v, j) => v < 0 ? j : -1).filter(j => j >= 0) };
   }
 
-  root.TharpStats = { brantTest, glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
+  root.TharpStats = { manova, boxM, brantTest, glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
     tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, processModel, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);
