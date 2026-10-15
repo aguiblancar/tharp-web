@@ -379,6 +379,10 @@
     h += card('paired', !!D.paired && nums.length >= 2, 'Comparación de medidas relacionadas (pre/post o varios momentos)', 'Las mismas personas medidas dos o más veces: t relacionada o Wilcoxon (2 momentos); ANOVA de medidas repetidas o Friedman (3 o más). Con un factor entre sujetos (por ejemplo, control frente a tratamiento): ANOVA mixta.',
       `<div class="field"><span>Momentos o condiciones (en el orden de las columnas del archivo)</span>${chips('pM', nums, v => (pDef.length ? pDef.includes(v.name) : nums.indexOf(v) < 2))}</div>
        <label class="field"><span>Hipótesis (solo con 2 medidas y sin factor entre sujetos)</span><select id="pAlt"><option value="two">Bilateral: las medidas difieren (recomendada)</option><option value="greater">Unilateral: la segunda medida es mayor</option><option value="less">Unilateral: la segunda medida es menor</option></select></label>
+       <details style="margin:4px 0 10px"><summary class="small">Dos factores intrasujeto (opcional; por ejemplo, condición × momento)</summary>
+         <p class="small muted" style="margin:6px 0">Marca arriba todas las columnas en este orden: el segundo factor cambia más rápido (A1·B1, A1·B2, …, A2·B1, A2·B2…), como en SPSS. El número de columnas debe ser niveles del factor 1 × niveles del factor 2.</p>
+         <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Factor 1: nombre y niveles</span><span style="display:flex;gap:6px"><input id="pW1N" placeholder="p. ej., condición" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:150px"><input id="pW1K" type="number" min="2" placeholder="niveles" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:90px"></span></label>
+         <label class="field"><span>Factor 2: nombre y niveles</span><span style="display:flex;gap:6px"><input id="pW2N" placeholder="p. ej., momento" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:150px"><input id="pW2K" type="number" min="2" placeholder="niveles" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:90px"></span></label></div></details>
        <label class="field"><span>Factor entre sujetos (opcional: ANOVA mixta)</span><select id="pB"><option value="">Ninguno</option>${facs.map(v => `<option value="${esc(v.name)}"${dP.between === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>`,
       nums.length < 2 ? 'Necesitas dos variables cuantitativas.' : '');
     const dC = D.chi || {};
@@ -867,6 +871,53 @@
         : `No se encontraron diferencias estadísticamente significativas, <i>V</i> = ${f(r.V, 1)}, ${pt(r.p)}, <i>r</i><sub>rb</sub> = ${f(r.rb)}.`));
       sec.code = `# ${name} frente a ${mu}\nshapiro.test(datos$${X})\nwilcox.test(datos$${X}, mu = ${mu}${ALT})  # exacta si no hay empates ni ceros y n < 50\neffectsize::rank_biserial(datos$${X}, mu = ${mu})`;
     }
+    return sec;
+  }
+
+  // Medidas repetidas con dos factores intrasujeto (y un factor entre sujetos opcional)
+  function runRm2(cols, wNames, kw, gName) {
+    const [A, B] = wNames, K = kw[0] * kw[1];
+    const sec = { title: `${A} × ${B} (medidas repetidas${gName ? ` × ${gName}` : ''})`, test: `ANOVA de medidas repetidas de dos factores${gName ? ' con un factor entre sujetos' : ''}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (cols.length !== K) { sec.error = `Has marcado ${cols.length} columnas, pero ${A} (${kw[0]} niveles) × ${B} (${kw[1]} niveles) requiere ${K}.`; return sec; }
+    const X = cols.map(nm => numOf(vByName(nm))), gc = gName ? catOf(vByName(gName)) : null;
+    const idx = ST.rows.map((_, i) => i).filter(i => X.every(c => c[i] !== null) && (!gc || gc[i] !== null));
+    const lv = gName ? ordOf(vByName(gName), idx.map(i => gc[i])) : [''], G = lv.length, g = gName ? idx.map(i => lv.indexOf(gc[i])) : null;
+    const Y = idx.map(i => X.map(c => c[i])), n = Y.length;
+    if (n - G < K) { sec.error = `Hay pocos casos completos (${n}) para ${K} medidas.`; return sec; }
+    if (gName && lv.some((_, j) => g.filter(x => x === j).length < 2)) { sec.error = 'Cada grupo necesita al menos 2 personas con todas las medidas.'; return sec; }
+    const r = S.rmFactorial(Y, kw, g, G), lab = (a, b) => `${A} ${a + 1} · ${B} ${b + 1}`;
+    sec.why.push(`Diseño intrasujeto ${kw[0]}×${kw[1]}: ${esc(A)} (${kw[0]} niveles) × ${esc(B)} (${kw[1]} niveles), con ${K} medidas de las mismas ${n} personas${gName ? ` y ${esc(gName)} como factor entre sujetos (${list(lv.map(esc))})` : ''}.`);
+    sec.why.push('Cada efecto intrasujeto (los dos principales y su interacción) se contrasta con su propio término de error, y su esfericidad se comprueba por separado (como SPSS, JASP y afex).');
+    sec.decision = `Se ajustó una ANOVA de medidas repetidas ${kw[0]}×${kw[1]}${gName ? ` con ${esc(gName)} como factor entre sujetos` : ''} con ${n} personas.`;
+    sec.tables.push(apaTable('Correspondencia de las columnas con las condiciones', ['Columna', esc(A), esc(B)], cols.map((c, q) => [esc(c), Math.floor(q / kw[1]) + 1, (q % kw[1]) + 1]),
+      `Comprueba que el orden es el correcto: el segundo factor (${esc(B)}) cambia más rápido.`));
+    const dRows = []; lv.forEach((l, j) => cols.forEach((c, q) => { const x = Y.filter((_, i) => !g || g[i] === j).map(rw => rw[q]), d = S.describe(x); dRows.push([gName && q === 0 ? esc(l) : '', esc(c), lab(Math.floor(q / kw[1]), q % kw[1]), d.n, f(d.mean), f(d.sd)]); }));
+    sec.tables.push(apaTable('Estadísticos descriptivos', (gName ? [esc(gName)] : ['']).concat(['Columna', 'Condición', '<i>n</i>', '<i>M</i>', '<i>DT</i>']), dRows));
+    const eName = e => e.factors.map(f => esc(wNames[f])).join(' × '), corr = [];
+    const sphRows = r.effects.filter(e => e.mauchly).map(e => { const ok = e.mauchly.p >= .05; if (!ok) corr.push(eName(e)); return [eName(e), nz(e.mauchly.W.toFixed(3)), f(e.mauchly.chi), e.mauchly.df, pv(e.mauchly.p), nz(e.gg.toFixed(3)), nz(e.hf.toFixed(3))]; });
+    if (sphRows.length) { sec.tables.push(apaTable('Esfericidad (Mauchly) y épsilon de corrección', ['Efecto', '<i>W</i>', 'χ²', '<i>gl</i>', '<i>p</i>', 'ε Greenhouse-Geisser', 'ε Huynh-Feldt'], sphRows, 'Los efectos con 2 niveles cumplen la esfericidad por definición. Si Mauchly es significativo, se aplica Greenhouse-Geisser a ese efecto.'));
+      sec.checks.push(chk(corr.length ? 'no' : 'ok', corr.length ? `No se cumple la esfericidad en ${list(corr)}: se corrigen sus grados de libertad con Greenhouse-Geisser.` : 'Se cumple la esfericidad en todos los efectos intrasujeto con más de dos niveles.')); }
+    const rowE = (nm, t, e) => { const useGG = e.mauchly && e.mauchly.p < .05, eps = useGG ? e.gg : 1;
+      return [nm, f(t.ss), dfF(t.df * eps), f(t.ss / (t.df * eps)), f(t.F), pv(useGG ? t.pGG : t.p), nz(t.peta2.toFixed(3)), nz(t.ges.toFixed(3))]; };
+    const rows = [];
+    if (r.B) rows.push(['<i>Entre sujetos</i>', '', '', '', '', '', '', ''], [esc(gName), f(r.B.ss), r.B.df, f(r.B.ss / r.B.df), f(r.B.F), pv(r.B.p), nz(r.B.peta2.toFixed(3)), nz(r.B.ges.toFixed(3))], ['Error', f(r.ssSe), r.dfS, f(r.ssSe / r.dfS), '', '', '', '']);
+    rows.push(['<i>Intrasujeto</i>', '', '', '', '', '', '', '']);
+    r.effects.forEach(e => { const useGG = e.mauchly && e.mauchly.p < .05, eps = useGG ? e.gg : 1; rows.push(rowE(eName(e), e.T, e)); if (e.TG) rows.push(rowE(`${eName(e)} × ${esc(gName)}`, e.TG, e)); rows.push([`Error (${eName(e)})`, f(e.ssE), dfF(e.dfE * eps), f(e.ssE / (e.dfE * eps)), '', '', '', '']); });
+    sec.tables.push(apaTable('Resultado de la ANOVA de medidas repetidas', ['Fuente', '<i>SC</i>', '<i>gl</i>', '<i>MC</i>', '<i>F</i>', '<i>p</i>', 'η²<sub>p</sub>', 'η²<sub>G</sub>'], rows,
+      `${corr.length ? 'Grados de libertad corregidos con Greenhouse-Geisser en los efectos sin esfericidad. ' : ''}Cada efecto intrasujeto tiene su propio término de error. η²<sub>G</sub> = eta cuadrado generalizado (comparable entre diseños).`));
+    const phRows = []; [0, 1].forEach(fi => { const w = r.within(fi); w.pairs.forEach((o, q) => phRows.push([q === 0 ? esc(wNames[fi]) : '', `${o.a + 1} − ${o.b + 1}`, f(o.est), f(o.se), f(o.t), pv(o.padj)])); });
+    sec.tables.push(apaTable('Comparaciones por pares de los efectos principales intrasujeto', ['Factor', 'Niveles', 'Diferencia', '<i>EE</i>', `<i>t</i>(${r.dfS})`, '<i>p</i> (Holm)'], phRows,
+      `Medias marginales promediando el otro factor${gName ? ' y los grupos sin ponderar' : ''}; error propio de cada diferencia (como emmeans y JASP).`));
+    const cellM = (a, b) => S.mean(Y.map(rw => rw[a * kw[1] + b])), ciM = (a, b) => S.meanCI(Y.map(rw => rw[a * kw[1] + b]));
+    sec.charts.push(fig(`Interacción ${A} × ${B}: medias e IC 95 %`, CH.interaction(Array.from({ length: kw[0] }, (_, a) => `${A} ${a + 1}`), Array.from({ length: kw[1] }, (_, b) => ({ name: `${B} ${b + 1}`, means: Array.from({ length: kw[0] }, (_, a) => cellM(a, b)), ci: Array.from({ length: kw[0] }, (_, a) => ciM(a, b)) })), 'Puntuación'), CH.legend(Array.from({ length: kw[1] }, (_, b) => `${B} ${b + 1}`))));
+    const stt = (t, e) => { const useGG = e.mauchly && e.mauchly.p < .05, eps = useGG ? e.gg : 1; return `<i>F</i>(${dfF(t.df * eps)}, ${dfF(e.dfE * eps)}) = ${f(t.F)}, ${pt(useGG ? t.pGG : t.p)}, η²<sub>p</sub> = ${nz(t.peta2.toFixed(3))}`; };
+    let txt = `Se realizó una ANOVA de medidas repetidas ${kw[0]}×${kw[1]} con ${esc(A)} y ${esc(B)} como factores intrasujeto${gName ? ` y ${esc(gName)} como factor entre sujetos` : ''}${corr.length ? ' (corrección de Greenhouse-Geisser donde no se cumplía la esfericidad)' : ''}. `;
+    txt += r.effects.map(e => `${e.factors.length > 1 ? `La interacción ${eName(e)}` : `El efecto principal de ${eName(e)}`} ${(e.mauchly && e.mauchly.p < .05 ? e.T.pGG : e.T.p) < .05 ? 'fue' : 'no fue'} estadísticamente significativ${e.factors.length > 1 ? 'a' : 'o'}, ${stt(e.T, e)}.` + (e.TG ? ` La interacción con ${esc(gName)} ${(e.mauchly && e.mauchly.p < .05 ? e.TG.pGG : e.TG.p) < .05 ? 'fue' : 'no fue'} significativa, ${stt(e.TG, e)}.` : '')).join(' ');
+    if (r.B) txt += ` El efecto principal de ${esc(gName)} ${r.B.p < .05 ? 'fue' : 'no fue'} estadísticamente significativo, <i>F</i>(${r.B.df}, ${r.dfS}) = ${f(r.B.F)}, ${pt(r.B.p)}, η²<sub>p</sub> = ${nz(r.B.peta2.toFixed(3))}.`;
+    sec.text.push(txt);
+    sec.code = `# ANOVA de medidas repetidas ${A} × ${B}${gName ? ` × ${gName}` : ''}\nmedidas <- c(${cols.map(rq).join(', ')})\nd <- datos[complete.cases(datos[, c(medidas${gName ? ', ' + rq(gName) : ''})]), ]\nd$id <- factor(seq_len(nrow(d)))\n` +
+      `largo <- data.frame(id = rep(d$id, ${K}), ${gName ? `grupo = factor(rep(d[[${rq(gName)}]], ${K})), ` : ''}A = factor(rep((seq_len(${K}) - 1) %/% ${kw[1]} + 1, each = nrow(d))), B = factor(rep((seq_len(${K}) - 1) %% ${kw[1]} + 1, each = nrow(d))), valor = unlist(d[, medidas], use.names = FALSE))\n` +
+      `modelo <- afex::aov_ez("id", "valor", largo, within = c("A", "B")${gName ? ', between = "grupo"' : ''}, anova_table = list(correction = "${corr.length ? 'GG' : 'none'}", es = c("pes", "ges")))\nmodelo\nsummary(modelo)  # Mauchly y épsilon\npairs(emmeans::emmeans(modelo, ~ A), adjust = "holm")\npairs(emmeans::emmeans(modelo, ~ B), adjust = "holm")`;
     return sec;
   }
 
@@ -2030,7 +2081,10 @@
         else add({ title: 'Proporciones', error: 'Selecciona al menos una variable categórica.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('agree')) add(runAgree(checkedVals('agV'), { model: ($('#agM') || {}).value || 'ICC2', unit: ($('#agU') || {}).value || 'single', weight: ($('#agW') || {}).value || 'none' }));
       if (isOn('roc')) add(runRoc(checkedVals('rocX'), ($('#rocY') || {}).value, ($('#rocPos') || {}).value));
-      if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
+      if (isOn('paired') && +(($('#pW1K') || {}).value) >= 2 && +(($('#pW2K') || {}).value) >= 2) {
+        const k1 = Math.round(+$('#pW1K').value), k2 = Math.round(+$('#pW2K').value);
+        add(runRm2(checkedVals('pM'), [($('#pW1N').value || 'Factor 1').trim(), ($('#pW2N').value || 'Factor 2').trim()], [k1, k2], ($('#pB') || {}).value || '')); }
+      else if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
         add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1], ($('#pAlt') || {}).value || 'two') : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));
       if (isOn('reg')) { const meth = ($('#rM') || {}).value || 'enter';

@@ -412,6 +412,47 @@
     return { n, k, G, ng, gg, hf, mauchly, within, cellMeans, subjMeans: sm,
       B: eff(ssB, dfB, dfSe, FB, ssSe), T: eff(ssT, dfT, dfE, FT, ssE), TG: eff(ssTG, dfTG, dfE, FTG, ssE), ssSe, dfSe, ssE, dfE };
   }
+  // ---------- medidas repetidas con varios factores intrasujeto (y un factor entre sujetos opcional) ----------
+  // Y: n × (k1·k2·…) con las casillas ordenadas como en SPSS (el último factor cambia más rápido); kw: niveles de cada factor
+  // intrasujeto; g/G: grupo de cada persona (opcional). Cada efecto intrasujeto se contrasta con su propio término de error
+  // (contrastes ortonormales de Helmert combinados por producto de Kronecker), como afex/SPSS/JASP.
+  function rmFactorial(Y, kw, g = null, G = 1) {
+    const n = Y.length, K = Y[0].length, ng = new Array(G).fill(0), gi = g || new Array(n).fill(0); gi.forEach(x => ng[x]++);
+    const helm = k => { const C = []; for (let j = 0; j < k - 1; j++) { const v = new Array(k).fill(0), m = j + 1; for (let i = 0; i < m; i++) v[i] = 1; v[m] = -m; const nr = Math.sqrt(m * (m + 1)); C.push(v.map(x => x / nr)); } return C; };
+    const kron = (A, B) => { const out = []; A.forEach(a => B.forEach(b => { const r = []; a.forEach(x => b.forEach(z => r.push(x * z))); out.push(r); })); return out; };
+    const nf = kw.length, subsets = []; for (let mask = 1; mask < (1 << nf); mask++) subsets.push([...Array(nf).keys()].filter(f => mask & (1 << f)));
+    subsets.sort((a, b) => a.length - b.length || a.join().localeCompare(b.join()));
+    const dfS = n - G, sm = Y.map(mean), gmS = Array.from({ length: G }, (_, j) => mean(sm.filter((_, i) => gi[i] === j))), grand = mean(sm);
+    const ssB = K * sum(ng.map((c, j) => c * (gmS[j] - grand) ** 2)), ssSe = K * sum(sm.map((v, i) => (v - gmS[gi[i]]) ** 2));
+    const effects = subsets.map(sub => {
+      let M = [[1]]; kw.forEach((k, f) => { M = kron(M, sub.includes(f) ? helm(k) : [new Array(k).fill(1 / Math.sqrt(k))]); });
+      const p = M.length, Z = Y.map(r => M.map(c => sum(c.map((w, a) => w * r[a]))));
+      const gm = Array.from({ length: G }, (_, j) => M.map((_, c) => mean(Z.filter((_, i) => gi[i] === j).map(z => z[c]))));
+      let ssT = 0, ssTG = 0; const E = Array.from({ length: p }, () => new Array(p).fill(0));
+      for (let c = 0; c < p; c++) { const u = mean(gm.map(m => m[c])), zbar = mean(Z.map(z => z[c])); ssT += u * u / (sum(ng.map(x => 1 / x)) / (G * G)); ssTG += sum(ng.map((x, j) => x * (gm[j][c] - zbar) ** 2)); }
+      Z.forEach((z, i) => { for (let a = 0; a < p; a++) for (let b = 0; b < p; b++) E[a][b] += (z[a] - gm[gi[i]][a]) * (z[b] - gm[gi[i]][b]); });
+      const ssE = sum(E.map((r, i) => r[i])), Sg = E.map(r => r.map(v => v / dfS)), tr_ = sum(Sg.map((r, i) => r[i])), tr2 = sum(Sg.map((r, i) => sum(r.map((v, j) => v * Sg[j][i]))));
+      const gg = p > 1 ? Math.min(1, tr_ * tr_ / (p * tr2)) : 1, hf = p > 1 ? Math.min(1, ((n - G + 1) * p * gg - 2) / (p * (n - G - p * gg))) : 1;
+      let mauchly = null;
+      if (p > 1) { const W = det(Sg) / (tr_ / p) ** p, dfm = p * (p + 1) / 2 - 1, nu = dfS, rho = 1 - (2 * p * p + p + 2) / (6 * p * nu);
+        const chi = -nu * rho * Math.log(W), w2 = (p + 2) * (p - 1) * (p - 2) * (2 * p ** 3 + 6 * p * p + 3 * p + 2) / (288 * (nu * p * rho) ** 2);
+        mauchly = { W, chi, df: dfm, p: pChi(chi, dfm) + w2 * (pChi(chi, dfm + 4) - pChi(chi, dfm)) }; }
+      const dfE = p * dfS, mk = (ss, df) => { const F = (ss / df) / (ssE / dfE); return { ss, df, F, p: pF(F, df, dfE), pGG: pF(F, df * gg, dfE * gg), pHF: pF(F, df * hf, dfE * hf), peta2: ss / (ss + ssE) }; };
+      return { factors: sub, p, M, ssE, dfE, gg, hf, mauchly, T: mk(ssT, p), TG: G > 1 ? mk(ssTG, (G - 1) * p) : null };
+    });
+    const errAll = ssSe + sum(effects.map(e => e.ssE));
+    effects.forEach(e => { e.T.ges = e.T.ss / (e.T.ss + errAll); if (e.TG) e.TG.ges = e.TG.ss / (e.TG.ss + errAll); });
+    const B = G > 1 ? (() => { const F = (ssB / (G - 1)) / (ssSe / dfS); return { ss: ssB, df: G - 1, F, p: pF(F, G - 1, dfS), peta2: ssB / (ssB + ssSe), ges: ssB / (ssB + errAll) }; })() : null;
+    // medias marginales de cada factor intrasujeto (promediando grupos sin ponderar) y comparaciones por pares (error propio, Holm)
+    const cellIdx = lv => lv.reduce((acc, l, f) => acc * kw[f] + l, 0);
+    const marg = f => { const out = []; for (let l = 0; l < kw[f]; l++) { const cols = []; const rec = (f2, lv) => { if (f2 === nf) { if (lv[f] === l) cols.push(cellIdx(lv)); return; } for (let q = 0; q < kw[f2]; q++) rec(f2 + 1, lv.concat([q])); }; rec(0, []);
+      out.push(Y.map(r => mean(cols.map(c => r[c])))); } return out; };
+    const within = f => { const S_ = marg(f), res = [];
+      for (let a = 0; a < kw[f]; a++) for (let b = a + 1; b < kw[f]; b++) { const dI = S_[a].map((v, i) => v - S_[b][i]), gmd = Array.from({ length: G }, (_, j) => mean(dI.filter((_, i) => gi[i] === j)));
+        const est = mean(gmd), s2 = sum(dI.map((v, i) => (v - gmd[gi[i]]) ** 2)) / dfS, se = Math.sqrt(s2 * sum(ng.map(x => 1 / x))) / G, t = est / se; res.push({ a, b, est, se, t, df: dfS, p: pT(t, dfS) }); }
+      const adj = holm(res.map(o => o.p)); res.forEach((o, q) => { o.padj = adj[q]; }); return { means: S_.map(s => mean(s)), pairs: res }; };
+    return { n, G, ng, effects, B, ssSe, dfS, within, cellIdx };
+  }
   function friedman(Y) {
     const n = Y.length, k = Y[0].length, R = new Array(k).fill(0); let ties = 0;
     Y.forEach(row => { const r = ranks(row); r.r.forEach((v, j) => R[j] += v); ties += r.ties; });
@@ -1288,5 +1329,5 @@
 
   root.TharpStats = { glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
-    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
+    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);
