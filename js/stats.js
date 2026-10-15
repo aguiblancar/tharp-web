@@ -618,6 +618,39 @@
   }
 
   // ---------- ANOVA factorial de dos factores (SC tipo III, codificación de efectos) ----------
+  // ---------- modelo lineal general con factores entre sujetos (todas sus interacciones) y covariables ----------
+  // SC de tipo III con codificación de efectos (como car::Anova(type = 3) con contr.sum), medias marginales estimadas
+  // promediando sin ponderar la rejilla de niveles con las covariables en su media (como emmeans)
+  function glmFactorial(y, F, L, C = []) { // F: n × k índices de nivel; L: niveles por factor; C: q arrays de covariables
+    const n = y.length, k = L.length, q = C.length;
+    const codes = (f, lvl) => Array.from({ length: L[f] - 1 }, (_, j) => (lvl === j ? 1 : lvl === L[f] - 1 ? -1 : 0));
+    const subsets = []; for (let mask = 1; mask < (1 << k); mask++) subsets.push([...Array(k).keys()].filter(f => mask & (1 << f)));
+    subsets.sort((a, b) => a.length - b.length || a.join() .localeCompare(b.join()));
+    const termCols = lv => subsets.map(sub => sub.reduce((acc, f) => { const c = codes(f, lv[f]), out = []; acc.forEach(a => c.forEach(b => out.push(a * b))); return out; }, [1]));
+    const rowOf = (lv, cov) => [1].concat(...termCols(lv)).concat(cov);
+    const X = y.map((_, i) => rowOf(F[i], C.map(c => c[i])));
+    const sizes = subsets.map(sub => sub.reduce((a, f) => a * (L[f] - 1), 1));
+    const terms = subsets.map((sub, t) => ({ factors: sub, df: sizes[t] })).concat(C.map((_, j) => ({ cov: j, df: 1 })));
+    let off = 1; terms.forEach(t => { t.cols = Array.from({ length: t.df }, (_, j) => off + j); off += t.df; });
+    const full = olsCore(X, y); if (!full) return null;
+    const dfE = n - X[0].length, mse = full.sse / dfE;
+    terms.forEach(t => { const keep = X[0].map((_, j) => j).filter(j => !t.cols.includes(j)), red = olsCore(X.map(r => keep.map(j => r[j])), y);
+      t.ss = red.sse - full.sse; t.ms = t.ss / t.df; t.F = t.ms / mse; t.p = pF(t.F, t.df, dfE); t.peta2 = t.ss / (t.ss + full.sse);
+      t.pomega2 = Math.max(0, t.df * (t.F - 1) / (t.df * (t.F - 1) + n)); });
+    const covMean = C.map(c => mean(c)), V = full.Ai.map(r => r.map(v => v * mse));
+    // medias marginales de un factor (o de una combinación de factores) promediando la rejilla del resto
+    const emm = fs => { const others = [...Array(k).keys()].filter(f => !fs.includes(f)), combos = [[]];
+      others.forEach(f => { const nx = []; combos.forEach(c => { for (let l = 0; l < L[f]; l++) nx.push(c.concat([[f, l]])); }); combos.splice(0, combos.length, ...nx); });
+      const targets = [[]]; fs.forEach(f => { const nx = []; targets.forEach(c => { for (let l = 0; l < L[f]; l++) nx.push(c.concat([[f, l]])); }); targets.splice(0, targets.length, ...nx); });
+      return targets.map(tg => { const rows = combos.map(cb => { const lv = new Array(k).fill(0); tg.concat(cb).forEach(([f, l]) => { lv[f] = l; }); return rowOf(lv, covMean); });
+        const c = rows[0].map((_, j) => mean(rows.map(r => r[j]))), em = sum(c.map((v, j) => v * full.b[j])), se = Math.sqrt(sum(c.map((v, a) => sum(c.map((w, b) => v * V[a][b] * w)))));
+        return { levels: tg.map(([, l]) => l), c, em, se }; }); };
+    const pairs = f => { const e = emm([f]), out = [], K = e.length;
+      for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) { const c = e[i].c.map((v, a) => v - e[j].c[a]), est = e[i].em - e[j].em, se = Math.sqrt(sum(c.map((v, a) => sum(c.map((w, b) => v * V[a][b] * w))))), t = est / se;
+        out.push({ i, j, est, se, t, p: K === 2 ? pT(t, dfE) : Math.min(1, 1 - J.tukey.cdf(Math.abs(t) * Math.SQRT2, K, dfE)), d: est / Math.sqrt(mse) }); }
+      return { emm: e, pairs: out }; };
+    return { terms, sse: full.sse, dfE, mse, resid: full.e, b: full.b, emm, pairs, covMean, n };
+  }
   function anova2(y, a, b, la, lb) { // a, b: índices de nivel por caso
     const effA = (i, j) => (a[i] === j ? 1 : a[i] === la - 1 ? -1 : 0), effB = (i, j) => (b[i] === j ? 1 : b[i] === lb - 1 ? -1 : 0);
     const n = y.length, colsA = [], colsB = [], colsAB = [];
@@ -1253,7 +1286,7 @@
       heywood: B.Psi.map((v, j) => v < 0 ? j : -1).filter(j => j >= 0) };
   }
 
-  root.TharpStats = { multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
+  root.TharpStats = { glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
     tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

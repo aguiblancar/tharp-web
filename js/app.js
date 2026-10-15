@@ -16,7 +16,7 @@
   // intervalo con extremos infinitos (hipótesis unilaterales) y valor de referencia sin ceros sobrantes
   const ciTxt = c => `[${isFinite(c[0]) ? f(c[0]) : '−∞'}, ${isFinite(c[1]) ? f(c[1]) : '∞'}]`;
   const fmtNum = v => String(Math.round(v * 1e6) / 1e6);
-  const J_inv = p => window.jStat.normal.inv(p, 0, 1);
+  const J_inv = p => window.jStat.normal.inv(p, 0, 1), f_ = (x, d = 2) => f(x, d);
   const lbl = { d: v => { v = Math.abs(v); return v < .2 ? 'trivial' : v < .5 ? 'pequeño' : v < .8 ? 'mediano' : 'grande'; },
     eta: v => (v < .01 ? 'trivial' : v < .06 ? 'pequeño' : v < .14 ? 'mediano' : 'grande'),
     r: v => { v = Math.abs(v); return v < .1 ? 'trivial' : v < .3 ? 'pequeño' : v < .5 ? 'mediano' : 'grande'; },
@@ -426,7 +426,9 @@
     h += card('fact', !!D.fact && nums.length >= 1 && f6.length >= 2, 'ANOVA factorial (dos factores)', 'Efectos principales e interacción con sumas de cuadrados de tipo III, η² parcial y gráfico de interacción.',
       `<div class="field"><span>Variables dependientes (un ANOVA para cada una)</span>${chips('fY', nums, v => v.name === pick(dF.y, nums[0] && nums[0].name))}</div>
        <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Factor 1</span>${sel('fA', f6, pick(dF.a, f6[0] && f6[0].name))}</label>
-       <label class="field"><span>Factor 2</span>${sel('fB', f6, pick(dF.b, f6[1] && f6[1].name))}</label></div>`,
+       <label class="field"><span>Factor 2</span>${sel('fB', f6, pick(dF.b, f6[1] && f6[1].name))}</label></div>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Factor 3 (opcional)</span><select id="fC"><option value="">Ninguno</option>${f6.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label></div>
+       <div class="field"><span>Covariables (opcional: ANCOVA factorial)</span>${chips('fCov', nums, () => false)}</div>`,
       !(nums.length >= 1 && f6.length >= 2) ? 'Necesitas una variable cuantitativa y dos categóricas de 2 a 6 niveles.' : '');
     const dA = D.alpha || {};
     const dA2 = D.ancova || {};
@@ -1802,6 +1804,72 @@
     return sec;
   }
 
+  // ANOVA factorial general (2 o 3 factores) con covariables opcionales: SC de tipo III, medias marginales y comparaciones
+  function runFactorialG(yName, fNames, cNames) {
+    fNames = fNames.filter(Boolean); cNames = cNames.filter(c => c !== yName && !fNames.includes(c));
+    const title = `${yName} según ${fNames.join(' × ')}${cNames.length ? `, controlando ${cNames.join(', ')}` : ''}`;
+    const sec = { title, test: `${cNames.length ? 'ANCOVA' : 'ANOVA'} factorial (SC tipo III)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (new Set(fNames).size !== fNames.length) { sec.error = 'Elige factores distintos.'; return sec; }
+    if (fNames.includes(yName)) { sec.error = 'La variable dependiente no puede ser un factor.'; return sec; }
+    const yv = numOf(vByName(yName)), fc = fNames.map(nm => catOf(vByName(nm))), cc = cNames.map(nm => numOf(vByName(nm)));
+    const idx = ST.rows.map((_, i) => i).filter(i => yv[i] !== null && fc.every(c => c[i] !== null) && cc.every(c => c[i] !== null));
+    const lv = fNames.map((nm, f) => ordOf(vByName(nm), idx.map(i => fc[f][i]))), L = lv.map(l => l.length), n = idx.length;
+    if (L.some(k => k < 2)) { sec.error = 'Cada factor necesita al menos 2 niveles con datos.'; return sec; }
+    const Fm = idx.map(i => fc.map((c, f) => lv[f].indexOf(c[i]))), y = idx.map(i => yv[i]), C = cc.map(c => idx.map(i => c[i]));
+    const cellKey = r => r.join('|'), cells = new Map(); Fm.forEach((r, q) => { const k_ = cellKey(r); if (!cells.has(k_)) cells.set(k_, []); cells.get(k_).push(y[q]); });
+    const nCells = L.reduce((a, b) => a * b, 1);
+    if (cells.size < nCells || [...cells.values()].some(c => c.length < 2)) { sec.error = `Hay combinaciones de niveles con menos de 2 casos (${cells.size} de ${nCells} casillas con datos): el modelo con todas las interacciones no puede estimarse. Agrupa niveles o quita un factor.`; return sec; }
+    const g = S.glmFactorial(y, Fm, L, C); if (!g) { sec.error = 'No se pudo estimar el modelo (colinealidad entre covariables).'; return sec; }
+    const tName = t => (t.cov !== undefined ? esc(cNames[t.cov]) : t.factors.map(f => esc(fNames[f])).join(' × '));
+    const design = L.join('×');
+    sec.decision = `Se ajustó un${cNames.length ? 'a ANCOVA' : ' ANOVA'} factorial ${design} con sumas de cuadrados de tipo III (como SPSS)${cNames.length ? ` y ${cNames.length} covariable${cNames.length > 1 ? 's' : ''}` : ''}, con ${n} casos.`;
+    sec.why.push(`Variable dependiente: ${esc(yName)} → cuantitativa.`);
+    sec.why.push(`${fNames.length} factores entre sujetos: ${fNames.map((nm, f) => `${esc(nm)} (${L[f]} niveles)`).join(', ')}. Se estiman sus efectos principales y todas sus interacciones.`);
+    if (cNames.length) sec.why.push(`Covariables: ${list(cNames.map(esc))}. Los efectos de los factores se estiman ajustando por ellas (medias marginales con las covariables en su media).`);
+    const lev = S.levene([...cells.values()]), sw = S.shapiro(g.resid), sizes = [...cells.values()].map(c => c.length);
+    sec.checks.push(chk(lev.p >= .05 ? 'ok' : 'no', `Homogeneidad de varianzas entre las ${nCells} casillas (Levene): <i>F</i>(${lev.df1}, ${lev.df2}) = ${f(lev.F)}, ${pt(lev.p)}.${lev.p >= .05 ? ' Se cumple.' : ' No se cumple: interpreta con cautela, sobre todo con casillas desiguales.'}`));
+    if (sw) sec.checks.push(chk(sw.p >= .05 ? 'ok' : n >= 100 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}.${sw.p >= .05 ? '' : n >= 100 ? ' Con muestras grandes el ANOVA es robusto a desviaciones moderadas.' : ' No se cumple y la muestra es pequeña.'}`));
+    sec.checks.push(chk(Math.max(...sizes) === Math.min(...sizes) ? 'ok' : 'info', `Tamaño de las casillas: entre ${Math.min(...sizes)} y ${Math.max(...sizes)} casos.`));
+    if (cNames.length) { // homogeneidad de pendientes: ganancia al añadir las interacciones factor × covariable al modelo
+      const codes = (f, l) => Array.from({ length: L[f] - 1 }, (_, j) => (l === j ? 1 : l === L[f] - 1 ? -1 : 0));
+      const subs = []; for (let mask = 1; mask < (1 << L.length); mask++) subs.push([...Array(L.length).keys()].filter(f => mask & (1 << f)));
+      const rowOf = (q, withInt) => { const lvq = Fm[q], r = [1];
+        subs.forEach(sub => sub.reduce((acc, f) => { const c = codes(f, lvq[f]), out = []; acc.forEach(x => c.forEach(z => out.push(x * z))); return out; }, [1]).forEach(v => r.push(v)));
+        C.forEach(c => r.push(c[q]));
+        if (withInt) fNames.forEach((_, f) => codes(f, lvq[f]).forEach(code => C.forEach(c => r.push(code * c[q]))));
+        return r; };
+      const X0 = idx.map((_, q) => rowOf(q, false)), X1 = idx.map((_, q) => rowOf(q, true)), m0 = S.olsCore(X0, y), m1 = S.olsCore(X1, y);
+      if (m0 && m1) { const dfn = X1[0].length - X0[0].length, dfd = n - X1[0].length, Fs = ((m0.sse - m1.sse) / dfn) / (m1.sse / dfd), ps = 1 - jStat.centralF.cdf(Fs, dfn, dfd);
+        sec.checks.push(chk(ps >= .05 ? 'ok' : 'no', `Homogeneidad de las pendientes de regresión (interacción factores × covariables): <i>F</i>(${dfn}, ${dfd}) = ${f(Fs)}, ${pt(ps)}.${ps >= .05 ? ' Se cumple.' : ' No se cumple: la relación de la covariable con la variable dependiente cambia según el grupo; la ANCOVA puede ser engañosa.'}`)); }
+    }
+    sec.alt = 'Si no se cumplen los supuestos, errores robustos (HC3) o un modelo lineal generalizado; con muchas casillas pequeñas, reduce el número de factores.';
+    sec.tables.push(apaTable(`Resultado de${cNames.length ? ' la ANCOVA' : 'l ANOVA'} factorial`, ['Fuente', '<i>SC</i>', '<i>gl</i>', '<i>MC</i>', '<i>F</i>', '<i>p</i>', 'η²<sub>p</sub>', 'ω²<sub>p</sub>'],
+      g.terms.map(t => [tName(t), f(t.ss), t.df, f(t.ms), f(t.F), pv(t.p), nz(t.peta2.toFixed(3)), nz(t.pomega2.toFixed(3))]).concat([['Error', f(g.sse), g.dfE, f(g.mse), '', '', '', '']]),
+      'SC de tipo III con codificación de efectos (como SPSS y car::Anova). η²<sub>p</sub> = eta cuadrado parcial; ω²<sub>p</sub> = omega cuadrado parcial.'));
+    const tc = S.tcrit(g.dfE), emRows = [], prRows = [];
+    fNames.forEach((nm, f) => { const pr = g.pairs(f);
+      pr.emm.forEach((e, q) => emRows.push([q === 0 ? esc(nm) : '', esc(lv[f][e.levels[0]]), f_(e.em), f_(e.se), `[${f_(e.em - tc * e.se)}, ${f_(e.em + tc * e.se)}]`]));
+      pr.pairs.forEach((c, q) => prRows.push([q === 0 ? esc(nm) : '', `${esc(lv[f][c.i])} − ${esc(lv[f][c.j])}`, f_(c.est), f_(c.se), f_(c.t), pv(c.p), f_(c.d)])); });
+    sec.tables.push(apaTable(`Medias marginales estimadas de ${yName}`, ['Factor', 'Nivel', '<i>M</i> marginal estimada', '<i>EE</i>', 'IC 95 %'], emRows,
+      `Promedian sin ponderar las casillas del resto de factores${cNames.length ? ', con las covariables en su media' : ''} (como emmeans, JASP y SPSS).`));
+    sec.tables.push(apaTable(`Comparaciones de las medias marginales estimadas de ${yName}`, ['Factor', 'Comparación', 'Diferencia', '<i>EE</i>', `<i>t</i>(${g.dfE})`, '<i>p</i>', '<i>d</i> de Cohen'], prRows,
+      '<i>p</i> con ajuste de Tukey cuando el factor tiene más de dos niveles. <i>d</i> = diferencia / √<i>MC</i><sub>error</sub> (como JASP).'));
+    if (L[1] <= 8) { const e2 = g.emm([0, 1]); sec.charts.push(fig(`Interacción ${fNames[0]} × ${fNames[1]}: medias marginales estimadas`, CH.interaction(lv[0], lv[1].map((b, j) => ({ name: b,
+      means: lv[0].map((_, i) => e2.find(e => e.levels[0] === i && e.levels[1] === j).em), ci: lv[0].map((_, i) => { const e = e2.find(x => x.levels[0] === i && x.levels[1] === j); return [e.em - tc * e.se, e.em + tc * e.se]; }) })), yName), CH.legend(lv[1]))); }
+    const st = t => `<i>F</i>(${t.df}, ${g.dfE}) = ${f(t.F)}, ${pt(t.p)}, η²<sub>p</sub> = ${nz(t.peta2.toFixed(3))}`;
+    const inter = g.terms.filter(t => t.factors && t.factors.length > 1), sigI = inter.filter(t => t.p < .05);
+    let txt = `Se realizó un${cNames.length ? 'a ANCOVA' : ' ANOVA'} factorial ${design} para analizar el efecto de ${list(fNames.map(esc))} sobre ${esc(yName)}${cNames.length ? `, controlando ${list(cNames.map(esc))}` : ''}. `;
+    txt += g.terms.filter(t => !(t.factors && t.factors.length > 1)).map(t => `${t.cov !== undefined ? `La covariable ${tName(t)}` : `El efecto principal de ${tName(t)}`} ${t.p < .05 ? 'fue' : 'no fue'} estadísticamente significativ${t.cov !== undefined ? 'a' : 'o'}, ${st(t)}.`).join(' ') + ' ';
+    txt += inter.map(t => `La interacción ${tName(t)} ${t.p < .05 ? 'fue' : 'no fue'} estadísticamente significativa, ${st(t)}.`).join(' ');
+    if (sigI.length) { txt += ' Las interacciones significativas indican que el efecto de un factor depende del nivel de otro (véase la figura), por lo que los efectos principales implicados deben interpretarse con cautela.';
+      sec.checks.push(chk('info', 'Hay interacciones significativas: analiza los efectos simples (el código R incluye cómo hacerlo con emmeans).')); }
+    sec.text.push(txt);
+    const Y = rn(yName), FS = fNames.map(rn).join(' * '), CS = cNames.map(rn).join(' + ');
+    sec.code = `# ${cNames.length ? 'ANCOVA' : 'ANOVA'} factorial: ${title}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- lm(${Y} ~ ${FS}${CS ? ' + ' + CS : ''}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::omega_squared(car::Anova(modelo, type = 3), partial = TRUE)\n` +
+      fNames.map(nm => `pairs(emmeans::emmeans(modelo, ${rq(nm)}), adjust = "tukey")`).join('\n') + `\n# Efectos simples\nemmeans::joint_tests(modelo, by = ${rq(fNames[1])})` + (cNames.length ? `\n# Homogeneidad de pendientes\nanova(modelo, update(modelo, . ~ . + (${fNames.map(rn).join(' + ')}):(${CS})))` : '');
+    return sec;
+  }
+
   // Selección de predictores con contrastes F parciales (cada variable categórica entra o sale como un bloque).
   // Criterios por defecto de SPSS y JASP: entrada p < .05 y salida p > .10. Todos los pasos usan los mismos casos.
   function stepSelect(X, y, cols, terms, method, PIN = .05, POUT = .10) {
@@ -1972,7 +2040,8 @@
       if (isOn('mlogit')) add(runPolyLogit(($('#mlY') || {}).value, checkedVals('mlX'), ($('#mlM') || {}).value || 'auto'));
       if (isOn('logit')) add(runLogistic($('#lY').value, checkedVals('lX')));
       if (isOn('fact')) { const ys = checkedVals('fY');
-        if (ys.length) ys.forEach(y => add(runFactorial(y, $('#fA').value, $('#fB').value)));
+        const f3 = ($('#fC') || {}).value || '', cv = checkedVals('fCov');
+        if (ys.length) ys.forEach(y => add(f3 || cv.length ? runFactorialG(y, [$('#fA').value, $('#fB').value].concat(f3 ? [f3] : []), cv) : runFactorial(y, $('#fA').value, $('#fB').value)));
         else add({ title: 'ANOVA factorial', error: 'Selecciona al menos una variable dependiente.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('ancova')) add(runAncova($('#acY').value, $('#acG').value, checkedVals('acC')));
       if (isOn('binrel')) add(runBinRel(checkedVals('bR')));
