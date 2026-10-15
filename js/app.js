@@ -1893,6 +1893,82 @@
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
   $$('[data-go]').forEach(b => b.onclick = () => show(+b.dataset.go));
+
+  // ---------- calculadora de potencia y tamaño muestral (no necesita datos) ----------
+  const PW = {
+    't-ind': { es: 'd de Cohen', pre: [.2, .5, .8], n: 'n por grupo', help: 'd = diferencia de medias / desviación típica. Si los grupos tienen tamaños distintos, indica la razón n₂/n₁.' },
+    't-paired': { es: 'd<sub>z</sub> de Cohen', pre: [.2, .5, .8], n: 'n (pares)', help: 'd<sub>z</sub> = media de las diferencias / desviación típica de las diferencias.' },
+    't-one': { es: 'd de Cohen', pre: [.2, .5, .8], n: 'n', help: 'd = (media − valor de referencia) / desviación típica.' },
+    anova: { es: 'f de Cohen', pre: [.1, .25, .4], n: 'n por grupo', k: 'Grupos', help: 'f = desviación típica de las medias de grupo / desviación típica dentro de los grupos (η² = f² / (1 + f²)).' },
+    r: { es: 'r (correlación esperada)', pre: [.1, .3, .5], n: 'n', help: 'Correlación de Pearson que se espera encontrar.' },
+    reg: { es: 'f² de Cohen', pre: [.02, .15, .35], n: 'N total', k: 'Predictores', help: 'f² = R² / (1 − R²). Por ejemplo, R² = .13 equivale a f² = .15.' },
+    chi: { es: 'w de Cohen', pre: [.1, .3, .5], n: 'N total', k: 'Grados de libertad', help: 'w = √(χ²/N). gl = (filas − 1)·(columnas − 1) en una tabla de contingencia, o categorías − 1 en bondad de ajuste.' },
+    p2: { es: 'h de Cohen', pre: [.2, .5, .8], n: 'n por grupo', help: 'h = 2·arcsen(√p₁) − 2·arcsen(√p₂). Por ejemplo, 50 % frente a 30 % da h ≈ .41.' },
+  };
+  const pwUI = () => { const t = $('#pwTest').value, c = PW[t], mode = $('#pwMode').value;
+    $('#pwEsLab').innerHTML = c.es; $('#pwNLab').textContent = c.n; $('#pwHelp').innerHTML = c.help;
+    $('#pwPresets').innerHTML = c.pre.map((v, i) => `<button class="btn btn-line btn-sm" data-pv="${v}">${['pequeño', 'mediano', 'grande'][i]} (${v})</button>`).join('');
+    $$('#pwPresets [data-pv]').forEach(b => b.onclick = () => { $('#pwEs').value = b.dataset.pv; });
+    $('#pwKW').classList.toggle('hidden', !c.k); if (c.k) $('#pwKLab').textContent = c.k;
+    if (t === 'chi' && +$('#pwK').value < 1) $('#pwK').value = 1;
+    $('#pwRatioW').classList.toggle('hidden', t !== 't-ind'); $('#pwAltW').classList.toggle('hidden', ['anova', 'reg', 'chi'].includes(t));
+    $('#pwNW').classList.toggle('hidden', mode !== 'power'); $('#pwPowW').classList.toggle('hidden', mode === 'power'); };
+  const showPow = on => { $('#sPow').classList.toggle('hidden', !on); $('#s1').classList.toggle('hidden', on); $('#stepper').classList.toggle('hidden', on); if (on) { pwUI(); window.scrollTo({ top: 0 }); } };
+  $('#powOpen').onclick = () => { showPow(true); history.replaceState(null, '', '#potencia'); };
+  $('#powClose').onclick = () => { showPow(false); history.replaceState(null, '', location.pathname); };
+  ['pwTest', 'pwMode'].forEach(id => $('#' + id).onchange = pwUI);
+  if (location.hash === '#potencia') showPow(true);
+  window.addEventListener('hashchange', () => showPow(location.hash === '#potencia'));
+  $('#pwRun').onclick = () => {
+    const t = $('#pwTest').value, c = PW[t], num = id => parseFloat(String($('#' + id).value).replace(',', '.'));
+    const es = num('pwEs'), alpha = num('pwAlpha'), target = num('pwPow'), k = Math.round(num('pwK')), ratio = num('pwRatio'), alt = ['anova', 'reg', 'chi'].includes(t) ? 'two' : $('#pwAlt').value, mode = $('#pwMode').value;
+    const out = $('#pwOut'), err = m => { out.innerHTML = `<div class="err">${m}</div>`; };
+    if (!(es > 0)) return err('El tamaño del efecto debe ser mayor que 0.');
+    if (!(alpha > 0 && alpha < 1)) return err('α debe estar entre 0 y 1 (habitualmente .05).');
+    if (mode === 'n' && !(target > 0 && target < 1)) return err('La potencia deseada debe estar entre 0 y 1 (habitualmente .80 o .90).');
+    if (c.k && !(k >= 1)) return err(`Indica ${c.k.toLowerCase()} (un número entero).`);
+    if (t === 'anova' && k < 2) return err('El ANOVA necesita al menos 2 grupos.');
+    const [test, args] = t.startsWith('t-') ? ['t', { d: es, type: { 't-ind': 'ind', 't-paired': 'paired', 't-one': 'one' }[t], ratio: t === 't-ind' ? ratio || 1 : 1 }]
+      : t === 'anova' ? ['anova', { f: es, k }] : t === 'r' ? ['r', { r: es }] : t === 'reg' ? ['reg', { f2: es, u: k }] : t === 'chi' ? ['chi', { w: es, df: k }] : ['p2', { h: es }];
+    if (t === 'r' && es >= 1) return err('La correlación debe ser menor que 1.');
+    Object.assign(args, { alpha, alt });
+    const minN = t === 'reg' ? k + 2 : t === 'r' ? 4 : 2;
+    let n = mode === 'n' ? S.sampleSize(test, args, target, minN) : Math.round(num('pwN'));
+    if (!n || !(n >= minN)) return err(mode === 'n' ? 'No se alcanza esa potencia con un tamaño razonable: revisa el tamaño del efecto.' : `El tamaño debe ser al menos ${minN}.`);
+    const pw = S.power(test, Object.assign({}, args, { n }));
+    const perGroup = ['t-ind', 'anova', 'p2'].includes(t), n2 = t === 't-ind' ? Math.max(2, Math.round(n * (ratio || 1))) : n, total = t === 't-ind' ? n + n2 : t === 'anova' ? n * k : t === 'p2' ? 2 * n : n;
+    const nTxt = t === 't-ind' ? (n2 === n ? `${n} participantes por grupo (${total} en total)` : `${n} y ${n2} participantes en cada grupo (${total} en total)`) : perGroup ? `${n} participantes por grupo (${total} en total)` : `${n} participantes`;
+    const testName = { 't-ind': 'una prueba t para muestras independientes', 't-paired': 'una prueba t para muestras relacionadas', 't-one': 'una prueba t para una muestra', anova: `un ANOVA de un factor con ${k} grupos`, r: 'una correlación de Pearson', reg: `una regresión lineal múltiple con ${k} predictor${k > 1 ? 'es' : ''}`, chi: `una prueba χ² con ${k} grado${k > 1 ? 's' : ''} de libertad`, p2: 'una comparación de dos proporciones' }[t];
+    const esTxt = `${c.es.replace(/ de Cohen| \(correlación esperada\)/, '')} = ${t === 'r' ? nz(f(es)) : f(es)}`, sided = alt === 'two' ? '' : ' (unilateral)', A_ = nz(f(alpha)), P_ = nz(f(target)), PW_ = nz(f(pw, 3));
+    const sentence = mode === 'n'
+      ? `Se realizó un análisis de potencia a priori para ${testName}${sided}. Para detectar un efecto de ${esTxt} con un nivel de significación de α = ${A_} y una potencia de ${P_}, se necesitan ${nTxt}; con ese tamaño, la potencia alcanzada es de ${PW_}.`
+      : `Se realizó un análisis de potencia para ${testName}${sided}. Con ${nTxt}, un nivel de significación de α = ${A_} y un efecto de ${esTxt}, la potencia es de ${PW_}${pw < .8 ? ', inferior al .80 recomendado habitualmente' : ''}.`;
+    // curva de potencia en función del tamaño
+    const nMax = Math.max(n * 2, minN + 10), pts = []; for (let q = 0; q <= 40; q++) { const nn = Math.max(minN, Math.round(minN + (nMax - minN) * q / 40)); pts.push([nn, S.power(test, Object.assign({}, args, { n: nn }))]); }
+    const W = 560, H = 230, X0 = 46, Y0 = 16, Wp = W - X0 - 14, Hp = H - Y0 - 34, sx = v => X0 + (v - minN) / (nMax - minN) * Wp, sy = v => Y0 + (1 - v) * Hp;
+    const svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px" role="img" aria-label="Curva de potencia">` +
+      [0, .2, .4, .6, .8, 1].map(v => `<line x1="${X0}" x2="${X0 + Wp}" y1="${sy(v)}" y2="${sy(v)}" stroke="#e3e0d7"/><text x="${X0 - 6}" y="${sy(v) + 4}" text-anchor="end" font-size="11" fill="#5a6b7a">${v.toFixed(1)}</text>`).join('') +
+      `<line x1="${X0}" x2="${X0 + Wp}" y1="${sy(target || .8)}" y2="${sy(target || .8)}" stroke="#2bb3a6" stroke-dasharray="4 3"/>` +
+      `<polyline fill="none" stroke="#0b2540" stroke-width="2.2" points="${pts.map(([a, b]) => `${sx(a).toFixed(1)},${sy(b).toFixed(1)}`).join(' ')}"/>` +
+      `<circle cx="${sx(n)}" cy="${sy(pw)}" r="5" fill="#2bb3a6"/>` +
+      [minN, Math.round((minN + nMax) / 2), nMax].map(v => `<text x="${sx(v)}" y="${H - 14}" text-anchor="middle" font-size="11" fill="#5a6b7a">${v}</text>`).join('') +
+      `<text x="${X0 + Wp / 2}" y="${H - 1}" text-anchor="middle" font-size="11" fill="#5a6b7a">${esc(c.n)}</text></svg>`;
+    const rAlt = alt === 'two' ? '' : ', alternative = "greater"', rn_ = mode === 'n' ? '' : `n = ${n}, `, rp = mode === 'n' ? `, power = ${target}` : '';
+    const code = { 't-ind': (ratio || 1) !== 1 ? `pwr::pwr.t2n.test(n1 = ${n}, n2 = ${n2}, d = ${es}, sig.level = ${alpha}${rAlt})` : `pwr::pwr.t.test(${rn_}d = ${es}, sig.level = ${alpha}${rp}, type = "two.sample"${rAlt})`,
+      't-paired': `pwr::pwr.t.test(${rn_}d = ${es}, sig.level = ${alpha}${rp}, type = "paired"${rAlt})`, 't-one': `pwr::pwr.t.test(${rn_}d = ${es}, sig.level = ${alpha}${rp}, type = "one.sample"${rAlt})`,
+      anova: `pwr::pwr.anova.test(k = ${k}, ${rn_}f = ${es}, sig.level = ${alpha}${rp})`, r: `pwr::pwr.r.test(${rn_}r = ${es}, sig.level = ${alpha}${rp}${rAlt})`,
+      reg: `pwr::pwr.f2.test(u = ${k}, ${mode === 'n' ? '' : `v = ${n - k - 1}, `}f2 = ${es}, sig.level = ${alpha}${rp})  # N = u + v + 1`, chi: `pwr::pwr.chisq.test(w = ${es}, ${mode === 'n' ? '' : `N = ${n}, `}df = ${k}, sig.level = ${alpha}${rp})`,
+      p2: `pwr::pwr.2p.test(h = ${es}, ${rn_}sig.level = ${alpha}${rp}${rAlt})` }[t];
+    out.innerHTML = `<div class="res"><h2>${mode === 'n' ? 'Tamaño muestral necesario' : 'Potencia del estudio'}</h2>
+      <p style="font-size:1.25rem;margin:8px 0">${mode === 'n' ? `<b>${nTxt.charAt(0).toUpperCase() + nTxt.slice(1)}</b>` : `<b>Potencia = ${PW_}</b>`}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px"><b>Redacción para el apartado de método</b><button class="btn btn-line btn-sm" id="pwCopy">Copiar texto</button></div>
+      <div class="text" id="pwTxt"><p>${sentence}</p></div>
+      <figure><figcaption><span>Potencia según el tamaño muestral (línea discontinua: potencia ${fmtNum(target || .8)})</span></figcaption>${svg}</figure>
+      <p class="small muted">Prevé además las pérdidas: si esperas, por ejemplo, un 15 % de abandonos o cuestionarios incompletos, divide el tamaño entre 0.85. El tamaño del efecto debe justificarse con estudios previos o con el mínimo efecto de interés práctico, no elegirse para que salga un número cómodo.</p>
+      <details><summary>Código R para reproducirlo</summary><pre>${esc(code)}</pre></details></div>`;
+    $('#pwCopy').onclick = () => navigator.clipboard.writeText($('#pwTxt').innerText).then(() => { $('#pwCopy').textContent = 'Copiado ✓'; setTimeout(() => { $('#pwCopy').textContent = 'Copiar texto'; }, 1500); });
+    track('potencia', { prueba: t, modo: mode });
+  };
   const drop = $('#drop'), file = $('#file');
   drop.onclick = () => file.click();
   drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); file.click(); } };

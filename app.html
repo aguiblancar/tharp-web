@@ -133,9 +133,38 @@ footer{padding:30px 0 50px;color:var(--muted);font-size:.85rem}
     <div id="loadErr"></div>
     <p class="muted small" style="text-align:center;margin-top:16px">¿No tienes datos a mano? <button class="btn btn-line btn-sm" id="demo">Probar con datos de ejemplo</button>
       <a href="#" id="dlDemo" class="small" style="margin-left:6px">Descargar el ejemplo (.csv)</a></p>
+    <p class="muted small" style="text-align:center;margin-top:6px">¿Estás planificando el estudio? <button class="btn btn-line btn-sm" id="powOpen">Calcular el tamaño muestral (potencia)</button></p>
     <div class="card small muted" style="margin-top:26px">
       <b style="color:var(--text)">Privacidad.</b> Todo el análisis se calcula en tu propio navegador. Tu archivo no se sube a ningún servidor ni se usa para entrenar ninguna IA, y desaparece al cerrar la pestaña.
     </div>
+  </section>
+
+  <!-- CALCULADORA DE POTENCIA Y TAMAÑO MUESTRAL -->
+  <section id="sPow" class="hidden">
+    <div class="card">
+      <div class="bar" style="margin:0 0 10px"><h2 style="font-size:1.5rem">Potencia y tamaño muestral</h2><button class="btn btn-line btn-sm" id="powClose">← Volver</button></div>
+      <p class="muted small" style="margin:0 0 14px">Calcula cuántos participantes necesitas para detectar un efecto con una probabilidad dada (análisis a priori) o qué potencia tiene un estudio con un tamaño concreto. Resultados equivalentes a G*Power y al paquete <i>pwr</i> de R.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap">
+        <label class="field"><span>Prueba</span><select id="pwTest">
+          <option value="t-ind">t para muestras independientes</option><option value="t-paired">t para muestras relacionadas</option><option value="t-one">t para una muestra</option>
+          <option value="anova">ANOVA de un factor</option><option value="r">Correlación</option><option value="reg">Regresión lineal múltiple</option>
+          <option value="chi">χ² (independencia o bondad de ajuste)</option><option value="p2">Comparación de dos proporciones</option></select></label>
+        <label class="field"><span>Quiero calcular</span><select id="pwMode"><option value="n">El tamaño muestral necesario</option><option value="power">La potencia con un tamaño dado</option></select></label>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+        <label class="field"><span id="pwEsLab">Tamaño del efecto</span><input id="pwEs" type="number" step="any" value="0.5" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:110px"></label>
+        <div class="field"><span>Referencia de Cohen</span><div id="pwPresets" style="display:flex;gap:6px"></div></div>
+        <label class="field"><span>α</span><input id="pwAlpha" type="number" step="any" value="0.05" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:90px"></label>
+        <label class="field" id="pwPowW"><span>Potencia deseada (1 − β)</span><input id="pwPow" type="number" step="any" value="0.80" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:90px"></label>
+        <label class="field hidden" id="pwNW"><span id="pwNLab">Tamaño</span><input id="pwN" type="number" step="1" value="30" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:100px"></label>
+        <label class="field" id="pwAltW"><span>Hipótesis</span><select id="pwAlt"><option value="two">Bilateral</option><option value="greater">Unilateral</option></select></label>
+        <label class="field hidden" id="pwKW"><span id="pwKLab">Grupos</span><input id="pwK" type="number" step="1" value="3" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:80px"></label>
+        <label class="field hidden" id="pwRatioW"><span>Razón n₂/n₁</span><input id="pwRatio" type="number" step="any" value="1" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:80px"></label>
+      </div>
+      <p class="small muted" id="pwHelp" style="margin:6px 0 0"></p>
+      <p style="margin-top:14px"><button class="btn btn-dark" id="pwRun">Calcular</button></p>
+    </div>
+    <div id="pwOut"></div>
   </section>
 
   <!-- PASO 2 -->
