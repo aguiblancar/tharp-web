@@ -87,6 +87,22 @@
     return { n, mean: mean(a), sd: n > 1 ? sd(a) : NaN, median: quantile(s, .5), q1: quantile(s, .25), q3: quantile(s, .75),
       min: s[0], max: s[n - 1], skew: skewness(a), kurt: kurtosis(a), ci: meanCI(a) };
   }
+  // Kolmogorov-Smirnov con la corrección de Lilliefors (p de Dallal y Wilkinson, 1986, y Stephens, como nortest::lillie.test)
+  function lilliefors(xIn) {
+    const x = xIn.slice().sort((a, b) => a - b), n = x.length; if (n < 5) return null;
+    const m = mean(x), s = sd(x); if (!(s > 0)) return null;
+    let K = 0; x.forEach((v, i) => { const p = J.normal.cdf((v - m) / s, 0, 1); K = Math.max(K, (i + 1) / n - p, p - i / n); });
+    let Kd = K, nd = n; if (n > 100) { Kd = K * Math.pow(n / 100, .49); nd = 100; }
+    let pv = Math.exp(-7.01256 * Kd * Kd * (nd + 2.78019) + 2.99587 * Kd * Math.sqrt(nd + 2.78019) - .122119 + .974598 / Math.sqrt(nd) + 1.67997 / nd);
+    if (pv > .1) { const KK = (Math.sqrt(n) - .01 + .85 / Math.sqrt(n)) * K;
+      pv = KK <= .302 ? 1 : KK <= .5 ? 2.76773 - 19.828315 * KK + 80.709644 * KK ** 2 - 138.55152 * KK ** 3 + 81.218052 * KK ** 4
+        : KK <= .9 ? -4.901232 + 40.662806 * KK - 97.490286 * KK ** 2 + 94.029866 * KK ** 3 - 32.355711 * KK ** 4
+        : KK <= 1.31 ? 6.198765 - 19.558097 * KK + 23.186922 * KK ** 2 - 10.611969 * KK ** 3 + 1.484217 * KK ** 4 : 0; }
+    return { D: K, p: Math.max(0, Math.min(1, pv)) };
+  }
+  // errores típicos de la asimetría y la curtosis (como SPSS)
+  const seSkew = n => Math.sqrt(6 * n * (n - 1) / ((n - 2) * (n + 1) * (n + 3)));
+  const seKurt = n => 2 * seSkew(n) * Math.sqrt((n * n - 1) / ((n - 3) * (n + 5)));
   function holm(ps) {
     const o = ps.map((p, i) => [p, i]).sort((a, b) => a[0] - b[0]), m = ps.length, out = new Array(m); let prev = 0;
     o.forEach(([p, i], k) => { prev = Math.max(prev, Math.min(1, (m - k) * p)); out[i] = prev; });
@@ -1169,7 +1185,7 @@
       heywood: B.Psi.map((v, j) => v < 0 ? j : -1).filter(j => j >= 0) };
   }
 
-  root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
+  root.TharpStats = { lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
     tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

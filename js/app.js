@@ -16,6 +16,7 @@
   // intervalo con extremos infinitos (hipótesis unilaterales) y valor de referencia sin ceros sobrantes
   const ciTxt = c => `[${isFinite(c[0]) ? f(c[0]) : '−∞'}, ${isFinite(c[1]) ? f(c[1]) : '∞'}]`;
   const fmtNum = v => String(Math.round(v * 1e6) / 1e6);
+  const J_inv = p => window.jStat.normal.inv(p, 0, 1);
   const lbl = { d: v => { v = Math.abs(v); return v < .2 ? 'trivial' : v < .5 ? 'pequeño' : v < .8 ? 'mediano' : 'grande'; },
     eta: v => (v < .01 ? 'trivial' : v < .06 ? 'pequeño' : v < .14 ? 'mediano' : 'grande'),
     r: v => { v = Math.abs(v); return v < .1 ? 'trivial' : v < .3 ? 'pequeño' : v < .5 ? 'mediano' : 'grande'; },
@@ -352,7 +353,8 @@
     const card = (id, on, title, desc, cfg, disabled) => `<div class="an${on && !disabled ? ' on' : ''}" data-an="${id}"><label><input type="checkbox"${on && !disabled ? ' checked' : ''}${disabled ? ' disabled' : ''}><span><b>${title}</b><span class="muted small">${disabled ? disabled : desc}</span></span></label><div class="cfg">${cfg}</div></div>`;
     let h = '';
     h += card('desc', true, 'Estadísticos descriptivos y gráficos', 'Media, desviación típica, mediana, asimetría y frecuencias, con histogramas y gráficos de barras.',
-      `<div class="field"><span>Variables</span>${chips('desc', nums.concat(cats), () => true)}</div>`);
+      `<div class="field"><span>Variables</span>${chips('desc', nums.concat(cats), () => true)}</div>
+       <label class="field"><span>Dividir por grupos (opcional)</span><select id="descG"><option value="">No</option>${facs.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label>`);
     h += card('corr', nums.length >= 2, 'Correlaciones', 'Matriz de correlaciones con significación. Tharp elige Pearson o Spearman según la distribución.',
       `<div class="field"><span>Variables cuantitativas</span>${chips('corr', nums, v => (D.corr ? D.corr.includes(v.name) : nums.indexOf(v) < 8))}</div>
        <label class="field"><span>Método</span><select id="corrM"><option value="auto">Automático (recomendado)</option><option value="pearson">Pearson</option><option value="spearman">Spearman</option><option value="kendall">Tau-b de Kendall</option></select></label>
@@ -484,38 +486,57 @@
   const chk = (s, t) => ({ s, t });
 
   // ---------- análisis ----------
-  function runDescriptives(names) {
-    const vars = names.map(vByName).filter(Boolean), nums = vars.filter(v => v.type === 'num'), cats = vars.filter(v => v.type === 'cat');
+  function runDescriptives(names, gName = '') {
+    const vars = names.map(vByName).filter(Boolean).filter(v => v.name !== gName), nums = vars.filter(v => v.type === 'num'), cats = vars.filter(v => v.type === 'cat');
     const sec = { title: 'Estadísticos descriptivos', test: 'Descriptivos', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
-    sec.decision = `Se describen ${vars.length} variables. Para las cuantitativas se informa media y desviación típica junto a mediana y asimetría; para las categóricas, frecuencias y porcentajes.`;
+    const G = gName ? vByName(gName) : null, gl = G ? levelsOf(G) : [], gc = G ? catOf(G) : null;
+    sec.decision = `Se describen ${vars.length} variables${G ? `, también por grupos de ${esc(gName)}` : ''}. Para las cuantitativas se informa media y desviación típica junto a mediana, rango intercuartílico, asimetría y curtosis; para las categóricas, frecuencias y porcentajes.`;
     sec.why.push('El análisis descriptivo resume la muestra antes de cualquier contraste de hipótesis y es obligatorio en el apartado de resultados.');
-    sec.why.push('Se informa la mediana además de la media porque, si la distribución es asimétrica, la mediana representa mejor el valor típico.');
+    sec.why.push('Se informa la mediana y el rango intercuartílico además de la media porque, si la distribución es asimétrica, representan mejor el valor típico y la dispersión.');
+    sec.why.push('La normalidad se valora con Shapiro-Wilk (la prueba más potente) y Kolmogorov-Smirnov con la corrección de Lilliefors (la que muestra SPSS en «Explorar»), junto con los gráficos Q-Q.');
     const textParts = [`La muestra estuvo compuesta por ${ST.rows.length} participantes.`];
+    const q = (sx, pr) => S.quantile(sx, pr);
     if (nums.length) {
-      const rows = [], skewed = [];
+      const rows = [], skewed = [], normRows = [], outl = [];
       nums.forEach(v => {
-        const x = numOf(v).filter(a => a !== null); if (x.length < 2) return; const d = S.describe(x);
+        const x = numOf(v).filter(a => a !== null); if (x.length < 2) return; const d = S.describe(x), n = x.length, sx = x.slice().sort((a, b) => a - b);
+        const q1 = q(sx, .25), q3 = q(sx, .75), iqr = q3 - q1;
         if (Math.abs(d.skew) > 1) skewed.push(v.name);
-        rows.push([esc(v.name), d.n, ST.rows.length - d.n, f(d.mean), f(d.sd), f(d.median), +d.min.toFixed(3), +d.max.toFixed(3), f(d.skew), f(d.kurt)]);
-        if (sec.charts.length < 12) sec.charts.push(fig(v.name, CH.histogram(x, v.name)));
+        rows.push([esc(v.name), n, ST.rows.length - n, f(d.mean), f(d.sd), f(d.median), `${f(q1)}–${f(q3)}`, +d.min.toFixed(3), +d.max.toFixed(3),
+          n > 2 ? `${f(d.skew)} (${f(S.seSkew(n))})` : f(d.skew), n > 3 ? `${f(d.kurt)} (${f(S.seKurt(n))})` : f(d.kurt)]);
+        const sw = n >= 3 && n <= 5000 ? S.shapiro(x) : null, ks = S.lilliefors(x);
+        normRows.push([esc(v.name), sw ? nz(sw.W.toFixed(3)) : '—', sw ? pv(sw.p) : '—', ks ? nz(ks.D.toFixed(3)) : '—', ks ? pv(ks.p) : '—']);
+        const tk = x.filter(a => a < q1 - 1.5 * iqr || a > q3 + 1.5 * iqr).length, z3 = x.filter(a => Math.abs((a - d.mean) / d.sd) > 3).length;
+        if (tk || z3) outl.push(`${esc(v.name)} (${tk} según el criterio de 1.5·RIC${z3 ? `; ${z3} con |<i>z</i>| > 3` : ''})`);
+        if (sec.charts.length < 18) { sec.charts.push(fig(v.name, CH.histogram(x, v.name))); sec.charts.push(fig(`${v.name}: gráfico Q-Q normal`, CH.qqplot(x, v.name, pr => J_inv(pr)))); }
       });
-      sec.tables.push(apaTable('Estadísticos descriptivos de las variables cuantitativas', ['Variable', '<i>n</i>', 'Perdidos', '<i>M</i>', '<i>DT</i>', '<i>Mdn</i>', 'Mín.', 'Máx.', 'Asimetría', 'Curtosis'], rows,
-        'Curtosis expresada como exceso respecto a la distribución normal (0 = normal).'));
+      sec.tables.push(apaTable('Estadísticos descriptivos de las variables cuantitativas', ['Variable', '<i>n</i>', 'Perdidos', '<i>M</i>', '<i>DT</i>', '<i>Mdn</i>', 'RIC (P25–P75)', 'Mín.', 'Máx.', 'Asimetría (<i>EE</i>)', 'Curtosis (<i>EE</i>)'], rows,
+        'Curtosis expresada como exceso respecto a la distribución normal (0 = normal). Errores típicos de asimetría y curtosis como en SPSS; percentiles con el método por defecto de R (tipo 7).'));
+      sec.tables.push(apaTable('Pruebas de normalidad', ['Variable', '<i>W</i> de Shapiro-Wilk', '<i>p</i>', '<i>D</i> de Kolmogorov-Smirnov', '<i>p</i> (Lilliefors)'], normRows,
+        'Con muestras grandes, desviaciones pequeñas e irrelevantes ya resultan significativas: interpreta las pruebas junto con los gráficos Q-Q, la asimetría y la curtosis.'));
       sec.checks.push(skewed.length ? chk('no', `Asimetría marcada (|asimetría| > 1) en ${list(skewed.map(esc))}: para estas variables conviene informar mediana y rango intercuartílico.`)
         : chk('ok', 'Ninguna variable cuantitativa presenta una asimetría marcada (|asimetría| ≤ 1).'));
+      sec.checks.push(outl.length ? chk('info', `Posibles valores atípicos: ${list(outl)}. Revisa que no sean errores de introducción de datos antes de decidir si se mantienen.`) : chk('ok', 'No hay valores atípicos según el criterio de 1.5·RIC ni |z| > 3.'));
+      if (nums.length <= 8) sec.charts.push(fig('Diagramas de caja', CH.boxplot(nums.map(v => ({ name: v.name, x: numOf(v).filter(a => a !== null) })).filter(g => g.x.length > 1), 'Variables')));
       const nt = nums.slice(0, 6).map(v => { const x = numOf(v).filter(a => a !== null); if (x.length < 2) return ''; const d = S.describe(x); return `${esc(v.name)} (<i>M</i> = ${f(d.mean)}, <i>DT</i> = ${f(d.sd)}; rango ${+d.min.toFixed(2)}–${+d.max.toFixed(2)})`; }).filter(Boolean);
       if (nt.length) textParts.push(`En cuanto a las variables cuantitativas, se obtuvieron los siguientes valores: ${list(nt)}.`);
+      if (G) {
+        const gr = []; nums.forEach(v => { const x = numOf(v); gl.forEach((l, j) => { const xs = x.filter((a, i) => a !== null && gc[i] === l); if (xs.length < 1) return; const d = S.describe(xs);
+          gr.push([j === 0 ? esc(v.name) : '', esc(l), d.n, f(d.mean), xs.length > 1 ? f(d.sd) : '—', f(d.median), +d.min.toFixed(3), +d.max.toFixed(3)]); });
+          if (sec.charts.length < 24 && gl.length <= 10) sec.charts.push(fig(`${v.name} por ${gName}`, CH.boxplot(gl.map(l => ({ name: l, x: x.filter((a, i) => a !== null && gc[i] === l) })).filter(g => g.x.length > 1), v.name))); });
+        sec.tables.push(apaTable(`Estadísticos descriptivos por ${gName}`, ['Variable', esc(gName), '<i>n</i>', '<i>M</i>', '<i>DT</i>', '<i>Mdn</i>', 'Mín.', 'Máx.'], gr));
+      }
     }
     if (cats.length) {
       const rows = [];
       cats.forEach(v => {
-        const c = catOf(v), lv = levelsOf(v), nv = c.filter(x => x !== null).length;
-        rows.push([`<b>${esc(v.name)}</b>`, '', '', '']);
-        lv.forEach(l => { const k = c.filter(x => x === l).length; rows.push(['&nbsp;&nbsp;&nbsp;' + esc(l), k, f(k / ST.rows.length * 100, 1), f(k / nv * 100, 1)]); });
-        if (nv < ST.rows.length) rows.push(['&nbsp;&nbsp;&nbsp;<span class="muted">Perdidos</span>', ST.rows.length - nv, f((ST.rows.length - nv) / ST.rows.length * 100, 1), '']);
-        if (sec.charts.length < 18 && lv.length <= 15) sec.charts.push(fig(v.name, CH.barsCat(lv, lv.map(l => c.filter(x => x === l).length), v.name)));
+        const c = catOf(v), lv = levelsOf(v), nv = c.filter(x => x !== null).length; let acc = 0;
+        rows.push([`<b>${esc(v.name)}</b>`, '', '', '', '']);
+        lv.forEach(l => { const k = c.filter(x => x === l).length; acc += k; rows.push(['&nbsp;&nbsp;&nbsp;' + esc(l), k, f(k / ST.rows.length * 100, 1), f(k / nv * 100, 1), f(acc / nv * 100, 1)]); });
+        if (nv < ST.rows.length) rows.push(['&nbsp;&nbsp;&nbsp;<span class="muted">Perdidos</span>', ST.rows.length - nv, f((ST.rows.length - nv) / ST.rows.length * 100, 1), '', '']);
+        if (sec.charts.length < 24 && lv.length <= 15) sec.charts.push(fig(v.name, CH.barsCat(lv, lv.map(l => c.filter(x => x === l).length), v.name)));
       });
-      sec.tables.push(apaTable('Frecuencias de las variables categóricas', ['Variable / categoría', '<i>n</i>', '%', '% válido'], rows));
+      sec.tables.push(apaTable('Frecuencias de las variables categóricas', ['Variable / categoría', '<i>n</i>', '%', '% válido', '% acumulado'], rows, 'El porcentaje acumulado sigue el orden de las categorías (relevante en variables ordinales).'));
       cats.slice(0, 4).forEach(v => {
         const c = catOf(v), lv = levelsOf(v), nv = c.filter(x => x !== null).length;
         const parts = lv.slice(0, 5).map(l => { const k = c.filter(x => x === l).length; return `${esc(l)} el ${f(k / nv * 100, 1)} % (<i>n</i> = ${k})`; });
@@ -523,8 +544,11 @@
       });
     }
     sec.text.push(textParts.join(' '));
-    sec.code = `# Descriptivos\n${nums.length ? `psych::describe(datos[, c(${nums.map(v => rq(v.name)).join(', ')})])\n` : ''}` +
-      cats.map(v => `table(datos$${rn(v.name)}, useNA = "ifany"); round(prop.table(table(datos$${rn(v.name)})) * 100, 1)`).join('\n');
+    const NN = nums.map(v => rq(v.name)).join(', ');
+    sec.code = `# Descriptivos\n${nums.length ? `psych::describe(datos[, c(${NN})], type = 2, quant = c(.25, .75))  # asimetría y curtosis como SPSS\n` +
+      `sapply(datos[, c(${NN})], function(x) c(shapiro.test(x)$p.value, nortest::lillie.test(x)$p.value))  # normalidad\n` +
+      `boxplot(datos[, c(${NN})])\n` + (G ? `psych::describeBy(datos[, c(${NN})], group = datos[[${rq(gName)}]], mat = TRUE)\n` : '') : ''}` +
+      cats.map(v => `t <- table(datos$${rn(v.name)}); cbind(n = t, pct = round(prop.table(t) * 100, 1), acum = round(cumsum(prop.table(t)) * 100, 1))`).join('\n');
     return sec;
   }
 
@@ -1821,7 +1845,7 @@
     log.push('Valores perdidos: cada análisis usa los casos con datos completos en sus variables (las correlaciones, por parejas).');
     const add = s => { secs.push(s); if (s.decision) log.push(`<b>${esc(s.title)}:</b> ${s.decision}`); else if (s.error) log.push(`<b>${esc(s.title)}:</b> no se pudo realizar. ${esc(s.error)}`); };
     try {
-      if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v)); }
+      if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v, ($('#descG') || {}).value || '')); }
       if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value, checkedVals('corrZ')));
       if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g, ($('#compAlt') || {}).value || 'two', { ph: ($('#compPH') || {}).value || 'auto', ctrl: ($('#compCtrl') || {}).value || '', con: ($('#compCon') || {}).value || '' }))); }
       if (isOn('one')) { const ys = checkedVals('oY'), mu = parseFloat(String(($('#oMu') || {}).value || '').replace(',', '.'));

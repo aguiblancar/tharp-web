@@ -194,5 +194,37 @@
     s += `<text x="190" y="128" text-anchor="end" fill="${COL.text}">${esc(lab.a)}</text><text x="450" y="128" fill="${COL.text}">${esc(lab.b)}</text><text x="320" y="246" text-anchor="middle" fill="${COL.text}">${esc(lab.c)}</text>`;
     return s + '</svg>';
   }
-  root.TharpCharts = { pathDiagram, scree, histogram, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
+  // diagrama de caja de Tukey: caja = cuartiles (tipo 7 de R), bigotes hasta el dato más extremo dentro de 1.5·RIC, atípicos como puntos
+  function boxplot(groups, label) {
+    const q = (s, p) => { const h = (s.length - 1) * p, lo = Math.floor(h), hi = Math.min(lo + 1, s.length - 1); return s[lo] + (h - lo) * (s[hi] - s[lo]); };
+    const st = groups.map(g => { const s = g.x.slice().sort((a, b) => a - b), q1 = q(s, .25), q3 = q(s, .75), md = q(s, .5), iqr = q3 - q1, lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
+      const inn = s.filter(v => v >= lo && v <= hi); return { name: g.name, q1, q3, md, wlo: inn[0], whi: inn[inn.length - 1], out: s.filter(v => v < lo || v > hi), n: s.length }; });
+    const all = groups.flatMap(g => g.x), yt = ticks(Math.min(...all), Math.max(...all), 5), y0 = yt[0], y1 = yt[yt.length - 1];
+    const W = Math.max(260, 70 + groups.length * 70), H = 240, m = { l: 46, r: 12, t: 12, b: 40 }, pw = W - m.l - m.r, ph = H - m.t - m.b, sy = v => m.t + ph - (v - y0) / (y1 - y0) * ph, bw = pw / groups.length;
+    let s = svgOpen(W, H, 'Diagrama de caja de ' + label) + yAxis(yt, sy, m.l, W - m.r);
+    st.forEach((g, i) => { const cx = m.l + bw * (i + .5), w = Math.min(46, bw * .5), col = COL.s[i % COL.s.length];
+      s += `<line x1="${cx}" x2="${cx}" y1="${sy(g.whi)}" y2="${sy(g.q3)}" stroke="${COL.axis}"/><line x1="${cx}" x2="${cx}" y1="${sy(g.q1)}" y2="${sy(g.wlo)}" stroke="${COL.axis}"/>` +
+        `<line x1="${cx - w / 4}" x2="${cx + w / 4}" y1="${sy(g.whi)}" y2="${sy(g.whi)}" stroke="${COL.axis}"/><line x1="${cx - w / 4}" x2="${cx + w / 4}" y1="${sy(g.wlo)}" y2="${sy(g.wlo)}" stroke="${COL.axis}"/>` +
+        `<rect x="${cx - w / 2}" y="${sy(g.q3)}" width="${w}" height="${Math.max(1, sy(g.q1) - sy(g.q3))}" fill="${col}" fill-opacity=".25" stroke="${col}" rx="3"><title>${esc(g.name)}: Q1 = ${fmt(g.q1)}, Mdn = ${fmt(g.md)}, Q3 = ${fmt(g.q3)} (n = ${g.n})</title></rect>` +
+        `<line x1="${cx - w / 2}" x2="${cx + w / 2}" y1="${sy(g.md)}" y2="${sy(g.md)}" stroke="${col}" stroke-width="2.5"/>` +
+        g.out.map(v => `<circle cx="${cx}" cy="${sy(v)}" r="3" fill="none" stroke="${COL.axis}"><title>Atípico: ${fmt(v)}</title></circle>`).join('') +
+        (groups.length > 1 ? `<text x="${cx}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(g.name, 12))}</text>` : ''); });
+    s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(label, 40))}</text>`;
+    return s + '</svg>';
+  }
+  // gráfico Q-Q normal: cuantiles observados frente a los teóricos (posiciones de Blom, como qqnorm de R con n > 10)
+  function qqplot(values, label, ninv) {
+    const s = values.slice().sort((a, b) => a - b), n = s.length, a = n <= 10 ? 3 / 8 : .5, th = s.map((_, i) => ninv((i + 1 - a) / (n + 1 - 2 * a)));
+    const mean = s.reduce((x, y) => x + y, 0) / n, sd = Math.sqrt(s.reduce((x, y) => x + (y - mean) ** 2, 0) / (n - 1));
+    const W = 300, H = 240, m = { l: 46, r: 12, t: 12, b: 40 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const xt = ticks(Math.min(...th), Math.max(...th), 5), yt = ticks(s[0], s[n - 1], 5), sx = v => m.l + (v - xt[0]) / (xt[xt.length - 1] - xt[0]) * pw, sy = v => m.t + ph - (v - yt[0]) / (yt[yt.length - 1] - yt[0]) * ph;
+    let o = svgOpen(W, H, 'Gráfico Q-Q de ' + label) + yAxis(yt, sy, m.l, W - m.r);
+    const x0 = xt[0], x1 = xt[xt.length - 1];
+    o += `<line x1="${sx(x0)}" x2="${sx(x1)}" y1="${sy(mean + sd * x0)}" y2="${sy(mean + sd * x1)}" stroke="${COL.s[1]}" stroke-width="1.5"/>`;
+    s.forEach((v, i) => { o += `<circle cx="${sx(th[i])}" cy="${sy(v)}" r="2.4" fill="${COL.s[0]}" fill-opacity=".7"/>`; });
+    xt.forEach(v => { o += `<text x="${sx(v)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${fmt(v)}</text>`; });
+    o += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">Cuantil teórico normal</text>`;
+    return o + '</svg>';
+  }
+  root.TharpCharts = { pathDiagram, scree, histogram, boxplot, qqplot, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
 })(window);
