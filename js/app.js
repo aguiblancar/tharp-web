@@ -2019,6 +2019,13 @@
     const rows = cols.map((c, j) => [esc(c.name), f(m.b[j], 3), f(m.se[j], 3), `[${f(m.ci[j][0], 3)}, ${f(m.ci[j][1], 3)}]`, j ? r2s(beta[j]) : '', f(m.t[j]), pv(m.pv[j])]
       .concat(het ? [f(m.se3[j], 3), pv(m.p3[j])] : []).concat(multi ? [j ? f(m.vif[j]) : ''] : []));
     sec.tables.push(apaTable(`Coeficientes del modelo de regresión para ${yName}`, head, rows, '<i>B</i> = coeficiente no estandarizado; β = coeficiente estandarizado.' + (het ? ' HC3 = errores típicos robustos a la heterocedasticidad.' : '')));
+    if (multi) { // correlaciones de orden cero, parcial y semiparcial de cada predictor y tolerancia (como SPSS)
+      const corrRows = cols.slice(1).map((c, q) => { const j = q + 1, xj = X.map(r => r[j]), r0 = S.pearson(xj, y).r, tj = m.t[j], df = m.dfr;
+        const part = tj * Math.sqrt((1 - m.r2) / df), partial = tj / Math.sqrt(tj * tj + df);
+        return [esc(c.name), r2s(r0), r2s(partial), r2s(part), nz((part * part).toFixed(3)), nz((1 / m.vif[j]).toFixed(3))]; });
+      sec.tables.push(apaTable('Correlaciones y colinealidad de los predictores', ['Predictor', '<i>r</i> de orden cero', '<i>r</i> parcial', '<i>r</i> semiparcial', '<i>sr</i>²', 'Tolerancia'], corrRows,
+        '<i>sr</i>² = semiparcial al cuadrado: proporción de varianza de la variable dependiente que explica cada predictor por sí solo, por encima de los demás. Tolerancia = 1 / VIF (valores < .10 indican colinealidad grave).'));
+    }
     const pUse = het ? m.p3 : m.pv, sigP = cols.map((c, j) => ({ c, j })).filter(o => o.j > 0 && pUse[o.j] < .05);
     const out = stepwise ? candidates.filter(c => !xNames.includes(c)) : [];
     const hierTxt = !hier ? '' : `Se realizó una regresión lineal jerárquica en ${hm.length} pasos para predecir ${esc(yName)}. ` + hm.map((o, b) => b === 0
