@@ -226,5 +226,17 @@
     o += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">Cuantil teórico normal</text>`;
     return o + '</svg>';
   }
-  root.TharpCharts = { pathDiagram, scree, histogram, boxplot, qqplot, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
+  // curva ROC: sensibilidad frente a 1 − especificidad, con la diagonal del azar y el punto de corte elegido
+  function rocCurve(curves, best) {
+    const W = 300, H = 280, m = { l: 46, r: 14, t: 12, b: 42 }, pw = W - m.l - m.r, ph = H - m.t - m.b, sx = v => m.l + v * pw, sy = v => m.t + (1 - v) * ph, t = [0, .25, .5, .75, 1];
+    let s = svgOpen(W, H, 'Curva ROC') + yAxis(t, sy, m.l, W - m.r);
+    t.forEach(v => { s += `<text x="${sx(v)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${fmt(v)}</text>`; });
+    s += `<line x1="${sx(0)}" y1="${sy(0)}" x2="${sx(1)}" y2="${sy(1)}" stroke="${COL.axis}" stroke-dasharray="4 3"/>`;
+    curves.forEach((c, i) => { const pts = c.pts.map(q => [1 - q.sp, q.se]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      s += `<polyline fill="none" stroke="${COL.s[i % COL.s.length]}" stroke-width="2.2" points="${pts.map(([x, y]) => `${sx(x).toFixed(1)},${sy(y).toFixed(1)}`).join(' ')}"><title>${esc(c.name)}: AUC = ${c.auc.toFixed(3)}</title></polyline>`; });
+    if (best) s += `<circle cx="${sx(1 - best.sp)}" cy="${sy(best.se)}" r="5" fill="${COL.s[1]}"><title>Punto de corte óptimo</title></circle>`;
+    s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">1 − especificidad</text><text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" fill="${COL.axis}">Sensibilidad</text>`;
+    return s + '</svg>';
+  }
+  root.TharpCharts = { pathDiagram, scree, histogram, boxplot, qqplot, rocCurve, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
 })(window);

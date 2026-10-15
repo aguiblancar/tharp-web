@@ -398,6 +398,12 @@
        <label class="field"><span>Unidad</span><select id="agU"><option value="single">Medida única (la puntuación de un juez)</option><option value="average">Promedio de los jueces (si usarás la media)</option></select></label>
        <label class="field"><span>Kappa de Cohen (categorías ordenadas)</span><select id="agW"><option value="none">Sin ponderar (categorías nominales)</option><option value="linear">Ponderada lineal</option><option value="quadratic">Ponderada cuadrática</option></select></label></div>`,
       (nums.length + cats.length) < 2 ? 'Necesitas al menos dos variables.' : '');
+    const bins2 = cats.filter(v => levelsOf(v).length === 2);
+    h += card('roc', false, 'Curva ROC (capacidad diagnóstica de una puntuación)', '¿Distingue una puntuación (test, escala, biomarcador) entre dos grupos, por ejemplo con y sin diagnóstico? Área bajo la curva, punto de corte óptimo, sensibilidad, especificidad y valores predictivos.',
+      `<div class="field"><span>Puntuaciones (una curva para cada una)</span>${chips('rocX', nums, () => false)}</div>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Estado real (2 categorías)</span>${sel('rocY', bins2, bins2[0] && bins2[0].name)}</label>
+       <label class="field"><span>Categoría «positiva» (por ejemplo, con diagnóstico)</span><select id="rocPos"></select></label></div>`,
+      !bins2.length || !nums.length ? 'Necesitas una puntuación cuantitativa y una variable con exactamente 2 categorías.' : '');
     const dR = D.reg || {}, regY = pick(dR.y, nums[0] && nums[0].name);
     h += card('reg', !!D.reg && nums.length >= 1, 'Regresión lineal', 'Coeficientes, β estandarizados, R², y diagnóstico completo: normalidad, homocedasticidad, multicolinealidad e influencia.',
       `<label class="field"><span>Variable dependiente</span>${sel('rY', nums, regY)}</label>
@@ -471,6 +477,9 @@
     const fillCtrl = () => { const g = $('#compG') && vByName($('#compG').value), c = $('#compCtrl'); if (!g || !c) return;
       c.innerHTML = levelsOf(g).map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join(''); };
     if ($('#compG')) { $('#compG').addEventListener('change', fillCtrl); fillCtrl(); }
+    const fillPos = () => { const v = $('#rocY') && vByName($('#rocY').value), c = $('#rocPos'); if (!v || !c) return; const lv = levelsOf(v);
+      c.innerHTML = lv.map((l, q) => `<option value="${esc(l)}"${q === lv.length - 1 ? ' selected' : ''}>${esc(l)}</option>`).join(''); };
+    if ($('#rocY')) { $('#rocY').addEventListener('change', fillPos); fillPos(); }
     $$('.an>label input').forEach(i => i.onchange = () => i.closest('.an').classList.toggle('on', i.checked));
   }
   const isOn = id => { const el = $(`.an[data-an="${id}"] > label input`); return el && el.checked; };
@@ -1144,6 +1153,44 @@
       `<i>z</i> y <i>p</i> contrastan κ = 0. ${R.length} casos, ${vs.length} jueces.`));
     sec.text.push(`Se calculó la kappa de Fleiss para evaluar el acuerdo entre ${vs.length} jueces (${list(names.map(esc))}) en ${R.length} casos: κ = ${nz(r.kappa.toFixed(2))}, <i>z</i> = ${f(r.z)}, ${pt(r.p)}.`);
     sec.code = `# Kappa de Fleiss\nd <- na.omit(datos[, ${Q}])\nirr::kappam.fleiss(d, detail = TRUE)`;
+    return sec;
+  }
+
+  // Curva ROC: una o varias puntuaciones frente a un estado real dicotómico
+  function runRoc(xNames, yName, posLab) {
+    const sec = { title: `Curva ROC: ${yName}`, test: 'Análisis de la curva ROC', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (!xNames.length) { sec.error = 'Selecciona al menos una puntuación.'; return sec; }
+    const yv = vByName(yName), y = catOf(yv), lv = levelsOf(yv); if (lv.length !== 2) { sec.error = 'El estado real debe tener exactamente 2 categorías.'; return sec; }
+    const pos = posLab && lv.includes(posLab) ? posLab : lv[1], neg = lv.find(l => l !== pos), res = [];
+    xNames.forEach(nm => { const x = numOf(vByName(nm)), P = [], N = [];
+      x.forEach((v, i) => { if (v === null || y[i] === null) return; (y[i] === pos ? P : N).push(v); });
+      if (P.length < 2 || N.length < 2) return;
+      let r = S.roc(P, N), flip = false;
+      if (S.median(P) < S.median(N)) { r = S.roc(P.map(v => -v), N.map(v => -v)); flip = true; } // como pROC: dirección según las medianas
+      res.push({ nm, r, flip, nP: P.length, nN: N.length }); });
+    if (!res.length) { sec.error = 'Hacen falta al menos 2 casos en cada categoría con puntuación.'; return sec; }
+    const lev = a => (a >= .9 ? 'excelente' : a >= .8 ? 'buena' : a >= .7 ? 'aceptable' : a >= .6 ? 'pobre' : 'insuficiente');
+    sec.why.push(`Se evalúa si ${list(res.map(o => esc(o.nm)))} ${res.length > 1 ? 'distinguen' : 'distingue'} entre «${esc(pos)}» (positivos) y «${esc(neg)}» (negativos) en ${esc(yName)}.`);
+    sec.why.push('El área bajo la curva (AUC) es la probabilidad de que un caso positivo elegido al azar puntúe más que uno negativo: 0.5 = azar, 1 = discriminación perfecta. Intervalo y error típico de DeLong (como pROC, SPSS y jamovi).');
+    sec.why.push('El punto de corte óptimo maximiza el índice de Youden (sensibilidad + especificidad − 1). Si los errores no cuestan lo mismo (por ejemplo, en cribado conviene no dejar escapar casos), puede preferirse otro corte de la tabla.');
+    sec.decision = `Se analizó la curva ROC de ${list(res.map(o => esc(o.nm)))} para distinguir «${esc(pos)}» de «${esc(neg)}».`;
+    res.forEach(o => { if (o.flip) sec.checks.push(chk('info', `En ${esc(o.nm)}, las puntuaciones más bajas corresponden a «${esc(pos)}»: el punto de corte se interpreta como «positivo si la puntuación es ≤ el corte».`)); });
+    const n0 = res[0]; if (Math.min(n0.nP, n0.nN) < 20) sec.checks.push(chk('info', `Pocos casos en alguna categoría (${n0.nP} positivos, ${n0.nN} negativos): el AUC y el punto de corte serán imprecisos (ver el intervalo).`));
+    sec.tables.push(apaTable('Área bajo la curva ROC', ['Puntuación', 'AUC', '<i>EE</i>', 'IC 95 %', '<i>z</i>', '<i>p</i>', 'Positivos', 'Negativos'],
+      res.map(o => [esc(o.nm), nz(o.r.auc.toFixed(3)), nz(o.r.se.toFixed(3)), `[${nz(o.r.ci[0].toFixed(3))}, ${nz(o.r.ci[1].toFixed(3))}]`, f(o.r.z), pv(o.r.p), o.nP, o.nN]),
+      '<i>z</i> y <i>p</i> contrastan AUC = .5 (discriminación al azar). Orientativo (Hosmer y Lemeshow): .7–.8 aceptable, .8–.9 buena, ≥ .9 excelente.'));
+    const ct = v => (Math.abs(v) === Infinity ? '—' : +v.toFixed(4));
+    sec.tables.push(apaTable('Punto de corte óptimo (índice de Youden)', ['Puntuación', 'Corte', 'Sensibilidad', 'Especificidad', 'Youden', 'VPP', 'VPN', 'RV+', 'RV−'],
+      res.map(o => { const b = o.r.best; return [esc(o.nm), `${o.flip ? '≤' : '≥'} ${ct(o.flip ? -b.t : b.t)}`, nz(b.se.toFixed(3)), nz(b.sp.toFixed(3)), nz(b.youden.toFixed(3)), nz(b.ppv.toFixed(3)), nz(b.npv.toFixed(3)), isFinite(b.lrp) ? f(b.lrp) : '∞', f(b.lrn)]; }),
+      `Corte = punto medio entre dos puntuaciones observadas (como pROC y SPSS); se clasifica como «${esc(pos)}» quien cumple la condición. VPP y VPN dependen de la prevalencia de la muestra (${f(n0.nP / (n0.nP + n0.nN) * 100, 1)} %). RV = razón de verosimilitudes.`));
+    const o0 = res[0], cut = o0.r.pts.filter(q => isFinite(q.t)), stepK = Math.max(1, Math.ceil(cut.length / 25));
+    sec.tables.push(apaTable(`Coordenadas de la curva de ${o0.nm}`, ['Corte', 'Sensibilidad', 'Especificidad', 'Youden'],
+      cut.filter((_, q) => q % stepK === 0).map(q => [`${o0.flip ? '≤' : '≥'} ${ct(o0.flip ? -q.t : q.t)}`, nz(q.se.toFixed(3)), nz(q.sp.toFixed(3)), nz((q.se + q.sp - 1).toFixed(3))]),
+      cut.length > 25 ? `Se muestra uno de cada ${stepK} cortes posibles.` : ''));
+    sec.charts.push(fig(`Curva ROC${res.length > 1 ? '' : ` de ${res[0].nm}`}`, CH.rocCurve(res.map(o => ({ name: o.nm, auc: o.r.auc, pts: o.r.pts })), res.length === 1 ? res[0].r.best : null), res.length > 1 ? CH.legend(res.map(o => o.nm)) : ''));
+    sec.text.push(res.map(o => { const b = o.r.best;
+      return `El área bajo la curva ROC de ${esc(o.nm)} fue ${nz(o.r.auc.toFixed(2))}, IC 95 % [${nz(o.r.ci[0].toFixed(2))}, ${nz(o.r.ci[1].toFixed(2))}], ${pt(o.r.p)}, lo que indica una capacidad de discriminación ${lev(o.r.auc)} entre «${esc(pos)}» y «${esc(neg)}». El punto de corte óptimo según el índice de Youden (${o.flip ? '≤' : '≥'} ${ct(o.flip ? -b.t : b.t)}) ofreció una sensibilidad de ${f(b.se * 100, 1)} % y una especificidad de ${f(b.sp * 100, 1)} %.`; }).join(' '));
+    sec.code = `# Curva ROC\nlibrary(pROC)\n` + res.map(o => `r <- roc(datos[[${rq(yName)}]], datos[[${rq(o.nm)}]], levels = c(${rq(neg)}, ${rq(pos)}), direction = "${o.flip ? '>' : '<'}")\nauc(r); ci.auc(r, method = "delong")\ncoords(r, "best", best.method = "youden", ret = c("threshold", "sensitivity", "specificity", "ppv", "npv"))\nplot(r)`).join('\n');
     return sec;
   }
 
@@ -1855,6 +1902,7 @@
         if (vs.length) vs.forEach(v => add(runProp(v, p0, ($('#prAlt') || {}).value || 'two', pr)));
         else add({ title: 'Proporciones', error: 'Selecciona al menos una variable categórica.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('agree')) add(runAgree(checkedVals('agV'), { model: ($('#agM') || {}).value || 'ICC2', unit: ($('#agU') || {}).value || 'single', weight: ($('#agW') || {}).value || 'none' }));
+      if (isOn('roc')) add(runRoc(checkedVals('rocX'), ($('#rocY') || {}).value, ($('#rocPos') || {}).value));
       if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
         add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1], ($('#pAlt') || {}).value || 'two') : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));

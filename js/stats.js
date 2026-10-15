@@ -750,6 +750,20 @@
     const z = kap / se0;
     return { kappa: kap, n, m, z, p: pZ(z), byCat: levels.map((l, j) => { const q = pj[j]; const kj = 1 - sum(cnt.map(c => c[j] * (m - c[j]))) / (n * m * (m - 1) * q * (1 - q)); return { level: l, kappa: kj }; }) };
   }
+  // ---------- curva ROC (como pROC): AUC, IC y EE de DeLong, punto de corte de Youden ----------
+  // pos: puntuaciones de los casos positivos; neg: de los negativos. Se asume que puntuaciones más altas indican positivo.
+  function roc(pos, neg) {
+    const m = pos.length, n = neg.length, psi = (x, y) => (x > y ? 1 : x === y ? .5 : 0);
+    const V10 = pos.map(x => mean(neg.map(y => psi(x, y)))), V01 = neg.map(y => mean(pos.map(x => psi(x, y)))), auc = mean(V10);
+    const se = Math.sqrt(variance(V10) / m + variance(V01) / n), z = (auc - .5) / se;
+    const ci = [Math.max(0, auc - 1.959963984540054 * se), Math.min(1, auc + 1.959963984540054 * se)];
+    // umbrales: puntos medios entre valores distintos consecutivos (como pROC y SPSS); positivo si puntuación ≥ umbral
+    const u = [...new Set(pos.concat(neg))].sort((a, b) => a - b), th = [-Infinity].concat(u.slice(1).map((v, i) => (v + u[i]) / 2)).concat([Infinity]);
+    const pts = th.map(t => { const tp = pos.filter(x => x >= t).length, tn = neg.filter(y => y < t).length; return { t, se: tp / m, sp: tn / n, tp, fp: n - tn, fn: m - tp, tn }; });
+    const best = pts.slice(1, -1).reduce((b, q) => (q.se + q.sp > b.se + b.sp ? q : b), pts[1] || pts[0]);
+    const ppv = best.tp / (best.tp + best.fp), npv = best.tn / (best.tn + best.fn);
+    return { auc, se, ci, z, p: pZ(z), m, n, pts, best: Object.assign({}, best, { youden: best.se + best.sp - 1, ppv, npv, lrp: best.se / (1 - best.sp), lrn: (1 - best.se) / best.sp }) };
+  }
   // ---------- potencia y tamaño muestral (como el paquete pwr de R y G*Power) ----------
   // F no central: mezcla de Poisson de betas incompletas
   function pncf(x, d1, d2, lambda) {
@@ -1185,7 +1199,7 @@
       heywood: B.Psi.map((v, j) => v < 0 ? j : -1).filter(j => j >= 0) };
   }
 
-  root.TharpStats = { lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
+  root.TharpStats = { roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
     tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);
