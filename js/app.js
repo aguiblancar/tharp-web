@@ -416,6 +416,12 @@
       `<label class="field"><span>Variable dependiente (2 categorías)</span>${sel('lY', bins, pick(dL.y, bins[0] && bins[0].name))}</label>
        <div class="field"><span>Predictores</span>${chips('lX', nums.concat(facs), v => (dL.x ? dL.x.includes(v.name) : false))}</div>`,
       !bins.length ? 'Necesitas una variable categórica con exactamente 2 categorías.' : '');
+    const poly = cats.filter(v => { const k = levelsOf(v).length; return k >= 3 && k <= 10; });
+    h += card('mlogit', false, 'Regresión logística multinomial u ordinal', 'Variable dependiente con 3 o más categorías: multinomial si no tienen orden (por ejemplo, tipo de tratamiento elegido) u ordinal de odds proporcionales si lo tienen (por ejemplo, leve, moderado, grave).',
+      `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Variable dependiente (3 o más categorías)</span>${sel('mlY', poly, poly[0] && poly[0].name)}</label>
+       <label class="field"><span>Modelo</span><select id="mlM"><option value="auto">Automático: ordinal si las categorías tienen orden, si no multinomial</option><option value="multinomial">Multinomial</option><option value="ordinal">Ordinal (odds proporcionales)</option></select></label></div>
+       <div class="field"><span>Predictores</span>${chips('mlX', nums.concat(facs), () => false)}</div>`,
+      !poly.length ? 'Necesitas una variable categórica con entre 3 y 10 categorías.' : '');
     const f6 = facs.filter(v => levelsOf(v).length <= 6), dF = D.fact || {};
     h += card('fact', !!D.fact && nums.length >= 1 && f6.length >= 2, 'ANOVA factorial (dos factores)', 'Efectos principales e interacción con sumas de cuadrados de tipo III, η² parcial y gráfico de interacción.',
       `<div class="field"><span>Variables dependientes (un ANOVA para cada una)</span>${chips('fY', nums, v => v.name === pick(dF.y, nums[0] && nums[0].name))}</div>
@@ -1544,6 +1550,59 @@
     return sec;
   }
 
+  // Regresión logística multinomial u ordinal (variable dependiente con 3 o más categorías)
+  function runPolyLogit(yName, xNames, model) {
+    const sec = { title: `Regresión logística: ${yName}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    xNames = xNames.filter(n => n !== yName);
+    if (!xNames.length) { sec.error = 'Selecciona al menos un predictor distinto de la variable dependiente.'; return sec; }
+    const yv = vByName(yName), ycat = catOf(yv); let { idx, cols, X } = design(xNames, i => ycat[i] !== null);
+    const lv = ordOf(yv, idx.map(i => ycat[i])), K = lv.length, y = idx.map(i => lv.indexOf(ycat[i])), n = idx.length;
+    if (K < 3) { sec.error = 'La variable dependiente necesita al menos 3 categorías con datos (con 2, usa la regresión logística binaria).'; return sec; }
+    const ordered = model === 'ordinal' || (model === 'auto' && !!(yv.order && (yv.orderUser || yv.orderNote || (yv.hint && /ordinal/i.test(yv.hint.note || '')))));
+    const ORD = ordered, p = cols.length, cnt = lv.map((_, k) => y.filter(v => v === k).length);
+    if (cnt.some(c => c < 2)) { sec.error = `Alguna categoría tiene menos de 2 casos (${lv.map((l, k) => `${esc(l)}: ${cnt[k]}`).join(', ')}). Agrupa categorías en «Preparar los datos».`; return sec; }
+    const fit = cs => { const Xs = X.map(r => cs.map(j => r[j])); return ORD ? S.ordinalLogit(Xs.map(r => r.slice(1)), y, K) : S.multinomial(Xs, y, K); };
+    const all = cols.map((_, j) => j), m = fit(all);
+    if (!m || !isFinite(m.ll)) { sec.error = 'El modelo no converge (separación perfecta o colinealidad entre predictores). Reduce los predictores o agrupa categorías.'; return sec; }
+    sec.test = ORD ? 'Regresión logística ordinal (odds proporcionales)' : 'Regresión logística multinomial';
+    const pr = S.pseudoR2(m.ll, m.ll0, n), dfM = ORD ? p - 1 : (K - 1) * (p - 1), LR = 2 * (m.ll - m.ll0), pLR = 1 - jStat.chisquare.cdf(LR, dfM);
+    const nPar = ORD ? (K - 1) + (p - 1) : (K - 1) * p, aic = -2 * m.ll + 2 * nPar;
+    sec.why.push(`Variable dependiente: ${esc(yName)} con ${K} categorías (${list(lv.map(esc))}).`);
+    sec.why.push(ORD ? `Las categorías están ordenadas (${lv.map(esc).join(' < ')}), así que se usa el modelo de odds proporcionales: un único coeficiente por predictor que indica si aumenta la probabilidad de estar en categorías más altas. Comprueba que el orden es el correcto (botón «Orden» en Variables).`
+      : `Las categorías no tienen un orden natural, así que se usa la regresión multinomial: cada categoría se compara con la de referencia («${esc(lv[0])}»), con sus propios coeficientes.`);
+    sec.decision = `Se ajustó una regresión logística ${ORD ? 'ordinal de odds proporcionales' : 'multinomial'} de ${esc(yName)} con ${n} casos completos.`;
+    sec.alt = ORD ? 'Si no se cumple el supuesto de odds proporcionales, la regresión multinomial (ignora el orden) o un modelo ordinal parcialmente proporcional.' : 'Si las categorías tienen orden, la regresión ordinal es más parsimoniosa y potente.';
+    // contrastes de razón de verosimilitudes de cada predictor (modelo sin ese término)
+    const lrt = xNames.map(t => { const keep = all.filter(j => j === 0 || cols[j].v.name !== t), r = fit(keep), dfT = (ORD ? 1 : K - 1) * (all.length - keep.length), ch = 2 * (m.ll - r.ll); return { t, ch, df: dfT, p: 1 - jStat.chisquare.cdf(ch, dfT) }; });
+    sec.tables.push(apaTable('Ajuste del modelo', ['−2LL (nulo)', '−2LL (modelo)', 'χ²', '<i>gl</i>', '<i>p</i>', '<i>R</i>² McFadden', '<i>R</i>² Cox-Snell', '<i>R</i>² Nagelkerke', 'AIC'],
+      [[f(-2 * m.ll0), f(-2 * m.ll), f(LR), dfM, pv(pLR), nz(pr.mcfadden.toFixed(3)), nz(pr.coxsnell.toFixed(3)), nz(pr.nagelkerke.toFixed(3)), f(aic)]], 'χ² = razón de verosimilitudes frente al modelo sin predictores.'));
+    sec.tables.push(apaTable('Contrastes de razón de verosimilitudes de cada predictor', ['Predictor', 'χ²', '<i>gl</i>', '<i>p</i>'], lrt.map(o => [esc(o.t), f(o.ch), o.df, pv(o.p)]), 'Compara el modelo completo con el modelo sin ese predictor (como SPSS).'));
+    const z = 1.959963984540054, orRow = (lab, b, se) => { const zz = b / se; return [lab, f(b, 3), f(se, 3), f(zz), pv(2 * (1 - jStat.normal.cdf(Math.abs(zz), 0, 1))), f(Math.exp(b)), `[${f(Math.exp(b - z * se))}, ${f(Math.exp(b + z * se))}]`]; };
+    if (ORD) {
+      sec.tables.push(apaTable('Coeficientes de la regresión ordinal', ['Término', '<i>B</i>', '<i>EE</i>', '<i>z</i>', '<i>p</i>', 'OR', 'IC 95 % (OR)'],
+        cols.slice(1).map((c, j) => orRow(esc(c.name), m.beta[j], m.seBeta[j])), 'OR > 1: más probabilidad de estar en categorías más altas. Signo como en SPSS y polr (logit P(Y ≤ j) = θ<sub>j</sub> − <i>x</i>β).'));
+      sec.tables.push(apaTable('Umbrales', ['Umbral', 'θ', '<i>EE</i>'], m.theta.map((t, j) => [`${esc(lv[j])} | ${esc(lv[j + 1])}`, f(t, 3), f(m.seTheta[j], 3)])));
+      sec.checks.push(chk('info', 'Supuesto de odds proporcionales: el efecto de cada predictor debe ser el mismo en todos los cortes entre categorías. Compruébalo con la prueba de Brant (incluida en el código R); si no se cumple, usa la regresión multinomial.'));
+    } else {
+      const rows = []; m.B.forEach((bk, k) => bk.forEach((b, j) => rows.push(orRow(j === 0 ? `<b>${esc(lv[k + 1])}</b> vs. ${esc(lv[0])}: ${esc(cols[j].name)}` : `&nbsp;&nbsp;&nbsp;${esc(cols[j].name)}`, b, m.SE[k][j]))));
+      sec.tables.push(apaTable(`Coeficientes de la regresión multinomial (referencia: ${lv[0]})`, ['Término', '<i>B</i>', '<i>EE</i>', '<i>z</i>', '<i>p</i>', 'OR', 'IC 95 % (OR)'], rows, 'OR = odds ratio de pertenecer a esa categoría frente a la de referencia. Contrastes de Wald.'));
+    }
+    const corr = y.filter((v, i) => v === m.pred[i]).length;
+    sec.tables.push(apaTable('Tabla de clasificación', ['Observado'].concat(lv.map(l => `Predicho: ${esc(l)}`)).concat(['% correcto']),
+      lv.map((l, k) => [esc(l)].concat(lv.map((_, q) => y.filter((v, i) => v === k && m.pred[i] === q).length)).concat([f(y.filter((v, i) => v === k && m.pred[i] === k).length / cnt[k] * 100, 1)])),
+      `Porcentaje global correcto: ${f(corr / n * 100, 1)} % (asignando cada caso a la categoría más probable).`));
+    if (n < 10 * nPar) sec.checks.push(chk('no', `Tamaño muestral: ${n} casos para ${nPar} parámetros. Se recomiendan al menos 10 casos por parámetro: los coeficientes pueden ser inestables.`));
+    const sigT = lrt.filter(o => o.p < .05);
+    sec.text.push(`Se realizó una regresión logística ${ORD ? 'ordinal de odds proporcionales' : `multinomial (categoría de referencia: ${esc(lv[0])})`} para predecir ${esc(yName)} a partir de ${list(xNames.map(esc))}. El modelo ${pLR < .05 ? 'fue' : 'no fue'} estadísticamente significativo frente al modelo nulo, χ²(${dfM}, <i>N</i> = ${n}) = ${f(LR)}, ${pt(pLR)}, <i>R</i>² de Nagelkerke = ${nz(pr.nagelkerke.toFixed(2))}, y clasificó correctamente al ${f(corr / n * 100, 1)} % de los casos. ` +
+      (sigT.length ? `${list(sigT.map(o => esc(o.t)))} ${sigT.length > 1 ? 'contribuyeron' : 'contribuyó'} significativamente al modelo (${sigT.map(o => `${esc(o.t)}: χ²(${o.df}) = ${f(o.ch)}, ${pt(o.p)}`).join('; ')}).` : 'Ningún predictor contribuyó significativamente al modelo.') +
+      (ORD ? ' ' + cols.slice(1).map((c, j) => { const b = m.beta[j], se = m.seBeta[j], pp = 2 * (1 - jStat.normal.cdf(Math.abs(b / se), 0, 1)); return pp < .05 ? `${esc(c.name)} se asoció con una ${b > 0 ? 'mayor' : 'menor'} probabilidad de categorías más altas (OR = ${f(Math.exp(b))}, IC 95 % [${f(Math.exp(b - z * se))}, ${f(Math.exp(b + z * se))}], ${pt(pp)}).` : ''; }).filter(Boolean).join(' ') : ''));
+    const fml = `${xNames.map(rn).join(' + ')}`, Yf = `factor(datos[[${rq(yName)}]], levels = c(${lv.map(rq).join(', ')})${ORD ? ', ordered = TRUE' : ''})`;
+    sec.code = `# Regresión logística ${ORD ? 'ordinal' : 'multinomial'}: ${yName}\nd <- datos; d$.y <- ${Yf}\nd <- d[complete.cases(d[, c(".y", ${xNames.map(rq).join(', ')})]), ]\n` +
+      (ORD ? `modelo <- MASS::polr(.y ~ ${fml}, data = d, Hess = TRUE)\nsummary(modelo)\nexp(cbind(OR = coef(modelo), confint.default(modelo)[names(coef(modelo)), ]))\ncar::Anova(modelo, type = 3)  # razón de verosimilitudes de cada predictor\nif (requireNamespace("brant", quietly = TRUE)) brant::brant(modelo)  # odds proporcionales\n`
+        : `modelo <- nnet::multinom(.y ~ ${fml}, data = d, trace = FALSE)\nsummary(modelo)\nz <- coef(modelo) / summary(modelo)$standard.errors; 2 * (1 - pnorm(abs(z)))  # p de Wald\nexp(coef(modelo))  # odds ratios\ncar::Anova(modelo, type = 3)  # razón de verosimilitudes de cada predictor\n`) +
+      `performance::r2_nagelkerke(modelo)\ntable(observado = d$.y, predicho = predict(modelo))`;
+    return sec;
+  }
   function runLogistic(yName, xNames) {
     const sec = { title: `Regresión logística: ${yName}`, test: 'Regresión logística binaria', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     xNames = xNames.filter(n => n !== yName);
@@ -1910,6 +1969,7 @@
         if (meth === 'blocks') { const bl = [checkedVals('rX'), checkedVals('rB2'), checkedVals('rB3')].map((b, i, all) => b.filter(x => !all.slice(0, i).flat().includes(x))).filter(b => b.length);
           add(runRegression($('#rY').value, bl.flat(), 'blocks', bl)); }
         else add(runRegression($('#rY').value, checkedVals('rX'), meth)); }
+      if (isOn('mlogit')) add(runPolyLogit(($('#mlY') || {}).value, checkedVals('mlX'), ($('#mlM') || {}).value || 'auto'));
       if (isOn('logit')) add(runLogistic($('#lY').value, checkedVals('lX')));
       if (isOn('fact')) { const ys = checkedVals('fY');
         if (ys.length) ys.forEach(y => add(runFactorial(y, $('#fA').value, $('#fB').value)));

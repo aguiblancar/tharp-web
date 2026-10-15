@@ -750,6 +750,60 @@
     const z = kap / se0;
     return { kappa: kap, n, m, z, p: pZ(z), byCat: levels.map((l, j) => { const q = pj[j]; const kj = 1 - sum(cnt.map(c => c[j] * (m - c[j]))) / (n * m * (m - 1) * q * (1 - q)); return { level: l, kappa: kj }; }) };
   }
+  // ---------- regresión logística multinomial (como nnet::multinom) ----------
+  // X: n × p con la constante en la primera columna; y: índice de categoría 0..K-1 (0 = referencia)
+  function multinomial(X, y, K, maxit = 100) {
+    const n = X.length, p = X[0].length, q = (K - 1) * p; let b = new Array(q).fill(0), ll = -Infinity;
+    const probs = bb => X.map(x => { const e = [1]; for (let k = 1; k < K; k++) { let s = 0; for (let j = 0; j < p; j++) s += x[j] * bb[(k - 1) * p + j]; e.push(Math.exp(Math.min(700, s))); } const t = sum(e); return e.map(v => v / t); });
+    const logLik = bb => sum(probs(bb).map((pr, i) => Math.log(Math.max(1e-300, pr[y[i]]))));
+    ll = logLik(b); let H = null, it = 0;
+    for (; it < maxit; it++) {
+      const P = probs(b), g = new Array(q).fill(0); H = Array.from({ length: q }, () => new Array(q).fill(0));
+      X.forEach((x, i) => { for (let k = 1; k < K; k++) { const r = (y[i] === k ? 1 : 0) - P[i][k]; for (let j = 0; j < p; j++) g[(k - 1) * p + j] += r * x[j]; }
+        for (let k = 1; k < K; k++) for (let l = 1; l < K; l++) { const w = P[i][k] * ((k === l ? 1 : 0) - P[i][l]); for (let a = 0; a < p; a++) for (let c = 0; c < p; c++) H[(k - 1) * p + a][(l - 1) * p + c] += w * x[a] * x[c]; } });
+      const Hi = inv(H); if (!Hi) return null;
+      const step = Hi.map(r => sum(r.map((v, j) => v * g[j]))); let t = 1, nb, nl;
+      for (let h = 0; h < 30; h++) { nb = b.map((v, j) => v + t * step[j]); nl = logLik(nb); if (nl >= ll - 1e-12) break; t /= 2; }
+      const dl = nl - ll; b = nb; ll = nl; if (Math.abs(dl) < 1e-10) { it++; break; }
+    }
+    const Pf = probs(b); H = Array.from({ length: q }, () => new Array(q).fill(0));
+    X.forEach((x, i) => { for (let k = 1; k < K; k++) for (let l = 1; l < K; l++) { const w = Pf[i][k] * ((k === l ? 1 : 0) - Pf[i][l]); for (let a = 0; a < p; a++) for (let c = 0; c < p; c++) H[(k - 1) * p + a][(l - 1) * p + c] += w * x[a] * x[c]; } });
+    const V = inv(H), se = V ? V.map((r, j) => Math.sqrt(r[j])) : b.map(() => NaN);
+    const cnt = Array.from({ length: K }, (_, k) => y.filter(v => v === k).length), ll0 = sum(cnt.map(c => (c ? c * Math.log(c / n) : 0)));
+    const pred = Pf.map(pr => pr.indexOf(Math.max(...pr)));
+    return { B: Array.from({ length: K - 1 }, (_, k) => b.slice(k * p, (k + 1) * p)), SE: Array.from({ length: K - 1 }, (_, k) => se.slice(k * p, (k + 1) * p)), ll, ll0, n, p, K, iter: it, pred, probs: Pf };
+  }
+  // ---------- regresión logística ordinal de odds proporcionales (como MASS::polr) ----------
+  // logit P(Y ≤ j) = θj − x·β; X: n × p SIN constante; y: 0..K-1 ordenada
+  function ordinalLogit(X, y, K, maxit = 200) {
+    const n = X.length, p = X[0] ? X[0].length : 0, F = z => 1 / (1 + Math.exp(-z)), f_ = z => { const e = F(z); return e * (1 - e); };
+    const cnt = Array.from({ length: K }, (_, k) => y.filter(v => v === k).length); let acc = 0;
+    let th = cnt.slice(0, K - 1).map(c => { acc += c; const pr = Math.min(.999, Math.max(.001, acc / n)); return Math.log(pr / (1 - pr)); });
+    let par = th.concat(new Array(p).fill(0));
+    const eta = (pp, x) => { let s = 0; for (let j = 0; j < p; j++) s += x[j] * pp[K - 1 + j]; return s; };
+    const ll = pp => { for (let j = 1; j < K - 1; j++) if (pp[j] <= pp[j - 1]) return -Infinity;
+      let s = 0; X.forEach((x, i) => { const e = eta(pp, x), k = y[i], up = k === K - 1 ? 1 : F(pp[k] - e), lo = k === 0 ? 0 : F(pp[k - 1] - e); s += Math.log(Math.max(1e-300, up - lo)); }); return s; };
+    const grad = pp => { const g = new Array(K - 1 + p).fill(0);
+      X.forEach((x, i) => { const e = eta(pp, x), k = y[i], up = k === K - 1 ? 1 : F(pp[k] - e), lo = k === 0 ? 0 : F(pp[k - 1] - e), pr = Math.max(1e-300, up - lo);
+        const du = k === K - 1 ? 0 : f_(pp[k] - e), dl = k === 0 ? 0 : f_(pp[k - 1] - e);
+        if (k < K - 1) g[k] += du / pr; if (k > 0) g[k - 1] -= dl / pr;
+        for (let j = 0; j < p; j++) g[K - 1 + j] += -(du - dl) / pr * x[j]; }); return g; };
+    const hess = pp => { const m = pp.length, H = []; for (let a = 0; a < m; a++) { const hgt = 1e-5 * Math.max(1, Math.abs(pp[a])), pp1 = pp.slice(), pp2 = pp.slice(); pp1[a] += hgt; pp2[a] -= hgt;
+        const g1 = grad(pp1), g2 = grad(pp2); H.push(g1.map((v, j) => (v - g2[j]) / (2 * hgt))); } return H.map((r, a) => r.map((v, b) => (v + H[b][a]) / 2)); };
+    let L = ll(par), it = 0;
+    for (; it < maxit; it++) {
+      const g = grad(par), Hn = hess(par).map(r => r.map(v => -v)), Hi = inv(Hn); if (!Hi) break;
+      const step = Hi.map(r => sum(r.map((v, j) => v * g[j]))); let t = 1, np, nl;
+      for (let h = 0; h < 40; h++) { np = par.map((v, j) => v + t * step[j]); nl = ll(np); if (nl >= L - 1e-12) break; t /= 2; }
+      const dl = nl - L; par = np; L = nl; if (Math.abs(dl) < 1e-11) { it++; break; }
+    }
+    const Vc = inv(hess(par).map(r => r.map(v => -v))), se = Vc ? Vc.map((r, j) => Math.sqrt(r[j])) : par.map(() => NaN);
+    const ll0 = sum(cnt.map(c => (c ? c * Math.log(c / n) : 0)));
+    const pred = X.map(x => { const e = eta(par, x), pr = Array.from({ length: K }, (_, k) => (k === K - 1 ? 1 : F(par[k] - e)) - (k === 0 ? 0 : F(par[k - 1] - e))); return pr.indexOf(Math.max(...pr)); });
+    return { theta: par.slice(0, K - 1), beta: par.slice(K - 1), seTheta: se.slice(0, K - 1), seBeta: se.slice(K - 1), ll: L, ll0, n, p, K, iter: it, pred };
+  }
+  // pseudo-R² a partir de las log-verosimilitudes (McFadden, Cox y Snell, Nagelkerke)
+  function pseudoR2(ll, ll0, n) { const cs = 1 - Math.exp(2 * (ll0 - ll) / n), mx = 1 - Math.exp(2 * ll0 / n); return { mcfadden: 1 - ll / ll0, coxsnell: cs, nagelkerke: cs / mx }; }
   // ---------- curva ROC (como pROC): AUC, IC y EE de DeLong, punto de corte de Youden ----------
   // pos: puntuaciones de los casos positivos; neg: de los negativos. Se asume que puntuaciones más altas indican positivo.
   function roc(pos, neg) {
@@ -1199,7 +1253,7 @@
       heywood: B.Psi.map((v, j) => v < 0 ? j : -1).filter(j => j >= 0) };
   }
 
-  root.TharpStats = { roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
+  root.TharpStats = { multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
     tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);
