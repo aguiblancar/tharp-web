@@ -876,6 +876,29 @@
     const pred = X.map(x => { const e = eta(par, x), pr = Array.from({ length: K }, (_, k) => (k === K - 1 ? 1 : F(par[k] - e)) - (k === 0 ? 0 : F(par[k - 1] - e))); return pr.indexOf(Math.max(...pr)); });
     return { theta: par.slice(0, K - 1), beta: par.slice(K - 1), seTheta: se.slice(0, K - 1), seBeta: se.slice(K - 1), ll: L, ll0, n, p, K, iter: it, pred };
   }
+  // prueba de Brant (1990) de odds proporcionales: una logística binaria por corte (Y > j) y covarianza conjunta de sus coeficientes
+  // X: n × p SIN constante; y: 0..K-1; groups: columnas de cada predictor (las ficticias de un factor van juntas). Devuelve la prueba
+  // global y una por predictor. Nota: el paquete brant de R copia los bloques de covarianza entre cortes sin trasponerlos, por lo que
+  // con varios predictores su χ² difiere ligeramente; aquí se usa la matriz simétrica correcta (comprobado en R: 2026-10-15).
+  function brantTest(X, y, K, groups = null) {
+    const n = X.length, p = X[0].length, Xc = X.map(r => [1].concat(r)), fits = [];
+    for (let j = 0; j < K - 1; j++) { const yy = y.map(v => (v > j ? 1 : 0)), m = logistic(Xc, yy); if (!m) return null; fits.push({ b: m.b, pi: Xc.map(x => 1 / (1 + Math.exp(-sum(x.map((v, a) => v * m.b[a]))))) }); }
+    const q = p + 1, XtWX = (w) => { const M = Array.from({ length: q }, () => new Array(q).fill(0)); Xc.forEach((x, i) => { for (let a = 0; a < q; a++) for (let c = 0; c < q; c++) M[a][c] += w[i] * x[a] * x[c]; }); return M; };
+    const Inv = fits.map(fi => inv(XtWX(fi.pi.map(v => v * (1 - v)))));
+    const J_ = K - 1, V = Array.from({ length: J_ * p }, () => new Array(J_ * p).fill(0));
+    for (let a = 0; a < J_; a++) for (let c = a; c < J_; c++) {
+      const w = fits[a].pi.map((_, i) => (a === c ? fits[a].pi[i] * (1 - fits[a].pi[i]) : fits[c].pi[i] - fits[a].pi[i] * fits[c].pi[i]));
+      const blk = matMul(matMul(Inv[a], XtWX(w)), Inv[c]);
+      for (let u = 1; u < q; u++) for (let v = 1; v < q; v++) { V[a * p + u - 1][c * p + v - 1] = blk[u][v]; V[c * p + v - 1][a * p + u - 1] = blk[u][v]; }
+    }
+    const beta = [].concat(...fits.map(fi => fi.b.slice(1)));
+    const test = vars => { // vars: índices de predictores incluidos en la prueba
+      const rows = []; for (let j = 1; j < J_; j++) vars.forEach(v => { const r = new Array(J_ * p).fill(0); r[v] = 1; r[j * p + v] = -1; rows.push(r); });
+      const Db = rows.map(r => sum(r.map((x, k) => x * beta[k]))), DVD = rows.map(r => rows.map(s2 => sum(r.map((x, k) => x * sum(s2.map((y_, l) => y_ * V[k][l])))))), Mi = inv(DVD);
+      if (!Mi) return { chi: NaN, df: rows.length, p: NaN };
+      const chi = sum(Db.map((d, a) => d * sum(Db.map((e, c) => Mi[a][c] * e)))); return { chi, df: rows.length, p: pChi(chi, rows.length) }; };
+    return { omnibus: test([...Array(p).keys()]), byVar: (groups || [...Array(p).keys()].map(v => [v])).map(test) };
+  }
   // pseudo-R² a partir de las log-verosimilitudes (McFadden, Cox y Snell, Nagelkerke)
   function pseudoR2(ll, ll0, n) { const cs = 1 - Math.exp(2 * (ll0 - ll) / n), mx = 1 - Math.exp(2 * ll0 / n); return { mcfadden: 1 - ll / ll0, coxsnell: cs, nagelkerke: cs / mx }; }
   // ---------- curva ROC (como pROC): AUC, IC y EE de DeLong, punto de corte de Youden ----------
@@ -1327,7 +1350,7 @@
       heywood: B.Psi.map((v, j) => v < 0 ? j : -1).filter(j => j >= 0) };
   }
 
-  root.TharpStats = { glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
+  root.TharpStats = { brantTest, glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
     tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

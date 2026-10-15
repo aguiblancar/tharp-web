@@ -1635,7 +1635,13 @@
       sec.tables.push(apaTable('Coeficientes de la regresión ordinal', ['Término', '<i>B</i>', '<i>EE</i>', '<i>z</i>', '<i>p</i>', 'OR', 'IC 95 % (OR)'],
         cols.slice(1).map((c, j) => orRow(esc(c.name), m.beta[j], m.seBeta[j])), 'OR > 1: más probabilidad de estar en categorías más altas. Signo como en SPSS y polr (logit P(Y ≤ j) = θ<sub>j</sub> − <i>x</i>β).'));
       sec.tables.push(apaTable('Umbrales', ['Umbral', 'θ', '<i>EE</i>'], m.theta.map((t, j) => [`${esc(lv[j])} | ${esc(lv[j + 1])}`, f(t, 3), f(m.seTheta[j], 3)])));
-      sec.checks.push(chk('info', 'Supuesto de odds proporcionales: el efecto de cada predictor debe ser el mismo en todos los cortes entre categorías. Compruébalo con la prueba de Brant (incluida en el código R); si no se cumple, usa la regresión multinomial.'));
+      const grp = xNames.map(t => cols.slice(1).map((c, j) => (c.v.name === t ? j : -1)).filter(j => j >= 0)), bt = S.brantTest(X.map(r => r.slice(1)), y, K, grp);
+      if (bt && isFinite(bt.omnibus.chi)) {
+        sec.tables.push(apaTable('Prueba de Brant del supuesto de odds proporcionales', ['', 'χ²', '<i>gl</i>', '<i>p</i>'], [['Global', f(bt.omnibus.chi), bt.omnibus.df, pv(bt.omnibus.p)]].concat(xNames.map((t, q) => [esc(t), f(bt.byVar[q].chi), bt.byVar[q].df, pv(bt.byVar[q].p)])),
+          'Un resultado significativo indica que el efecto de ese predictor cambia entre los cortes de la variable dependiente (no se cumplen las odds proporcionales). Brant (1990).'));
+        const bad = xNames.filter((_, q) => bt.byVar[q].p < .05);
+        sec.checks.push(chk(bt.omnibus.p >= .05 && !bad.length ? 'ok' : 'no', `Odds proporcionales (prueba de Brant): χ²(${bt.omnibus.df}) = ${f(bt.omnibus.chi)}, ${pt(bt.omnibus.p)}.${bt.omnibus.p >= .05 && !bad.length ? ' Se cumple.' : ` No se cumple${bad.length ? ` (${list(bad.map(esc))})` : ''}: considera la regresión multinomial o un modelo ordinal parcialmente proporcional.`}`));
+      } else sec.checks.push(chk('info', 'No se pudo calcular la prueba de Brant (algún corte tiene muy pocos casos). Revisa el supuesto de odds proporcionales con la regresión multinomial.'));
     } else {
       const rows = []; m.B.forEach((bk, k) => bk.forEach((b, j) => rows.push(orRow(j === 0 ? `<b>${esc(lv[k + 1])}</b> vs. ${esc(lv[0])}: ${esc(cols[j].name)}` : `&nbsp;&nbsp;&nbsp;${esc(cols[j].name)}`, b, m.SE[k][j]))));
       sec.tables.push(apaTable(`Coeficientes de la regresión multinomial (referencia: ${lv[0]})`, ['Término', '<i>B</i>', '<i>EE</i>', '<i>z</i>', '<i>p</i>', 'OR', 'IC 95 % (OR)'], rows, 'OR = odds ratio de pertenecer a esa categoría frente a la de referencia. Contrastes de Wald.'));
