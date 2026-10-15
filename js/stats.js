@@ -460,6 +460,87 @@
     return { Q, df: k - 1, p: pChi(Q, k - 1), W: Q / (n * (k - 1)), meanRanks: R.map(v => v / n), n, k };
   }
 
+  // comparaciones por pares tras Friedman (como PMCMRplus): Conover (t, gl = (n−1)(k−1)), Siegel-Castellan/Dunn (z) y Nemenyi (rango studentizado, gl = ∞)
+  function friedmanPosthoc(Y, method = 'conover', adjust = 'holm') {
+    const n = Y.length, k = Y[0].length, Rk = Y.map(row => ranks(row).r), Rs = new Array(k).fill(0); let s2 = 0;
+    Rk.forEach(r => r.forEach((v, j) => { Rs[j] += v; s2 += v * v; }));
+    const S2 = 1 / (k - 1) * (s2 - k * n * (k + 1) ** 2 / 4), T2 = sum(Rs.map(v => (v - n * (k + 1) / 2) ** 2)) / S2;
+    const A = S2 * 2 * n * (k - 1) / (n * k - k - n + 1), B = 1 - T2 / (n * (k - 1)), df = n * k - k - n + 1, seZ = Math.sqrt(k * (k + 1) / (6 * n));
+    const out = [];
+    for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) {
+      if (method === 'conover') { const t = (Rs[b] - Rs[a]) / Math.sqrt(A * B); out.push({ a, b, stat: t, p: pT(t, df), df }); }
+      else if (method === 'nemenyi') { const q = Math.abs(Rs[b] - Rs[a]) / n / seZ * Math.SQRT2; out.push({ a, b, stat: q / Math.SQRT2 * Math.sign(Rs[b] - Rs[a]), q, p: Math.min(1, 1 - J.tukey.cdf(q, k, 1e7)) }); }
+      else { const z = (Rs[b] - Rs[a]) / n / seZ; out.push({ a, b, stat: z, p: 2 * (1 - J.normal.cdf(Math.abs(z), 0, 1)) }); }
+    }
+    if (method !== 'nemenyi') { const m = out.length, adj = adjust === 'bonferroni' ? out.map(o => Math.min(1, o.p * m)) : adjust === 'none' ? out.map(o => o.p) : holm(out.map(o => o.p)); out.forEach((o, i) => o.padj = adj[i]); }
+    else out.forEach(o => o.padj = o.p);
+    return out;
+  }
+  // prueba de los signos: binomial exacta sobre las diferencias distintas de 0 (como binom.test / DescTools::SignTest)
+  function signTest(d, alt = 'two') {
+    const nz = d.filter(v => v !== 0), pos = nz.filter(v => v > 0).length, r = binomTest(pos, nz.length, .5, alt);
+    return { pos, neg: nz.length - pos, ties: d.length - nz.length, n: nz.length, p: r.p, median: quantile(sorted(d), .5) };
+  }
+  // prueba de la mediana (Mood): por encima de la mediana conjunta frente a igual o por debajo; χ² de Pearson y p exacta de Fisher
+  function medianTest(xs) {
+    const all = xs.flat(), med = quantile(sorted(all), .5), tab = [xs.map(x => x.filter(v => v > med).length), xs.map(x => x.filter(v => v <= med).length)];
+    if (tab.some(r => r.every(v => v === 0))) return { med, tab, chi: NaN, df: xs.length - 1, p: NaN, pFisher: NaN };
+    const c = chiSquare(tab), fx = fisherRxC(tab);
+    return { med, tab, chi: c.chi, df: c.df, p: c.p, pFisher: fx ? fx.p : null, minE: Math.min(...c.E.flat()) };
+  }
+  // Kolmogorov-Smirnov para dos muestras (como ks.test de R ≥ 4.3): p exacta si m·n < 10000 (también con empates), si no, asintótica
+  function ks2(x, y) {
+    const m = x.length, n = y.length, xs = sorted(x), ys = sorted(y), all = sorted(x.concat(y));
+    let D = 0, Dp = 0, Dm = 0, i = 0, j = 0;
+    const vals = [...new Set(all)];
+    vals.forEach(v => { while (i < m && xs[i] <= v) i++; while (j < n && ys[j] <= v) j++; const d = i / m - j / n; D = Math.max(D, Math.abs(d)); Dp = Math.max(Dp, d); Dm = Math.max(Dm, -d); });
+    let p, exact = m * n < 10000;
+    if (exact) {
+      const tie = all.map((v, q) => q === all.length - 1 || all[q + 1] !== v), lim = Math.round(D * m * n) - 1e-7;
+      const ok = (a, b) => !tie[a + b - 1] || Math.abs(a * n - b * m) < lim;
+      let u = new Float64Array(n + 1); u[0] = 1;
+      for (let b = 1; b <= n; b++) u[b] = ok(0, b) ? u[b - 1] : 0;
+      for (let a = 1; a <= m; a++) { const w = a / (a + n); u[0] = ok(a, 0) ? w * u[0] : 0;
+        for (let b = 1; b <= n; b++) u[b] = ok(a, b) ? w * u[b] + u[b - 1] : 0; }
+      p = Math.min(1, Math.max(0, 1 - u[n]));
+    } else {
+      const z = Math.sqrt(m * n / (m + n)) * D; let s = 0; for (let k = 1; k < 100; k++) s += (k % 2 ? 1 : -1) * Math.exp(-2 * k * k * z * z); p = Math.min(1, Math.max(0, 2 * s));
+    }
+    return { D, Dplus: Dp, Dminus: Dm, p, exact, m, n };
+  }
+  // Jonckheere-Terpstra (grupos en orden creciente): exacta sin empates y N ≤ 100 (como clinfun), si no, normal con corrección por empates (como PMCMRplus)
+  function jonckheere(xs) {
+    const ni = xs.map(x => x.length), N = sum(ni), all = xs.flat(); let JT = 0;
+    for (let a = 0; a < xs.length; a++) for (let b = a + 1; b < xs.length; b++) xs[a].forEach(u => xs[b].forEach(v => { JT += v > u ? 1 : v === u ? .5 : 0; }));
+    const mu = (N * N - sum(ni.map(v => v * v))) / 4, cnt = {}; all.forEach(v => cnt[v] = (cnt[v] || 0) + 1);
+    const nt = Object.values(cnt), ties = nt.some(v => v > 1);
+    const vr = !ties ? (N * N * (2 * N + 3) - sum(ni.map(v => v * v * (2 * v + 3)))) / 72
+      : (N * (N - 1) * (2 * N + 5) - sum(ni.map(v => v * (v - 1) * (2 * v + 5))) - sum(nt.map(v => v * (v - 1) * (2 * v + 5)))) / 72
+        + sum(ni.map(v => v * (v - 1) * (v - 2))) * sum(nt.map(v => v * (v - 1) * (v - 2))) / (36 * N * (N - 1) * (N - 2)) + sum(ni.map(v => v * (v - 1))) * sum(nt.map(v => v * (v - 1))) / (8 * N * (N - 1));
+    const z = (JT - mu) / Math.sqrt(vr); let p, exact = !ties && N <= 100;
+    if (exact) { let dist = new Float64Array([1]), rest = N;
+      ni.slice(0, -1).forEach(na => { rest -= na; const c = wilcoxCounts(na, rest), tot = c.reduce((s_, v) => s_ + v, 0), nd = new Float64Array(dist.length + c.length - 1);
+        for (let a = 0; a < dist.length; a++) if (dist[a]) for (let b = 0; b < c.length; b++) nd[a + b] += dist[a] * c[b] / tot; dist = nd; });
+      const J0 = Math.round(JT); let lo = 0, hi = 0; dist.forEach((v, q) => { if (q <= J0) lo += v; if (q >= J0) hi += v; }); p = Math.min(1, 2 * Math.min(lo, hi, .5)); }
+    else p = 2 * Math.min(1 - J.normal.cdf(Math.abs(z), 0, 1), .5);
+    return { JT, mu, sd: Math.sqrt(vr), z, p, exact, ties, N };
+  }
+  // prueba de rachas (aleatoriedad) respecto a la mediana, como DescTools::RunsTest: exacta con n ≤ 30, si no, normal con corrección por continuidad
+  function runsTest(xIn) {
+    let x = xIn, med = null; if (new Set(xIn).size > 2) { med = quantile(sorted(xIn), .5); x = xIn.map(v => (v > med ? 1 : 0)); }
+    else { const lv = [...new Set(xIn)].sort((a, b) => (a < b ? -1 : 1)); x = xIn.map(v => (v === lv[0] ? 0 : 1)); }
+    const runs = 1 + x.slice(1).filter((v, i) => v !== x[i]).length, m = x.filter(v => v === 0).length, n = x.length - m, N = m + n;
+    if (!m || !n) return null;
+    const E = 1 + 2 * n * m / N, s2 = 2 * n * m * (2 * n * m - n - m) / (N * N * (N - 1)), dd = runs - E;
+    const z = dd < -.5 ? (dd + .5) / Math.sqrt(s2) : dd > .5 ? (dd - .5) / Math.sqrt(s2) : 0, exact = N <= 30;
+    let p;
+    if (exact) { const lc = [0]; for (let i = 1; i <= N; i++) lc[i] = lc[i - 1] + Math.log(i); const ch = (a, b) => (b < 0 || b > a ? 0 : Math.exp(lc[a] - lc[b] - lc[a - b]));
+      const pp = r => { if (r % 2 === 0) { const k = r / 2; return 2 * ch(m - 1, k - 1) * ch(n - 1, k - 1); } const k = (r - 1) / 2; return ch(m - 1, k - 1) * ch(n - 1, k) + ch(m - 1, k) * ch(n - 1, k - 1); };
+      const rmax = m === n ? 2 * m : 2 * Math.min(m, n) + 1, den = ch(N, m); p = 0; for (let r = 2; r <= rmax; r++) if (Math.abs(r - E) >= Math.abs(runs - E) - 1e-9) p += pp(r) / den; p = Math.min(1, p); }
+    else p = 2 * Math.min(J.normal.cdf(z, 0, 1), 1 - J.normal.cdf(z, 0, 1));
+    return { runs, m, n, E, z, p, exact, med };
+  }
+
   // ---------- asociación ----------
   function pearson(x, y) {
     const n = x.length, mx = mean(x), my = mean(y); let sxy = 0, sxx = 0, syy = 0;
@@ -1533,5 +1614,5 @@
 
   root.TharpStats = { manova, boxM, brantTest, glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
-    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, kendallW, krippAlpha, blandAltman, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, processModel, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ordinalAssoc, fisherRxC, mantelHaenszel, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
+    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, friedmanPosthoc, signTest, medianTest, ks2, jonckheere, runsTest, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, kendallW, krippAlpha, blandAltman, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, processModel, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ordinalAssoc, fisherRxC, mantelHaenszel, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

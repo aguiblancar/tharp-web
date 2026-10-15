@@ -344,6 +344,7 @@
 
   // ---------- configuración de análisis ----------
   function chips(name, vars, checked) { return `<div class="chips">${vars.map(v => `<label><input type="checkbox" name="${name}" value="${esc(v.name)}"${checked(v) ? ' checked' : ''}>${esc(v.name)}</label>`).join('') || '<span class="muted small">No hay variables de este tipo.</span>'}</div>`; }
+  const optChips = (name, opts) => `<div class="chips">${opts.map(([v, l]) => `<label><input type="checkbox" name="${name}" value="${v}">${l}</label>`).join('')}</div>`;
   function sel(id, vars, def) { return `<select id="${id}">${vars.map(v => `<option value="${esc(v.name)}"${v.name === def ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select>`; }
   function renderConfig() {
     const nums = byType('num'), cats = byType('cat'), facs = cats.filter(v => { const k = levelsOf(v).length; return k >= 2 && k <= 12; });
@@ -367,18 +368,22 @@
        <label class="field"><span>Hipótesis (solo con 2 grupos)</span><select id="compAlt"><option value="two">Bilateral: los grupos difieren (recomendada)</option><option value="greater">Unilateral: el primer grupo puntúa más</option><option value="less">Unilateral: el primer grupo puntúa menos</option></select></label>
        <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Comparaciones post hoc (3 o más grupos)</span><select id="compPH" onchange="document.getElementById('compCtrlW').style.display = this.value === 'dunnett' ? '' : 'none'"><option value="auto">Automáticas: Tukey o Games-Howell según las varianzas (recomendado)</option><option value="tukey">Tukey HSD</option><option value="gh">Games-Howell</option><option value="bonferroni">Bonferroni</option><option value="holm">Holm</option><option value="sidak">Šidák</option><option value="scheffe">Scheffé</option><option value="tamhane">T2 de Tamhane</option><option value="dunnett">Dunnett (frente a un grupo control)</option><option value="lsd">DMS de Fisher (sin corrección)</option></select></label>
        <label class="field" id="compCtrlW" style="display:none"><span>Grupo control</span><select id="compCtrl"></select></label>
-       <label class="field"><span>Contrastes planificados (opcional)</span><select id="compCon"><option value="">Ninguno</option><option value="polynomial">Polinómicos: tendencia lineal, cuadrática…</option><option value="simple">Simples: cada grupo frente al primero</option><option value="repeated">Repetidos: cada grupo frente al siguiente</option><option value="helmert">Helmert: cada grupo frente a la media de los siguientes</option><option value="difference">Diferencia: cada grupo frente a la media de los anteriores</option><option value="deviation">Desviación: cada grupo frente a la media global</option></select></label></div>`,
+       <label class="field"><span>Contrastes planificados (opcional)</span><select id="compCon"><option value="">Ninguno</option><option value="polynomial">Polinómicos: tendencia lineal, cuadrática…</option><option value="simple">Simples: cada grupo frente al primero</option><option value="repeated">Repetidos: cada grupo frente al siguiente</option><option value="helmert">Helmert: cada grupo frente a la media de los siguientes</option><option value="difference">Diferencia: cada grupo frente a la media de los anteriores</option><option value="deviation">Desviación: cada grupo frente a la media global</option></select></label></div>
+       <div class="field"><span>Pruebas no paramétricas adicionales (opcional)</span>${optChips('compNP', [['median', 'Prueba de la mediana'], ['ks', 'Kolmogorov-Smirnov (2 grupos)'], ['jt', 'Jonckheere-Terpstra (tendencia en el orden de los grupos)']])}</div>`,
       !(nums.length >= 1 && facs.length >= 1) ? 'Necesitas una variable cuantitativa y una categórica con 2 a 12 grupos.' : '');
     h += card('one', false, 'Comparación con un valor de referencia (una muestra)', '¿La media difiere de un valor fijo, como el punto medio de una escala o una norma publicada? Prueba t para una muestra o Wilcoxon, según la normalidad.',
       `<div class="field"><span>Variables (una prueba para cada una)</span>${chips('oY', nums, v => v === nums[0])}</div>
        <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Valor de referencia</span><input id="oMu" type="number" step="any" value="0" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:140px"></label>
-       <label class="field"><span>Hipótesis</span><select id="oAlt"><option value="two">Bilateral: la media difiere (recomendada)</option><option value="greater">Unilateral: la media es mayor</option><option value="less">Unilateral: la media es menor</option></select></label></div>`,
+       <label class="field"><span>Hipótesis</span><select id="oAlt"><option value="two">Bilateral: la media difiere (recomendada)</option><option value="greater">Unilateral: la media es mayor</option><option value="less">Unilateral: la media es menor</option></select></label></div>
+       <div class="field"><span>Pruebas adicionales (opcional)</span>${optChips('oNP', [['sign', 'Prueba de los signos (mediana frente al valor de referencia)'], ['runs', 'Prueba de rachas (aleatoriedad en el orden de los casos)']])}</div>`,
       nums.length < 1 ? 'Necesitas una variable cuantitativa.' : '');
     const dP = D.paired || {};
     const pDef = (dP.vars || []).filter(has);
     h += card('paired', !!D.paired && nums.length >= 2, 'Comparación de medidas relacionadas (pre/post o varios momentos)', 'Las mismas personas medidas dos o más veces: t relacionada o Wilcoxon (2 momentos); ANOVA de medidas repetidas o Friedman (3 o más). Con un factor entre sujetos (por ejemplo, control frente a tratamiento): ANOVA mixta.',
       `<div class="field"><span>Momentos o condiciones (en el orden de las columnas del archivo)</span>${chips('pM', nums, v => (pDef.length ? pDef.includes(v.name) : nums.indexOf(v) < 2))}</div>
        <label class="field"><span>Hipótesis (solo con 2 medidas y sin factor entre sujetos)</span><select id="pAlt"><option value="two">Bilateral: las medidas difieren (recomendada)</option><option value="greater">Unilateral: la segunda medida es mayor</option><option value="less">Unilateral: la segunda medida es menor</option></select></label>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Comparaciones tras Friedman (3 o más medidas)</span><select id="pFPH"><option value="wilcoxon">Wilcoxon por pares, corrección de Holm (recomendado)</option><option value="conover">Conover, corrección de Holm (como JASP)</option><option value="siegel">Dunn-Bonferroni sobre rangos medios (como SPSS)</option><option value="nemenyi">Nemenyi</option></select></label></div>
+       <div class="field"><span>Opciones no paramétricas</span>${optChips('pNP', [['force', 'Usar siempre la prueba no paramétrica (Wilcoxon o Friedman)'], ['sign', 'Añadir la prueba de los signos (2 medidas)']])}</div>
        <details style="margin:4px 0 10px"><summary class="small">Dos factores intrasujeto (opcional; por ejemplo, condición × momento)</summary>
          <p class="small muted" style="margin:6px 0">Marca arriba todas las columnas en este orden: el segundo factor cambia más rápido (A1·B1, A1·B2, …, A2·B1, A2·B2…), como en SPSS. El número de columnas debe ser niveles del factor 1 × niveles del factor 2.</p>
          <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Factor 1: nombre y niveles</span><span style="display:flex;gap:6px"><input id="pW1N" placeholder="p. ej., condición" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:150px"><input id="pW1K" type="number" min="2" placeholder="niveles" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:90px"></span></label>
@@ -800,16 +805,17 @@
     sec.code = code; return sec;
   }
 
-  function runPaired(aName, bName, alt = 'two') {
+  function runPaired(aName, bName, alt = 'two', forceNP = false) {
     const sec = { title: `${aName} frente a ${bName} (medidas relacionadas)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (aName === bName) { sec.error = 'Elige dos variables distintas.'; return sec; }
     const xa = numOf(vByName(aName)), xb = numOf(vByName(bName)), a = [], b = [];
     xa.forEach((v, i) => { if (v !== null && xb[i] !== null) { a.push(v); b.push(xb[i]); } });
     if (a.length < 3) { sec.error = 'Se necesitan al menos 3 casos con ambas medidas.'; return sec; }
     const d = b.map((v, i) => v - a[i]); if (S.sd(d) === 0) { sec.error = 'Las diferencias son todas iguales: no se puede realizar la prueba.'; return sec; }
-    const n = a.length, sw = S.shapiro(d), normOK = n >= 30 || (sw && sw.p >= .05), da = S.describe(a), db = S.describe(b), A = rn(aName), B = rn(bName);
+    const n = a.length, sw = S.shapiro(d), normOK = !forceNP && (n >= 30 || (sw && sw.p >= .05)), da = S.describe(a), db = S.describe(b), A = rn(aName), B = rn(bName);
     sec.why.push(`Se comparan dos medidas de las mismas personas: ${esc(aName)} y ${esc(bName)}.`);
     sec.why.push('Al ser medidas relacionadas, se analiza la diferencia dentro de cada persona, lo que elimina la variabilidad entre sujetos.');
+    if (forceNP) sec.why.push('Has pedido usar siempre la prueba no paramétrica (Wilcoxon), sin depender de la normalidad.');
     const swT = sw ? `Shapiro-Wilk de las diferencias: <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}` : 'Shapiro-Wilk no calculable';
     sec.checks.push(sw && sw.p >= .05 ? chk('ok', swT + '. Se cumple la normalidad.') : n >= 30 ? chk('info', swT + `. No es normal, pero con <i>n</i> = ${n} ≥ 30 la prueba t es robusta.`) : chk('no', swT + '. No se cumple y la muestra es pequeña.'));
     sec.tables.push(apaTable('Estadísticos descriptivos de las medidas relacionadas', ['Medida', '<i>n</i>', '<i>M</i>', '<i>DT</i>', '<i>Mdn</i>'],
@@ -832,14 +838,14 @@
       sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nt.test(datos$${B}, datos$${A}, paired = TRUE${ALT})\neffectsize::cohens_d(datos$${B}, datos$${A}, paired = TRUE${ALT})  # d_z con IC`;
     } else {
       const r = S.wilcoxonSigned(a, b, alt); sec.test = 'Prueba de rangos con signo de Wilcoxon' + (one ? ' (unilateral)' : '');
-      sec.why.push('Las diferencias no son normales y la muestra es pequeña: se usa la prueba de Wilcoxon, que no requiere normalidad.');
-      sec.decision = `Se eligió la prueba de Wilcoxon${hyp} porque son dos medidas de las mismas personas y las diferencias no siguen una distribución normal.`;
+      if (!forceNP) sec.why.push('Las diferencias no son normales y la muestra es pequeña: se usa la prueba de Wilcoxon, que no requiere normalidad.');
+      sec.decision = `Se eligió la prueba de Wilcoxon${hyp} porque son dos medidas de las mismas personas y ${forceNP ? 'se pidió una prueba no paramétrica' : 'las diferencias no siguen una distribución normal'}.`;
       sec.alt = 'Prueba t para muestras relacionadas si las diferencias fueran normales.';
       sec.tables.push(apaTable('Resultado de la prueba de rangos con signo de Wilcoxon', ['', '<i>V</i>', '<i>z</i>', '<i>p</i>' + (one ? ' (unilateral)' : ''), '<i>r</i><sub>rb</sub>', 'IC 95 % (<i>r</i><sub>rb</sub>)'], [[`${esc(bName)} − ${esc(aName)}`, f(r.V, 1), f(r.z), pv(r.p), f(r.rb), ciTxt(r.rbCI)]],
         `<i>V</i> = suma de rangos de las diferencias positivas. Se excluyeron ${n - r.n} diferencias nulas. ${r.exact ? '<i>p</i> exacta (sin empates ni ceros y menos de 50 pares, como R y JASP).' : '<i>p</i> por la aproximación normal con corrección por continuidad.'} <i>r</i><sub>rb</sub> = correlación biserial por rangos de pares emparejados (como JASP).`));
       const t = S.tTestPaired(a, b, alt); sec.sens = `Análisis de sensibilidad: la prueba t relacionada da ${pt(t.p)}, ${(t.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
       const st = `<i>V</i> = ${f(r.V, 1)}, ${pt(r.p)}${one ? ' (unilateral)' : ''}, <i>r</i><sub>rb</sub> = ${f(r.rb)}, IC 95 % [${ciTxt(r.rbCI).slice(1, -1)}]`;
-      sec.text.push(`Dado que las diferencias no seguían una distribución normal, se aplicó la prueba de rangos con signo de Wilcoxon${hyp} para comparar ${esc(aName)} (<i>Mdn</i> = ${f(da.median)}) y ${esc(bName)} (<i>Mdn</i> = ${f(db.median)}). ` +
+      sec.text.push(`${forceNP ? 'Se' : 'Dado que las diferencias no seguían una distribución normal, se'} aplicó la prueba de rangos con signo de Wilcoxon${hyp} para comparar ${esc(aName)} (<i>Mdn</i> = ${f(da.median)}) y ${esc(bName)} (<i>Mdn</i> = ${f(db.median)}). ` +
         (r.p < .05 ? `Se encontraron diferencias estadísticamente significativas, ${st}, con un tamaño del efecto ${lbl.r(Math.abs(r.rb))}.` : `No se encontraron diferencias estadísticamente significativas, ${st}.`));
       sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nwilcox.test(datos$${B}, datos$${A}, paired = TRUE${ALT})  # exacta si no hay empates ni ceros y n < 50\neffectsize::rank_biserial(datos$${B}, datos$${A}, paired = TRUE)`;
     }
@@ -1010,7 +1016,7 @@
       `pairs(emmeans::emmeans(modelo, ~ medida), adjust = "holm")\n` + (G > 2 ? `pairs(emmeans::emmeans(modelo, ~ grupo), adjust = "tukey")\n` : '') + `# Efectos simples\nemmeans::joint_tests(modelo, by = "medida")\nemmeans::joint_tests(modelo, by = "grupo")`;
     return sec;
   }
-  function runRepeated(names) {
+  function runRepeated(names, opts = {}) {
     const k = names.length, cols = names.map(n => numOf(vByName(n)));
     const sec = { title: `${names.join(', ')} (medidas repetidas)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     const idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null)), n = idx.length;
@@ -1020,7 +1026,8 @@
     const lv = list(names.map(esc));
     // normalidad de los residuos del modelo de medidas repetidas (valor − media del sujeto − media del momento + media global)
     const gm = S.mean(Y.flat()), sm = Y.map(S.mean), resid = Y.flatMap((r, i) => r.map((v, j) => v - sm[i] - ds[j].mean + gm));
-    const sw = S.shapiro(resid), normOK = n >= 30 || (sw && sw.p >= .05);
+    const sw = S.shapiro(resid), normOK = !opts.force && (n >= 30 || (sw && sw.p >= .05));
+    if (opts.force) sec.why.push('Has pedido usar siempre la prueba no paramétrica (Friedman), sin depender de la normalidad.');
     sec.why.push(`Se comparan ${k} medidas de las mismas personas: ${lv}.`);
     sec.why.push('Al ser medidas relacionadas, el análisis separa la variabilidad entre personas de la debida a los momentos, lo que da más potencia que comparar grupos independientes.');
     const swT = sw ? `Shapiro-Wilk de los residuos: <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}` : 'Shapiro-Wilk no calculable';
@@ -1062,25 +1069,92 @@
       code += `rstatix::anova_test(largo, dv = valor, wid = id, within = momento, effect.size = "pes")  # incluye Mauchly y Greenhouse-Geisser\nrstatix::pairwise_t_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm")`;
     } else {
       const r = S.friedman(Y); sec.test = 'Prueba de Friedman';
-      sec.why.push('La normalidad no se cumple y la muestra es pequeña: se usa la prueba de Friedman, que trabaja con rangos dentro de cada persona.');
-      sec.decision = `Se eligió la prueba de Friedman porque se comparan ${k} medidas de las mismas personas y no se cumple la normalidad.`;
+      if (!opts.force) sec.why.push('La normalidad no se cumple y la muestra es pequeña: se usa la prueba de Friedman, que trabaja con rangos dentro de cada persona.');
+      sec.decision = `Se eligió la prueba de Friedman porque se comparan ${k} medidas de las mismas personas y ${opts.force ? 'se pidió una prueba no paramétrica' : 'no se cumple la normalidad'}.`;
       sec.alt = 'ANOVA de medidas repetidas si los datos fueran aproximadamente normales.';
       sec.tables.push(apaTable('Resultado de la prueba de Friedman', ['', 'χ²', '<i>gl</i>', '<i>p</i>', '<i>W</i> de Kendall', '<i>n</i>'], [[lv, f(r.Q), r.df, pv(r.p), nz(r.W.toFixed(3)), n]],
         'Rangos promedio: ' + names.map((nm, j) => `${esc(nm)} = ${f(r.meanRanks[j])}`).join('; ') + '. <i>W</i> de Kendall como tamaño del efecto.'));
       const a = S.rmAnova(Y), aP = a.mauchly && a.mauchly.p < .05 ? a.pGG : a.p;
       sec.sens = `Análisis de sensibilidad: el ANOVA de medidas repetidas da ${pt(aP)}, ${(aP < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
       const st = `χ²(${r.df}) = ${f(r.Q)}, ${pt(r.p)}, <i>W</i> = ${nz(r.W.toFixed(2))}`;
-      let t = `Dado que no se cumplía el supuesto de normalidad, se aplicó la prueba de Friedman para comparar ${lv} (${names.map((nm, j) => `${esc(nm)}: <i>Mdn</i> = ${f(ds[j].median)}`).join('; ')}). `;
+      let t = `${opts.force ? 'Se' : 'Dado que no se cumplía el supuesto de normalidad, se'} aplicó la prueba de Friedman para comparar ${lv} (${names.map((nm, j) => `${esc(nm)}: <i>Mdn</i> = ${f(ds[j].median)}`).join('; ')}). `;
       if (r.p < .05) {
-        const ph = posthoc('Wilcoxon', S.wilcoxonSigned);
-        t += `Se encontraron diferencias estadísticamente significativas, ${st}.` + phText(ph, 'Wilcoxon con corrección de Holm', true);
-        sec.tables.push(apaTable('Comparaciones por pares (Wilcoxon, corrección de Holm)', ['Comparación', '<i>z</i>', '<i>p</i> ajustada'],
-          ph.map(o => [`${esc(names[o.b])} − ${esc(names[o.a])}`, f(o.r.z), pv(o.padj)])));
+        const fm = opts.ph || 'wilcoxon';
+        if (fm === 'wilcoxon') { const ph = posthoc('Wilcoxon', S.wilcoxonSigned);
+          t += `Se encontraron diferencias estadísticamente significativas, ${st}.` + phText(ph, 'Wilcoxon con corrección de Holm', true);
+          sec.tables.push(apaTable('Comparaciones por pares (Wilcoxon, corrección de Holm)', ['Comparación', '<i>z</i>', '<i>p</i> ajustada'],
+            ph.map(o => [`${esc(names[o.b])} − ${esc(names[o.a])}`, f(o.r.z), pv(o.padj)]))); }
+        else { const ph = S.friedmanPosthoc(Y, fm, fm === 'siegel' ? 'bonferroni' : 'holm'), FN = { conover: 'Conover con corrección de Holm', siegel: 'Dunn-Bonferroni sobre los rangos medios', nemenyi: 'Nemenyi' }[fm];
+          t += `Se encontraron diferencias estadísticamente significativas, ${st}.` + phText(ph, FN, true);
+          sec.tables.push(apaTable(`Comparaciones por pares (${FN})`, ['Comparación', fm === 'conover' ? '<i>t</i>' : fm === 'nemenyi' ? '<i>q</i>' : '<i>z</i>', '<i>p</i> ajustada'],
+            ph.map(o => [`${esc(names[o.b])} − ${esc(names[o.a])}`, f(fm === 'nemenyi' ? o.q : o.stat), pv(o.padj)]),
+            fm === 'conover' ? `Diferencias de sumas de rangos; <i>t</i> con ${ph[0].df} gl (Conover, 1999).` : fm === 'nemenyi' ? 'Rango studentizado con gl infinitos sobre los rangos medios.' : '<i>z</i> = diferencia de rangos medios / √(<i>k</i>(<i>k</i> + 1) / 6<i>n</i>), con corrección de Bonferroni.'));
+          code += `\nm <- as.matrix(datos_mr[, medidas])\n${{ conover: 'PMCMRplus::frdAllPairsConoverTest(m, p.adjust.method = "holm")', siegel: 'PMCMRplus::frdAllPairsSiegelTest(m, p.adjust.method = "bonferroni")', nemenyi: 'PMCMRplus::frdAllPairsNemenyiTest(m)' }[fm]}\n`; }
       } else t += `No se encontraron diferencias estadísticamente significativas, ${st}.`;
       sec.text.push(t);
       code += `friedman.test(as.matrix(datos_mr[, medidas]))\nrstatix::friedman_effsize(largo, valor ~ momento | id)\nrstatix::pairwise_wilcox_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm")  # p exacta sin empates ni ceros y n < 50, como Tharp`;
     }
     sec.code = code; return sec;
+  }
+
+  // pruebas no paramétricas adicionales para grupos independientes, elegidas por la persona
+  function addNPGroups(sec, yName, gName, tests) {
+    if (sec.error || !tests.length) return sec;
+    const gv = vByName(gName), y = numOf(vByName(yName)), g = catOf(gv), lv = levelsOf(gv), groups = lv.map(l => ({ name: l, x: [] }));
+    y.forEach((v, i) => { if (v !== null && g[i] !== null) groups[lv.indexOf(g[i])].x.push(v); });
+    const gs = groups.filter(q => q.x.length >= 3), xs = gs.map(q => q.x), nm = gs.map(q => esc(q.name)), txt = [];
+    let code = `\n# Pruebas no paramétricas adicionales\ndn <- subset(datos, !is.na(${rn(yName)}) & ${rn(gName)} %in% c(${gs.map(q => rq(q.name)).join(', ')}))\ndn$g <- factor(dn[[${rq(gName)}]], levels = c(${gs.map(q => rq(q.name)).join(', ')})); dn$y <- dn[[${rq(yName)}]]\n`;
+    if (tests.includes('median')) { const r = S.medianTest(xs);
+      if (isFinite(r.chi)) { const pUse = r.minE < 5 && r.pFisher != null ? r.pFisher : r.p;
+        sec.tables.push(apaTable(`Prueba de la mediana: ${yName} según ${gName}`, [''].concat(nm), [[`Por encima de ${f(r.med)} (mediana conjunta)`].concat(r.tab[0]), [`Igual o por debajo`].concat(r.tab[1])],
+          `χ²(${r.df}) = ${f(r.chi)}, ${pt(r.p)}${r.pFisher != null ? `; prueba exacta de Fisher: ${pt(r.pFisher)}` : ''}.${r.minE < 5 ? ' Hay frecuencias esperadas menores que 5: conviene usar la <i>p</i> exacta de Fisher.' : ''}`));
+        txt.push(`La prueba de la mediana ${pUse < .05 ? 'mostró' : 'no mostró'} diferencias entre los grupos en la proporción de casos por encima de la mediana conjunta (${f(r.med)}), χ²(${r.df}) = ${f(r.chi)}, ${pt(r.p)}${r.pFisher != null ? ` (prueba exacta de Fisher: ${pt(r.pFisher)})` : ''}.`); }
+      else txt.push('La prueba de la mediana no se pudo calcular: todos los casos quedan al mismo lado de la mediana conjunta.');
+      code += `tab <- table(dn$y > median(dn$y), dn$g)  # prueba de la mediana\nchisq.test(tab, correct = FALSE)\nfisher.test(tab, workspace = 2e7)\n`; }
+    if (tests.includes('ks')) {
+      if (gs.length !== 2) sec.checks.push(chk('info', `La prueba de Kolmogorov-Smirnov para dos muestras solo se aplica con 2 grupos (hay ${gs.length}): no se calculó.`));
+      else { const r = S.ks2(xs[0], xs[1]);
+        sec.tables.push(apaTable(`Kolmogorov-Smirnov para dos muestras: ${yName} según ${gName}`, ['<i>D</i>', '<i>p</i>', '<i>n</i>'], [[nz(r.D.toFixed(3)), pv(r.p), `${r.m} y ${r.n}`]],
+          `Compara las distribuciones completas (posición, dispersión y forma). <i>p</i> ${r.exact ? 'exacta' : 'asintótica'}, como ks.test de R.`));
+        txt.push(`La prueba de Kolmogorov-Smirnov ${r.p < .05 ? 'indicó' : 'no indicó'} que las distribuciones de ${esc(yName)} en ${nm[0]} y ${nm[1]} difieren, <i>D</i> = ${nz(r.D.toFixed(2))}, ${pt(r.p)}.`);
+        code += `ks.test(dn$y[dn$g == ${rq(gs[0].name)}], dn$y[dn$g == ${rq(gs[1].name)}])\n`; } }
+    if (tests.includes('jt')) { const r = S.jonckheere(xs);
+      sec.tables.push(apaTable(`Jonckheere-Terpstra: ${yName} según ${gName} (orden ${gs.map(q => q.name).join(' < ')})`, ['<i>J</i>', '<i>z</i>', '<i>p</i>', '<i>N</i>'], [[f(r.JT, 1), f(r.z), pv(r.p), r.N]],
+        `Contrasta una tendencia monótona en el orden de los grupos (${list(nm)}). <i>p</i> bilateral ${r.exact ? 'exacta' : `por aproximación normal${r.ties ? ' con corrección por empates' : ''}`}. Para cambiar el orden, usa el botón «Orden» en Variables.`));
+      txt.push(`La prueba de Jonckheere-Terpstra ${r.p < .05 ? `mostró una tendencia ${r.z > 0 ? 'creciente' : 'decreciente'}` : 'no mostró una tendencia significativa'} de ${esc(yName)} en el orden ${list(nm)}, <i>J</i> = ${f(r.JT, 1)}, <i>z</i> = ${f(r.z)}, ${pt(r.p)}.`);
+      code += r.exact ? `clinfun::jonckheere.test(dn$y, as.numeric(dn$g))  # p exacta\n` : `PMCMRplus::jonckheereTest(dn$y, dn$g)  # aproximación normal con corrección por empates\n`; }
+    if (txt.length) sec.text.push(txt.join(' '));
+    sec.why.push('Pruebas no paramétricas adicionales elegidas por ti: complementan el análisis principal sin sustituirlo.');
+    sec.code = (sec.code || '') + code; return sec;
+  }
+  // prueba de los signos para dos medidas relacionadas
+  function addSign(sec, aName, bName, alt, on) {
+    if (!on || sec.error) return sec;
+    const xa = numOf(vByName(aName)), xb = numOf(vByName(bName)), d = [];
+    xa.forEach((v, i) => { if (v !== null && xb[i] !== null) d.push(xb[i] - v); });
+    const r = S.signTest(d, alt), RA = { two: 'two.sided', greater: 'greater', less: 'less' }[alt];
+    sec.tables.push(apaTable(`Prueba de los signos: ${bName} − ${aName}`, ['Diferencias positivas', 'Negativas', 'Empates', '<i>p</i>'], [[r.pos, r.neg, r.ties, pv(r.p)]],
+      `Binomial exacta sobre las diferencias distintas de 0${alt !== 'two' ? ' (unilateral)' : ''}. Solo usa el signo de cada diferencia: menos potente que Wilcoxon, pero no supone simetría.`));
+    sec.text.push(`La prueba de los signos (${r.pos} diferencias positivas, ${r.neg} negativas y ${r.ties} empates) ${r.p < .05 ? 'fue' : 'no fue'} significativa, ${pt(r.p)}.`);
+    sec.code = (sec.code || '') + `\n# Prueba de los signos\nd <- datos[[${rq(bName)}]] - datos[[${rq(aName)}]]; d <- d[!is.na(d)]\nbinom.test(sum(d > 0), sum(d != 0)${alt !== 'two' ? `, alternative = "${RA}"` : ''})`;
+    return sec;
+  }
+  // una muestra: prueba de los signos y prueba de rachas
+  function addNPOne(sec, name, mu, alt, tests) {
+    if (sec.error || !tests.length) return sec;
+    const x = numOf(vByName(name)).filter(v => v !== null), RA = { two: 'two.sided', greater: 'greater', less: 'less' }[alt];
+    let code = '\n# Pruebas adicionales\nx <- na.omit(datos[[' + rq(name) + ']])\n';
+    if (tests.includes('sign')) { const r = S.signTest(x.map(v => v - mu), alt);
+      sec.tables.push(apaTable(`Prueba de los signos: ${name} frente a ${fmtNum(mu)}`, ['Por encima', 'Por debajo', 'Iguales', '<i>Mdn</i>', '<i>p</i>'], [[r.pos, r.neg, r.ties, f(S.quantile(S.sorted(x), .5)), pv(r.p)]],
+        `Binomial exacta${alt !== 'two' ? ' unilateral' : ''}: contrasta si la mediana difiere de ${fmtNum(mu)} sin suponer simetría.`));
+      sec.text.push(`La prueba de los signos ${r.p < .05 ? 'indicó' : 'no indicó'} que la mediana de ${esc(name)} difiere de ${fmtNum(mu)} (${r.pos} valores por encima y ${r.neg} por debajo), ${pt(r.p)}.`);
+      code += `binom.test(sum(x > ${mu}), sum(x != ${mu})${alt !== 'two' ? `, alternative = "${RA}"` : ''})  # prueba de los signos\n`; }
+    if (tests.includes('runs')) { const r = S.runsTest(x);
+      if (r) { sec.tables.push(apaTable(`Prueba de rachas: ${name}`, ['Rachas', 'Esperadas', '<i>n</i> (≤ / > mediana)', '<i>z</i>', '<i>p</i>'], [[r.runs, f(r.E), `${r.m} / ${r.n}`, r.exact ? '—' : f(r.z), pv(r.p)]],
+          `Valores por encima de la mediana (${r.med === null ? '—' : f(r.med)}) frente al resto, en el orden de las filas del archivo. <i>p</i> ${r.exact ? 'exacta (n ≤ 30)' : 'normal con corrección por continuidad'}, como DescTools::RunsTest.`));
+        sec.text.push(`La prueba de rachas ${r.p < .05 ? `indicó que la secuencia no es aleatoria (${r.runs < r.E ? 'menos' : 'más'} rachas de las esperadas)` : 'no indicó desviaciones de la aleatoriedad en el orden de los casos'}: ${r.runs} rachas frente a ${f(r.E)} esperadas, ${pt(r.p)}.`); }
+      code += 'DescTools::RunsTest(x)  # prueba de rachas respecto a la mediana\n'; }
+    sec.code = (sec.code || '') + code; return sec;
   }
 
   function runChi(aName, bName, sName = '') {
@@ -2248,9 +2322,9 @@
     try {
       if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v, ($('#descG') || {}).value || '')); }
       if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value, checkedVals('corrZ')));
-      if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g, ($('#compAlt') || {}).value || 'two', { ph: ($('#compPH') || {}).value || 'auto', ctrl: ($('#compCtrl') || {}).value || '', con: ($('#compCon') || {}).value || '' }))); }
+      if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(addNPGroups(runCompare(y, g, ($('#compAlt') || {}).value || 'two', { ph: ($('#compPH') || {}).value || 'auto', ctrl: ($('#compCtrl') || {}).value || '', con: ($('#compCon') || {}).value || '' }), y, g, checkedVals('compNP')))); }
       if (isOn('one')) { const ys = checkedVals('oY'), mu = parseFloat(String(($('#oMu') || {}).value || '').replace(',', '.'));
-        if (ys.length) ys.forEach(y => add(runOneSample(y, mu, ($('#oAlt') || {}).value || 'two')));
+        if (ys.length) ys.forEach(y => add(addNPOne(runOneSample(y, mu, ($('#oAlt') || {}).value || 'two'), y, mu, ($('#oAlt') || {}).value || 'two', checkedVals('oNP'))));
         else add({ title: 'Una muestra', error: 'Selecciona al menos una variable.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('prop')) { const vs = checkedVals('prV'), p0 = parseFloat(String(($('#prP0') || {}).value || '0.5').replace(',', '.')), pr = String(($('#prProbs') || {}).value || '').trim();
         if (vs.length) vs.forEach(v => add(runProp(v, p0, ($('#prAlt') || {}).value || 'two', pr)));
@@ -2261,7 +2335,7 @@
         const k1 = Math.round(+$('#pW1K').value), k2 = Math.round(+$('#pW2K').value);
         add(runRm2(checkedVals('pM'), [($('#pW1N').value || 'Factor 1').trim(), ($('#pW2N').value || 'Factor 2').trim()], [k1, k2], ($('#pB') || {}).value || '')); }
       else if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
-        add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1], ($('#pAlt') || {}).value || 'two') : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
+        add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? addSign(runPaired(m[0], m[1], ($('#pAlt') || {}).value || 'two', checkedVals('pNP').includes('force')), m[0], m[1], ($('#pAlt') || {}).value || 'two', checkedVals('pNP').includes('sign')) : m.length > 2 ? runRepeated(m, { ph: ($('#pFPH') || {}).value || 'wilcoxon', force: checkedVals('pNP').includes('force') }) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value, ($('#cS') || {}).value || ''));
       if (isOn('reg')) { const meth = ($('#rM') || {}).value || 'enter';
         if (meth === 'blocks') { const bl = [checkedVals('rX'), checkedVals('rB2'), checkedVals('rB3')].map((b, i, all) => b.filter(x => !all.slice(0, i).flat().includes(x))).filter(b => b.length);
@@ -2289,6 +2363,22 @@
     ST.sections = secs; ST.log = log; renderResults(); show(4);
     track('analisis_ejecutados', { n: secs.length, pruebas: secs.filter(x => !x.error).map(x => x.test || '').join(' | ').slice(0, 480) });
   }
+  // cita de Tharp (APA 7, software): frase para el método y referencia; sin datos ni nombres de variables
+  function citeTharp() {
+    const V = window.TharpVersion || { version: '', year: new Date().getFullYear(), url: 'https://tharp.es', doi: '' }, link = V.doi ? `https://doi.org/${V.doi}` : V.url;
+    return { version: V.version, method: `Los análisis estadísticos se realizaron con Tharp (versión ${V.version}; Equipo de Tharp, ${V.year}).`,
+      refHtml: `Equipo de Tharp. (${V.year}). <i>Tharp</i> (Versión ${V.version}) [Software]. ${link}`, refText: `Equipo de Tharp. (${V.year}). Tharp (Versión ${V.version}) [Software]. ${link}` };
+  }
+  function citeBox() {
+    const c = citeTharp();
+    return `<div class="res cite"><h2>Cómo citar Tharp</h2>
+      <p class="small muted">Las normas APA (7.ª ed.) piden mencionar en el método el software con el que se hicieron los análisis y citarlo en las referencias, como se hace con SPSS, JASP o R.</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px"><b>En el apartado de análisis de datos</b><button class="btn btn-line btn-sm" data-cite="citeM">Copiar</button></div>
+      <p id="citeM">${c.method}</p>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:12px"><b>En la lista de referencias</b><button class="btn btn-line btn-sm" data-cite="citeR">Copiar</button></div>
+      <p id="citeR" style="padding-left:2em;text-indent:-2em">${c.refHtml}</p>
+      <p class="small muted">Si usas el script de R para reproducir los análisis, cita también R y los paquetes empleados: <code>citation()</code> y <code>citation("nombre_del_paquete")</code> en R dan la referencia de cada uno.</p></div>`;
+  }
   function renderResults() {
     $('#log').innerHTML = ST.log.map(l => `<li>${l}</li>`).join('');
     $('#results').innerHTML = ST.sections.map((s, si) => {
@@ -2307,7 +2397,8 @@
         ${s.checks.length ? `<details open><summary>Supuestos comprobados</summary><ul class="checks">${s.checks.map(c => `<li class="${c.s}">${c.t}</li>`).join('')}</ul></details>` : ''}
         <details><summary>Código R para reproducirlo</summary><pre>${esc(s.code)}</pre></details>
       </div>`;
-    }).join('');
+    }).join('') + (ST.sections.length ? citeBox() : '');
+    $$('[data-cite]').forEach(b => b.onclick = () => { const el = $('#' + b.dataset.cite); navigator.clipboard.writeText(el.innerText).then(() => { b.textContent = 'Copiado ✓'; setTimeout(() => b.textContent = 'Copiar', 1500); }); track('copiar_cita'); });
     $$('[data-copy]').forEach(b => b.onclick = () => { const t = $('#txt' + b.dataset.copy).innerText; navigator.clipboard.writeText(t).then(() => { b.textContent = 'Copiado ✓'; setTimeout(() => b.textContent = 'Copiar texto', 1500); }); });
     $$('[data-png]').forEach(b => b.onclick = () => { const [si, ci] = b.dataset.png.split('-').map(Number), c = ST.sections[si].charts[ci]; svgToPng(c.svg, c.title); track('descarga_png'); });
   }
@@ -2357,7 +2448,7 @@
         return out;
       };
       const kids = [new D.Paragraph({ heading: D.HeadingLevel.TITLE, children: [new D.TextRun('Resultados del análisis estadístico')] }),
-        P(`Generado con Tharp (tharp.es) el ${new Date().toLocaleDateString('es-ES')} a partir de «${esc(ST.fileName)}».`, { run: { color: '555555' } }),
+        P(`Generado con Tharp ${citeTharp().version} (tharp.es) el ${new Date().toLocaleDateString('es-ES')} a partir de «${esc(ST.fileName)}».`, { run: { color: '555555' } }),
         new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, children: [new D.TextRun('Registro de decisiones')] })];
       ST.log.forEach((l, i) => kids.push(P(`${i + 1}. ${l}`)));
       let figN = 0;
@@ -2380,6 +2471,12 @@
         s.checks.forEach(c => kids.push(P(({ ok: '✓ ', no: '⚠ ', info: 'ℹ ' })[c.s] + c.t)));
         if (s.sens) kids.push(P(s.sens));
       }
+      { const c = citeTharp();
+        kids.push(new D.Paragraph({ heading: D.HeadingLevel.HEADING_1, children: [new D.TextRun('Cómo citar Tharp')], spacing: { before: 360 } }),
+          P('Las normas APA (7.ª ed.) piden mencionar en el método el software con el que se hicieron los análisis y citarlo en las referencias.', { run: { color: '555555' } }),
+          P('<b>En el apartado de análisis de datos:</b> ' + c.method),
+          P('<b>En la lista de referencias:</b>'), P(c.refHtml, { p: { indent: { left: 720, hanging: 720 } } }),
+          P('Si usas el script de R, cita también R y los paquetes empleados: citation() y citation("nombre_del_paquete") en R dan la referencia de cada uno.', { run: { color: '555555' } })); }
       const doc = new D.Document({ creator: 'Tharp', title: 'Resultados del análisis estadístico',
         styles: { default: { document: { run: { font: 'Times New Roman', size: 24 } } } }, sections: [{ children: kids }] });
       download('tharp_resultados.docx', await D.Packer.toBlob(doc)); track('descarga_word');
@@ -2400,14 +2497,14 @@
     });
     const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Resultados</title>
       <style>body{font-family:'Times New Roman',serif;font-size:12pt;line-height:1.5}h1{font-size:16pt}h2{font-size:13pt;margin-top:18pt}table{border-collapse:collapse;margin:6pt 0}.note{font-size:10pt}.muted{color:#555}</style></head><body>
-      <h1>Resultados del análisis estadístico</h1><p class="muted">Generado con Tharp (tharp.es) el ${new Date().toLocaleDateString('es-ES')} a partir de «${esc(ST.fileName)}».</p>
+      <h1>Resultados del análisis estadístico</h1><p class="muted">Generado con Tharp ${citeTharp().version} (tharp.es) el ${new Date().toLocaleDateString('es-ES')} a partir de «${esc(ST.fileName)}».</p>
       <h2>Registro de decisiones</h2><ol>${ST.log.map(l => `<li>${l}</li>`).join('')}</ol>${box.innerHTML}
       <p class="muted" style="margin-top:24pt">Los gráficos pueden descargarse en formato PNG desde Tharp e insertarse en este documento.</p></body></html>`;
     download('tharp_resultados.doc', new Blob(['﻿', html], { type: 'application/msword' }));
   }
   function exportR() {
     const isCsv = /\.(csv|tsv|txt)$/i.test(ST.fileName), isJasp = /\.jasp$/i.test(ST.fileName), isSav = /\.z?sav$/i.test(ST.fileName), cats = byType('cat');
-    let s = `# ===============================================================\n# Script generado por Tharp (tharp.es) — ${new Date().toLocaleDateString('es-ES')}\n# Reproduce los análisis realizados sobre «${ST.fileName}»\n# Paquetes: psych, car, effectsize, rstatix, FSA, rcompanion, lmtest, sandwich, parameters\n# ===============================================================\n\n`;
+    let s = `# ===============================================================\n# Script generado por Tharp ${citeTharp().version} (tharp.es) — ${new Date().toLocaleDateString('es-ES')}\n# Reproduce los análisis realizados sobre «${ST.fileName}»\n# Paquetes: psych, car, effectsize, rstatix, FSA, rcompanion, lmtest, sandwich, parameters\n#\n# Cómo citarlo (APA 7):\n#   ${citeTharp().refText}\n#   Cita también R y los paquetes que uses: citation() y citation(\"paquete\") dan sus referencias.\n# ===============================================================\n\n`;
     const NA = 'c("", "NA", "N/A", "n/a", "NaN", "null", "NULL", ".", "-", "#N/A", "NS/NC", "ns/nc", "NSNC")';
     const csv = ST.csv || { sep: ';', dec: ',', enc: 'UTF-8-BOM' };
     s += isJasp ? `# R no lee archivos .jasp: en JASP usa Archivo → Exportar → Exportar datos (CSV) y guárdalo junto a este script.\ndatos <- read.csv(${rq(ST.fileName.replace(/\.jasp$/i, '.csv'))}, na.strings = ${NA}, check.names = FALSE, strip.white = TRUE)\n`
