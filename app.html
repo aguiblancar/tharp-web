@@ -180,6 +180,22 @@ footer{padding:30px 0 50px;color:var(--muted);font-size:.85rem}
       <p class="muted small" style="margin:12px 0 16px">Revisa el tipo de cada variable. Tharp lo ha detectado automáticamente, pero tú decides: cámbialo si no es correcto.</p>
       <div class="scroll"><table class="vars" id="varTable"></table></div>
     </div>
+    <div class="card" id="prepCard">
+      <h2 style="font-size:1.35rem;margin-bottom:6px">Preparar los datos <span class="muted small" style="font-family:Inter,sans-serif;font-weight:400">(opcional)</span></h2>
+      <p class="muted small" style="margin:0 0 12px">Calcula puntuaciones de escalas, invierte ítems, agrupa categorías, crea grupos o filtra casos. Tus datos originales no cambian: cada transformación crea una variable nueva (o filtra casos), se puede deshacer y se incluye en el script R.</p>
+      <label class="field"><span>¿Qué quieres hacer?</span><select id="tfType">
+        <option value="">Elige una transformación…</option>
+        <option value="scale">Puntuación de una escala (suma o media de ítems)</option>
+        <option value="reverse">Invertir un ítem</option>
+        <option value="recode">Agrupar o recodificar categorías</option>
+        <option value="cut">Crear grupos a partir de una variable cuantitativa</option>
+        <option value="diff">Diferencia entre dos variables (por ejemplo, post − pre)</option>
+        <option value="z">Puntuaciones típicas (z)</option>
+        <option value="filter">Filtrar casos (analizar solo un subgrupo)</option></select></label>
+      <div id="tfForm"></div>
+      <div id="tfMsg"></div>
+      <div id="tfList"></div>
+    </div>
     <div class="bar"><button class="btn btn-line" data-go="1">← Cambiar archivo</button><button class="btn btn-dark" data-go="3">Continuar →</button></div>
   </section>
 
