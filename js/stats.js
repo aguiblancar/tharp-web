@@ -1201,6 +1201,51 @@
       sobel: { z: sobelZ, p: pZ(sobelZ) }, abStd: ab * sdx / sdy, r2m: fa.r2, r2y: fb.r2, n };
   }
 
+  // ---------- modelos de PROCESS (Hayes): 4 con mediadores en paralelo, 6 en serie, 7 y 14 de mediación moderada ----------
+  // y, x: arrays; Ms: mediadores; W: moderador (modelos 7 y 14); C: covariables. Sin centrar, como PROCESS por defecto.
+  // Devuelve las ecuaciones (coeficientes con EE, t y p) y los efectos indirectos con IC bootstrap percentil (B remuestras, semilla fija).
+  function processModel(model, y, x, Ms, W = null, C = [], B = 5000, seed = 20261015, wVals = null) {
+    const n = y.length, k = Ms.length;
+    const row = (i, parts) => [1].concat(...parts.map(pt => pt(i)));
+    const X_ = i => [x[i]], Mj = j => i => [Ms[j][i]], Cv = i => C.map(c => c[i]), Wv = i => [W[i]], XW = i => [x[i] * W[i]], MW = j => i => [Ms[j][i] * W[i]];
+    // diseño de cada ecuación: lista de bloques; names para mostrar
+    const eqs = [];
+    if (model === 4) { for (let j = 0; j < k; j++) eqs.push({ dv: 'M' + j, parts: [X_, Cv], names: ['X'].concat(C.map((_, q) => 'C' + q)) });
+      eqs.push({ dv: 'Y', parts: [X_].concat(Ms.map((_, j) => Mj(j))).concat([Cv]), names: ['X'].concat(Ms.map((_, j) => 'M' + j), C.map((_, q) => 'C' + q)) }); }
+    if (model === 6) { for (let j = 0; j < k; j++) eqs.push({ dv: 'M' + j, parts: [X_].concat(Ms.slice(0, j).map((_, q) => Mj(q))).concat([Cv]), names: ['X'].concat(Ms.slice(0, j).map((_, q) => 'M' + q), C.map((_, q) => 'C' + q)) });
+      eqs.push({ dv: 'Y', parts: [X_].concat(Ms.map((_, j) => Mj(j))).concat([Cv]), names: ['X'].concat(Ms.map((_, j) => 'M' + j), C.map((_, q) => 'C' + q)) }); }
+    if (model === 7) { eqs.push({ dv: 'M0', parts: [X_, Wv, XW, Cv], names: ['X', 'W', 'X×W'].concat(C.map((_, q) => 'C' + q)) });
+      eqs.push({ dv: 'Y', parts: [X_, Mj(0), Cv], names: ['X', 'M0'].concat(C.map((_, q) => 'C' + q)) }); }
+    if (model === 14) { eqs.push({ dv: 'M0', parts: [X_, Cv], names: ['X'].concat(C.map((_, q) => 'C' + q)) });
+      eqs.push({ dv: 'Y', parts: [X_, Mj(0), Wv, MW(0), Cv], names: ['X', 'M0', 'W', 'M0×W'].concat(C.map((_, q) => 'C' + q)) }); }
+    const dvOf = (dv, i) => (dv === 'Y' ? y[i] : Ms[+dv.slice(1)][i]);
+    const fitAll = idx => eqs.map(e => olsCore(idx.map(i => row(i, e.parts)), idx.map(i => dvOf(e.dv, i))));
+    const coef = (fits, dv, nm) => { const q = eqs.findIndex(e => e.dv === dv), j = eqs[q].names.indexOf(nm); return fits[q].b[j + 1]; };
+    // valores del moderador: percentiles 16, 50 y 84 (PROCESS v4) o los dos valores si es dicotómico
+    const wv = W ? (wVals || (() => { const u = [...new Set(W)].sort((a, b) => a - b); if (u.length === 2) return u; const s = sorted(W); return [quantile(s, .16), quantile(s, .5), quantile(s, .84)]; })()) : [];
+    const effects = fits => { const out = {}, c = (dv, nm) => coef(fits, dv, nm);
+      if (model === 4) { let tot = 0; for (let j = 0; j < k; j++) { const v = c('M' + j, 'X') * c('Y', 'M' + j); out['ind' + j] = v; tot += v; } out.indTot = tot;
+        for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) out[`con${a}_${b}`] = out['ind' + a] - out['ind' + b]; }
+      if (model === 6) { // rutas: cada subconjunto ordenado de mediadores
+        let tot = 0; const paths = []; const rec = (last, chain) => { for (let j = last + 1; j < k; j++) { const ch = chain.concat([j]); paths.push(ch); rec(j, ch); } }; rec(-1, []);
+        paths.forEach(ch => { let v = c('M' + ch[0], 'X'); for (let q = 1; q < ch.length; q++) v *= c('M' + ch[q], 'M' + ch[q - 1]); v *= c('Y', 'M' + ch[ch.length - 1]); out['path' + ch.join('_')] = v; tot += v; }); out.indTot = tot; }
+      if (model === 7) { const a1 = c('M0', 'X'), a3 = c('M0', 'X×W'), b = c('Y', 'M0'); wv.forEach((w, q) => { out['cond' + q] = (a1 + a3 * w) * b; }); out.imm = a3 * b; }
+      if (model === 14) { const a = c('M0', 'X'), b1 = c('Y', 'M0'), b3 = c('Y', 'M0×W'); wv.forEach((w, q) => { out['cond' + q] = a * (b1 + b3 * w); }); out.imm = a * b3; }
+      return out; };
+    const all = Array.from({ length: n }, (_, i) => i), fits = fitAll(all); if (fits.some(f_ => !f_)) return null;
+    const est = effects(fits);
+    let s = seed >>> 0; const rnd = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    const boot = Object.fromEntries(Object.keys(est).map(key => [key, []]));
+    for (let r = 0; r < B; r++) { const idx = Array.from({ length: n }, () => Math.floor(rnd() * n)), bf = fitAll(idx); if (bf.some(f_ => !f_)) continue; const e = effects(bf); Object.keys(e).forEach(key => boot[key].push(e[key])); }
+    const ci = Object.fromEntries(Object.keys(est).map(key => { const bs = sorted(boot[key]); return [key, { est: est[key], se: sd(boot[key]), ci: [quantile(bs, .025), quantile(bs, .975)] }]; }));
+    // ecuaciones con inferencia completa
+    const eqOut = eqs.map(e => { const Xd = all.map(i => row(i, e.parts)), m = ols(Xd, all.map(i => dvOf(e.dv, i))); return { dv: e.dv, names: ['(Constante)'].concat(e.names), b: m.b, se: m.se, t: m.t, p: m.pv, ci: m.ci, r2: m.r2, F: m.F, df1: m.df1, dfr: m.dfr, pF: m.pF }; });
+    // efectos total y directo de X sobre Y
+    const tot = ols(all.map(i => [1, x[i]].concat(C.map(c => c[i]))), y), dirEq = eqOut.find(e => e.dv === 'Y'), jx = dirEq.names.indexOf('X');
+    return { model, n, eqs: eqOut, effects: ci, B: Math.min(...Object.values(boot).map(v => v.length)), wv,
+      total: { b: tot.b[1], se: tot.se[1], t: tot.t[1], p: tot.pv[1], ci: tot.ci[1] }, direct: { b: dirEq.b[jx], se: dirEq.se[jx], t: dirEq.t[jx], p: dirEq.p[jx], ci: dirEq.ci[jx] } };
+  }
+
   // ---------- optimización sin derivadas (Nelder-Mead) ----------
   function nelderMead(fn, x0, step = 0.5, tol = 1e-10, maxit = 4000) {
     const n = x0.length; let pts = [x0.slice()].concat(x0.map((_, i) => { const p = x0.slice(); p[i] += step * (Math.abs(p[i]) || 1); return p; }));
@@ -1352,5 +1397,5 @@
 
   root.TharpStats = { brantTest, glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
-    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
+    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, processModel, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

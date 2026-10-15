@@ -456,7 +456,13 @@
     h += card('med', !!D.med && nums.length >= 2, 'Mediación (efecto indirecto)', '¿X influye en Y a través de un mediador M? Efectos a, b, c y c′ y efecto indirecto con intervalo bootstrap (modelo 4 de PROCESS).',
       `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Predictor (X)</span>${sel('meX', xs, pick(dMe.x, defMeX))}</label>
        <label class="field"><span>Mediador (M)</span>${sel('meM', nums, pick(dMe.m, defMeM))}</label>
-       <label class="field"><span>Variable dependiente (Y)</span>${sel('meY', nums, pick(dMe.y, defMeY))}</label></div>`,
+       <label class="field"><span>Variable dependiente (Y)</span>${sel('meY', nums, pick(dMe.y, defMeY))}</label></div>
+       <label class="field"><span>Modelo de PROCESS</span><select id="meMod" onchange="document.getElementById('meMW').style.display = this.value === '4p' || this.value === '6' ? '' : 'none'; document.getElementById('meWW').style.display = this.value === '7' || this.value === '14' ? '' : 'none'">
+         <option value="4">4 · Mediación simple (recomendado si tienes un mediador)</option><option value="4p">4 · Varios mediadores en paralelo</option><option value="6">6 · Mediadores en serie (X → M1 → M2 → Y)</option>
+         <option value="7">7 · Mediación moderada: W modera X → M</option><option value="14">14 · Mediación moderada: W modera M → Y</option></select></label>
+       <div class="field" id="meMW" style="display:none"><span>Mediadores adicionales (en serie, se encadenan después de M en el orden del archivo)</span>${chips('meM2', nums, () => false)}</div>
+       <label class="field" id="meWW" style="display:none"><span>Moderador (W)</span>${sel('meW', xs, nmN(xs.find(v => v.name !== defMeY && v.name !== defMeM && v.name !== defMeX)))}</label>
+       <div class="field"><span>Covariables (opcional)</span>${chips('meC', nums, () => false)}</div>`,
       nums.length < 2 ? 'Necesitas un predictor, un mediador cuantitativo y una variable dependiente cuantitativa.' : '');
     const dL2 = D.lmm || {}, allV = ST.vars, gDef = (allV.find(v => /^(id|participante|sujeto|caso|case|subject|grupo|clase|centro|escuela|colegio)$|(^id[_ ]|[_ ]id$)/i.test(v.name)) || allV[0] || {}).name;
     h += card('lmm', !!D.lmm && nums.length >= 1, 'Modelo lineal mixto (datos longitudinales o anidados)', 'Varias mediciones por persona, o personas dentro de grupos (alumnos en clases, pacientes en hospitales): efectos fijos con gl de Satterthwaite, efectos aleatorios, CCI y R² de Nakagawa.',
@@ -1065,7 +1071,7 @@
           ph.map(o => [`${esc(names[o.b])} − ${esc(names[o.a])}`, f(o.r.z), pv(o.padj)])));
       } else t += `No se encontraron diferencias estadísticamente significativas, ${st}.`;
       sec.text.push(t);
-      code += `friedman.test(as.matrix(datos_mr[, medidas]))\nrstatix::friedman_effsize(largo, valor ~ momento | id)\nrstatix::pairwise_wilcox_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm", exact = FALSE)`;
+      code += `friedman.test(as.matrix(datos_mr[, medidas]))\nrstatix::friedman_effsize(largo, valor ~ momento | id)\nrstatix::pairwise_wilcox_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm")  # p exacta sin empates ni ceros y n < 50, como Tharp`;
     }
     sec.code = code; return sec;
   }
@@ -1447,6 +1453,64 @@
     return sec;
   }
 
+  // Modelos de PROCESS con varios mediadores, en serie, de mediación moderada o con covariables
+  function runProcess(mo, yN, xN, mNames, wN, cNames) {
+    const model = mo === '4p' ? 4 : +mo, MN = { 4: mNames.length > 1 ? 'mediación con mediadores en paralelo' : 'mediación simple', 6: 'mediación en serie', 7: 'mediación moderada en la primera etapa', 14: 'mediación moderada en la segunda etapa' }[model];
+    const sec = { title: `Mediación: ${xN} → ${mNames.join(model === 6 ? ' → ' : ', ')} → ${yN}${wN ? ` (moderador: ${wN})` : ''}`, test: `PROCESS, modelo ${model} (${MN}, bootstrap)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const used = [yN, xN, ...mNames, wN].filter(Boolean); if (new Set(used).size !== used.length) { sec.error = 'Y, X, los mediadores y el moderador deben ser variables distintas.'; return sec; }
+    if ((model === 7 || model === 14) && !wN) { sec.error = 'Elige un moderador (W).'; return sec; }
+    if ((mo === '4p' || model === 6) && mNames.length < 2) { sec.error = 'Marca al menos un mediador adicional.'; return sec; }
+    if (model === 6 && mNames.length > 4) { sec.error = 'El modelo en serie admite hasta 4 mediadores.'; return sec; }
+    cNames = cNames.filter(c => !used.includes(c));
+    const xv = numOrBin(vByName(xN)), wv = wN ? numOrBin(vByName(wN)) : null; if (!xv || (wN && !wv)) { sec.error = 'X y W deben ser cuantitativas o tener exactamente 2 categorías.'; return sec; }
+    const yv = numOf(vByName(yN)), mv = mNames.map(m => numOf(vByName(m))), cv = cNames.map(c => numOf(vByName(c)));
+    const idx = ST.rows.map((_, i) => i).filter(i => yv[i] !== null && xv.vals[i] !== null && mv.every(m => m[i] !== null) && (!wv || wv.vals[i] !== null) && cv.every(c => c[i] !== null)), n = idx.length;
+    if (n < 10 + mNames.length + cNames.length) { sec.error = `Hay pocos casos completos (${n}).`; return sec; }
+    const pick_ = arr => idx.map(i => arr[i]), r = S.processModel(model, pick_(yv), pick_(xv.vals), mv.map(pick_), wv ? pick_(wv.vals) : null, cv.map(pick_));
+    if (!r) { sec.error = 'No se pudo estimar el modelo (colinealidad entre variables).'; return sec; }
+    const nm = k => (k === 'X' ? esc(xN) : k === 'W' ? esc(wN) : k === 'X×W' ? `${esc(xN)} × ${esc(wN)}` : /^M\d$/.test(k) ? esc(mNames[+k[1]]) : /^M\d×W$/.test(k) ? `${esc(mNames[+k[1]])} × ${esc(wN)}` : /^C\d$/.test(k) ? esc(cNames[+k[1]]) : k);
+    const ci2 = c => `[${f(c[0], 3)}, ${f(c[1], 3)}]`, sig = c => c[0] > 0 || c[1] < 0;
+    sec.why.push(`Modelo ${model} de PROCESS (Hayes, 2022): ${MN}. ${model === 6 ? 'Los mediadores se encadenan en el orden indicado.' : ''}`);
+    sec.why.push(`Los efectos indirectos se contrastan con intervalos de confianza bootstrap percentil (${r.B} remuestras, semilla fija para que el resultado sea reproducible): hay efecto si el intervalo no incluye el 0.`);
+    if (wN) sec.why.push(`Los efectos indirectos condicionados se calculan en ${r.wv.length === 2 ? 'los dos valores' : 'los percentiles 16, 50 y 84'} de ${esc(wN)} (como PROCESS v4). El índice de mediación moderada (Hayes, 2015) contrasta si el efecto indirecto cambia con W.`);
+    if (cNames.length) sec.why.push(`Covariables en todas las ecuaciones: ${list(cNames.map(esc))}.`);
+    sec.decision = `Se estimó el modelo ${model} de PROCESS (${MN}) con ${n} casos e intervalos bootstrap de ${r.B} remuestras.`;
+    if (xv.bin) sec.checks.push(chk('info', `${esc(xN)} es dicotómica: se codifica 0 = ${esc(xv.lv[0])}, 1 = ${esc(xv.lv[1])}.`));
+    r.eqs.forEach(e => { const dvN = e.dv === 'Y' ? esc(yN) : esc(mNames[+e.dv.slice(1)]);
+      sec.tables.push(apaTable(`Ecuación de ${dvN}`, ['Predictor', '<i>B</i>', '<i>EE</i>', '<i>t</i>', '<i>p</i>', 'IC 95 %'], e.names.map((k, j) => [nm(k), f(e.b[j], 3), f(e.se[j], 3), f(e.t[j]), pv(e.p[j]), ci2(e.ci[j])]),
+        `<i>R</i>² = ${nz(e.r2.toFixed(3))}, <i>F</i>(${e.df1}, ${e.dfr}) = ${f(e.F)}, ${pt(e.pF)}.`)); });
+    const effRows = [['Efecto total (c)', f(r.total.b, 3), f(r.total.se, 3), ci2(r.total.ci), pv(r.total.p)], ['Efecto directo (c′)', f(r.direct.b, 3), f(r.direct.se, 3), ci2(r.direct.ci), pv(r.direct.p)]];
+    const E = r.effects, ind = [];
+    if (model === 4) { mNames.forEach((m, j) => ind.push([`Indirecto a través de ${esc(m)}`, E['ind' + j]])); if (mNames.length > 1) { ind.push(['Indirecto total', E.indTot]); for (let a = 0; a < mNames.length; a++) for (let b = a + 1; b < mNames.length; b++) ind.push([`Contraste: ${esc(mNames[a])} − ${esc(mNames[b])}`, E[`con${a}_${b}`]]); } }
+    if (model === 6) { Object.keys(E).filter(k => k.startsWith('path')).forEach(k => ind.push([`${esc(xN)} → ${k.slice(4).split('_').map(j => esc(mNames[+j])).join(' → ')} → ${esc(yN)}`, E[k]])); ind.push(['Indirecto total', E.indTot]); }
+    if (model === 7 || model === 14) { r.wv.forEach((w, q) => ind.push([`Indirecto con ${esc(wN)} = ${wv.bin ? esc(wv.lv[q]) : f(w)}${wv.bin ? '' : ` (percentil ${[16, 50, 84][q]})`}`, E['cond' + q]])); ind.push(['Índice de mediación moderada', E.imm]); }
+    ind.forEach(([lab, e]) => effRows.push([lab, f(e.est, 3), f(e.se, 3), ci2(e.ci), sig(e.ci) ? 'IC excluye 0' : 'IC incluye 0']));
+    sec.tables.push(apaTable('Efectos total, directo e indirectos', ['Efecto', 'Estimación', '<i>EE</i>', 'IC 95 %', 'Significación'], effRows,
+      `Efectos total y directo con su <i>t</i> habitual; efectos indirectos con EE e IC bootstrap percentil (${r.B} remuestras). Coeficientes no estandarizados.`));
+    let t = `Se estimó un modelo de ${MN} (modelo ${model} de PROCESS; Hayes, 2022) para analizar si el efecto de ${esc(xN)} sobre ${esc(yN)} ${model === 7 || model === 14 ? `a través de ${esc(mNames[0])} dependía de ${esc(wN)}` : `estaba mediado por ${list(mNames.map(esc))}`}${cNames.length ? `, controlando ${list(cNames.map(esc))}` : ''}, con intervalos de confianza bootstrap de ${r.B} remuestras. `;
+    t += `El efecto total fue ${r.total.p < .05 ? 'significativo' : 'no significativo'} (<i>c</i> = ${f(r.total.b)}, ${pt(r.total.p)}) y el directo ${r.direct.p < .05 ? 'significativo' : 'no significativo'} (<i>c′</i> = ${f(r.direct.b)}, ${pt(r.direct.p)}). `;
+    t += ind.map(([lab, e]) => `${lab.replace(/<[^>]+>/g, '')}: ${f(e.est, 3)}, IC 95 % ${ci2(e.ci)}${sig(e.ci) ? ' (significativo)' : ' (no significativo)'}`).join('; ') + '.';
+    if (model === 7 || model === 14) t += sig(E.imm.ci) ? ` El índice de mediación moderada fue significativo: el efecto indirecto cambió según ${esc(wN)}.` : ` El índice de mediación moderada no fue significativo: no hay evidencia de que el efecto indirecto dependa de ${esc(wN)}.`;
+    sec.text.push(t);
+    // código R reproducible: variables con nombres cortos (Y, X, M1…, W, C1…) y bootstrap percentil con el paquete boot
+    const Mn = mNames.map((_, j) => 'M' + (j + 1)), Cn = cNames.map((_, j) => 'C' + (j + 1)), Cf = Cn.length ? ' + ' + Cn.join(' + ') : '';
+    const src = v => `datos[[${rq(v)}]]`, bin = (v, info) => (info && info.bin ? `as.numeric(${src(v)} == ${rq(info.lv[1])})` : src(v));
+    const dfCode = `d <- data.frame(Y = ${src(yN)}, X = ${bin(xN, xv)}${mNames.map((m, j) => `, ${Mn[j]} = ${src(m)}`).join('')}${wN ? `, W = ${bin(wN, wv)}` : ''}${cNames.map((c, j) => `, ${Cn[j]} = ${src(c)}`).join('')})`;
+    let body;
+    if (model === 4) body = Mn.map((m, j) => `a${j + 1} <- coef(lm(${m} ~ X${Cf}, d))["X"]`).concat([`bY <- coef(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`, `ind <- c(${Mn.map((m, j) => `a${j + 1} * bY["${m}"]`).join(', ')})`, Mn.length > 1 ? 'c(ind, total = sum(ind))' : 'ind']).join('; ');
+    else if (model === 6) { const eqs = Mn.map((m, j) => `e${j + 1} <- coef(lm(${m} ~ X${Mn.slice(0, j).map(z => ' + ' + z).join('')}${Cf}, d))`);
+      const paths = Object.keys(E).filter(k => k.startsWith('path')).map(k => k.slice(4).split('_').map(Number));
+      const expr = ch => [`e${ch[0] + 1}["X"]`].concat(ch.slice(1).map((j, q) => `e${j + 1}["${Mn[ch[q]]}"]`)).concat([`bY["${Mn[ch[ch.length - 1]]}"]`]).join(' * ');
+      body = eqs.concat([`bY <- coef(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`, `ind <- c(${paths.map(expr).join(', ')})`, 'c(ind, total = sum(ind))']).join('; '); }
+    else if (model === 7) body = `eM <- coef(lm(M1 ~ X * W${Cf}, d)); b <- coef(lm(Y ~ X + M1${Cf}, d))["M1"]; c((eM["X"] + eM["X:W"] * ws) * b, indice = unname(eM["X:W"] * b))`;
+    else body = `a <- coef(lm(M1 ~ X${Cf}, d))["X"]; eY <- coef(lm(Y ~ X + M1 * W${Cf}, d)); c(a * (eY["M1"] + eY["M1:W"] * ws), indice = unname(a * eY["M1:W"]))`;
+    const eqR = model === 4 ? Mn.map(m => `summary(lm(${m} ~ X${Cf}, d))`).concat([`summary(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`]) : model === 6 ? Mn.map((m, j) => `summary(lm(${m} ~ X${Mn.slice(0, j).map(z => ' + ' + z).join('')}${Cf}, d))`).concat([`summary(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`])
+      : model === 7 ? [`summary(lm(M1 ~ X * W${Cf}, d))`, `summary(lm(Y ~ X + M1${Cf}, d))`] : [`summary(lm(M1 ~ X${Cf}, d))`, `summary(lm(Y ~ X + M1 * W${Cf}, d))`];
+    sec.code = `# PROCESS, modelo ${model} (${MN}) con bootstrap percentil\n# Y = ${yN}; X = ${xN}${mNames.map((m, j) => `; ${Mn[j]} = ${m}`).join('')}${wN ? `; W = ${wN}` : ''}${cNames.map((c, j) => `; ${Cn[j]} = ${c}`).join('')}\n${dfCode}\nd <- d[complete.cases(d), ]\n` +
+      (wN ? `ws <- ${wv.bin ? 'c(0, 1)' : 'quantile(d$W, c(.16, .5, .84))'}  # valores de W (como PROCESS v4)\n` : '') +
+      `efectos <- function(d, i) { d <- d[i, ]; ${body} }\nset.seed(20261015)\nb <- boot::boot(d, efectos, R = 5000)\nb$t0  # estimaciones\nt(apply(b$t, 2, quantile, c(.025, .975)))  # IC 95 % percentil\n# Ecuaciones\n${eqR.join('\n')}\nsummary(lm(Y ~ X${Cf}, d))  # efecto total`;
+    return sec;
+  }
   function runMediation(yN, xN, mN) {
     const sec = { title: `Mediación: ${xN} → ${mN} → ${yN}`, test: 'Mediación simple (bootstrap)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (new Set([yN, xN, mN]).size < 3) { sec.error = 'El predictor, el mediador y la variable dependiente deben ser distintos.'; return sec; }
@@ -2115,7 +2179,9 @@
       if (isOn('cfa')) add(runCfa([0, 1, 2, 3].map(k => ({ name: $('#cfN' + k).value.trim() || `Factor ${k + 1}`, items: checkedVals('cfI' + k) })).filter(fc => fc.items.length)));
       if (isOn('lmm')) add(runLmm($('#lmY').value, checkedVals('lmX'), $('#lmG').value, $('#lmS').value, [$('#lmIA').value, $('#lmIB').value]));
       if (isOn('mod')) add(runModeration($('#moY').value, $('#moX').value, $('#moW').value));
-      if (isOn('med')) add(runMediation($('#meY').value, $('#meX').value, $('#meM').value));
+      if (isOn('med')) { const mo = ($('#meMod') || {}).value || '4', cvs = checkedVals('meC');
+        if (mo === '4' && !cvs.length) add(runMediation($('#meY').value, $('#meX').value, $('#meM').value));
+        else add(runProcess(mo, $('#meY').value, $('#meX').value, [$('#meM').value].concat(mo === '4p' || mo === '6' ? checkedVals('meM2').filter(m => m !== $('#meM').value) : []), mo === '7' || mo === '14' ? $('#meW').value : '', cvs)); }
       if (isOn('efa')) add(runEfa(checkedVals('eI'), $('#eN').value, $('#eR').value, ($('#eE') || {}).value || 'pa'));
       if (isOn('alpha')) add(runAlpha(checkedVals('aI'), checkedVals('aR')));
     } catch (e) { console.error(e); alert('Ha ocurrido un error inesperado en el análisis: ' + e.message); return; }
