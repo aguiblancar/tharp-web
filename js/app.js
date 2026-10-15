@@ -195,8 +195,9 @@
     const dR = D.reg || {}, regY = pick(dR.y, nums[0] && nums[0].name);
     h += card('reg', !!D.reg && nums.length >= 1, 'Regresión lineal', 'Coeficientes, β estandarizados, R², y diagnóstico completo: normalidad, homocedasticidad, multicolinealidad e influencia.',
       `<label class="field"><span>Variable dependiente</span>${sel('rY', nums, regY)}</label>
-       <div class="field"><span>Predictores</span>${chips('rX', nums.concat(facs), v => (dR.x ? dR.x.includes(v.name) : false))}</div>
-       <label class="field"><span>Método de entrada de los predictores</span><select id="rM">${[['enter', 'Introducir: todos a la vez (recomendado)'], ['stepwise', 'Por pasos (entrada p < .05, salida p > .10)'], ['forward', 'Hacia delante (entrada p < .05)'], ['backward', 'Hacia atrás (salida p > .10)']].map(([k, l]) => `<option value="${k}"${(dR.method || 'enter') === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`,
+       <label class="field"><span>Método de entrada de los predictores</span><select id="rM" onchange="document.querySelectorAll('.rblk').forEach(e => e.style.display = this.value === 'blocks' ? '' : 'none'); document.getElementById('rXlab').textContent = this.value === 'blocks' ? 'Bloque 1 (predictores del primer modelo)' : 'Predictores'">${[['enter', 'Introducir: todos a la vez (recomendado)'], ['blocks', 'Jerárquica por bloques (Δ R²)'], ['stepwise', 'Por pasos (entrada p < .05, salida p > .10)'], ['forward', 'Hacia delante (entrada p < .05)'], ['backward', 'Hacia atrás (salida p > .10)']].map(([k, l]) => `<option value="${k}"${(dR.method || 'enter') === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+       <div class="field"><span id="rXlab">${dR.method === 'blocks' ? 'Bloque 1 (predictores del primer modelo)' : 'Predictores'}</span>${chips('rX', nums.concat(facs), v => (dR.x ? dR.x.includes(v.name) : false))}</div>
+       ${[2, 3].map(b => `<div class="field rblk" style="display:${dR.method === 'blocks' ? '' : 'none'}"><span>Bloque ${b} (se añaden al modelo anterior${b === 3 ? '; opcional' : ''})</span>${chips('rB' + b, nums.concat(facs), v => ((dR['b' + b] || []).includes(v.name)))}</div>`).join('')}`,
       nums.length < 1 ? 'Necesitas una variable cuantitativa como dependiente.' : '');
     const bins = cats.filter(v => levelsOf(v).length === 2), dL = D.logit || {};
     h += card('logit', !!D.logit && bins.length >= 1, 'Regresión logística binaria', 'Para variables dependientes dicotómicas (sí/no): odds ratios, R² de Nagelkerke, Hosmer-Lemeshow y tabla de clasificación.',
@@ -1271,9 +1272,11 @@
     }
     return { selected: cur, steps };
   }
-  function runRegression(yName, xNames, method = 'enter') {
-    const stepwise = method !== 'enter', mName = { stepwise: 'por pasos', forward: 'hacia delante', backward: 'hacia atrás' }[method];
-    const sec = { title: `Regresión lineal${stepwise ? ` ${mName}` : ''}: ${yName}`, test: '', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+  function runRegression(yName, xNames, method = 'enter', blocks = null) {
+    const stepwise = ['stepwise', 'forward', 'backward'].includes(method), hier = method === 'blocks', mName = { stepwise: 'por pasos', forward: 'hacia delante', backward: 'hacia atrás' }[method];
+    const sec = { title: `Regresión lineal${stepwise ? ` ${mName}` : hier ? ' jerárquica' : ''}: ${yName}`, test: '', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (hier) { blocks = blocks.map(b => b.filter(n => n !== yName)).filter(b => b.length);
+      if (blocks.length < 2) { sec.error = 'La regresión jerárquica necesita al menos dos bloques con predictores distintos: marca los del bloque 1 y los que se añaden en el bloque 2.'; return sec; } }
     xNames = xNames.filter(n => n !== yName);
     if (!xNames.length) { sec.error = 'Selecciona al menos un predictor distinto de la variable dependiente.'; return sec; }
     const yv = numOf(vByName(yName)), candidates = xNames.slice(); let { idx, cols, X } = design(xNames, i => yv[i] !== null); const n = idx.length;
@@ -1321,7 +1324,22 @@
       sec.tables.push(apaTable(`Pasos de la regresión ${mName}`, ['Paso', 'Cambio', '<i>R</i>²', 'Δ<i>R</i>²', '<i>F</i> de cambio (<i>gl</i>)', '<i>p</i>'], stepRows,
         `Criterio de entrada: <i>p</i> < .05${method !== 'forward' ? '; criterio de salida: <i>p</i> > .10' : ''}. ${method === 'backward' ? 'Se parte del modelo con todos los predictores; cada paso elimina uno.' : 'Cada paso añade o elimina un predictor respecto al anterior.'}`));
     }
-    sec.tables.push(apaTable(stepwise ? `Resumen del modelo final${sel.steps.length ? ` (paso ${sel.steps.length})` : ''}` : 'Resumen del modelo de regresión', ['<i>R</i>²', '<i>R</i>² ajustado', '<i>F</i>', '<i>gl</i>', '<i>p</i>', '<i>n</i>'], [[nz(m.r2.toFixed(3)), nz(m.adjr2.toFixed(3)), f(m.F), `${m.df1}, ${m.dfr}`, pv(m.pF), n]]));
+    let hm = null;
+    if (hier) {
+      // un modelo por bloque, acumulando predictores; todos con los mismos casos completos (como SPSS y JASP)
+      hm = blocks.map((_, b) => { const set = blocks.slice(0, b + 1).flat(), js = cols.map((c, j) => (j === 0 || set.includes(c.v.name) ? j : -1)).filter(j => j >= 0);
+        const Xb = X.map(r => js.map(j => r[j])), mb = S.ols(Xb, y); return { js, m: mb, added: blocks[b], beta: js.map((j, q) => (q === 0 || !mb ? null : mb.b[q] * S.sd(X.map(r => r[j])) / sdY)) }; });
+      if (hm.some(o => !o.m)) { sec.error = 'Hay colinealidad perfecta entre los predictores de algún bloque. Elimina alguno.'; return sec; }
+      hm.forEach((o, b) => { const prev = b ? hm[b - 1] : null, r2p = prev ? prev.m.r2 : 0, df1 = o.js.length - (prev ? prev.js.length : 1), df2 = n - o.js.length;
+        o.dr2 = o.m.r2 - r2p; o.Fc = (o.dr2 / df1) / ((1 - o.m.r2) / df2); o.dfc = [df1, df2]; o.pc = S.pF(o.Fc, df1, df2); });
+      sec.why.push(`Regresión jerárquica en ${blocks.length} bloques: ${blocks.map((b, i) => `bloque ${i + 1}: ${list(b.map(esc))}`).join('; ')}. Cada modelo añade un bloque al anterior y Δ<i>R</i>² indica cuánta varianza explican los predictores nuevos por encima de los anteriores.`);
+      sec.tables.push(apaTable('Resumen de los modelos de la regresión jerárquica', ['Modelo', 'Predictores añadidos', '<i>R</i>²', '<i>R</i>² ajustado', '<i>F</i> (<i>gl</i>)', '<i>p</i>', 'Δ<i>R</i>²', '<i>F</i> de cambio (<i>gl</i>)', '<i>p</i> del cambio'],
+        hm.map((o, b) => [b + 1, list(o.added.map(esc)), nz(o.m.r2.toFixed(3)), nz(o.m.adjr2.toFixed(3)), `${f(o.m.F)} (${o.m.df1}, ${o.m.dfr})`, pv(o.m.pF), nz(o.dr2.toFixed(3)), `${f(o.Fc)} (${o.dfc[0]}, ${o.dfc[1]})`, pv(o.pc)]),
+        `Todos los modelos usan los mismos ${n} casos completos. Δ<i>R</i>² y <i>F</i> de cambio comparan cada modelo con el anterior (el modelo 1, con el modelo nulo).`));
+      const prevRows = hm.slice(0, -1).flatMap((o, b) => o.js.map((j, q) => [q === 0 ? `Modelo ${b + 1}` : '', esc(cols[j].name), f(o.m.b[q], 3), f(o.m.se[q], 3), q ? r2s(o.beta[q]) : '', f(o.m.t[q]), pv(o.m.pv[q])]));
+      sec.tables.push(apaTable('Coeficientes de los modelos anteriores', ['Modelo', 'Predictor', '<i>B</i>', '<i>EE</i>', 'β', '<i>t</i>', '<i>p</i>'], prevRows, `Los coeficientes del modelo final (modelo ${hm.length}) aparecen en la tabla siguiente, con sus intervalos de confianza y el diagnóstico.`));
+    }
+    sec.tables.push(apaTable(stepwise ? `Resumen del modelo final${sel.steps.length ? ` (paso ${sel.steps.length})` : ''}` : hier ? `Resumen del modelo final (modelo ${hm.length})` : 'Resumen del modelo de regresión', ['<i>R</i>²', '<i>R</i>² ajustado', '<i>F</i>', '<i>gl</i>', '<i>p</i>', '<i>n</i>'], [[nz(m.r2.toFixed(3)), nz(m.adjr2.toFixed(3)), f(m.F), `${m.df1}, ${m.dfr}`, pv(m.pF), n]]));
     const head = ['Predictor', '<i>B</i>', '<i>EE</i>', 'IC 95 % (<i>B</i>)', 'β', '<i>t</i>', '<i>p</i>'].concat(het ? ['<i>EE</i> (HC3)', '<i>p</i> (HC3)'] : []).concat(multi ? ['VIF'] : []);
     const beta = cols.map((c, j) => (j === 0 ? null : m.b[j] * S.sd(X.map(r => r[j])) / sdY));
     const rows = cols.map((c, j) => [esc(c.name), f(m.b[j], 3), f(m.se[j], 3), `[${f(m.ci[j][0], 3)}, ${f(m.ci[j][1], 3)}]`, j ? r2s(beta[j]) : '', f(m.t[j]), pv(m.pv[j])]
@@ -1329,7 +1347,10 @@
     sec.tables.push(apaTable(`Coeficientes del modelo de regresión para ${yName}`, head, rows, '<i>B</i> = coeficiente no estandarizado; β = coeficiente estandarizado.' + (het ? ' HC3 = errores típicos robustos a la heterocedasticidad.' : '')));
     const pUse = het ? m.p3 : m.pv, sigP = cols.map((c, j) => ({ c, j })).filter(o => o.j > 0 && pUse[o.j] < .05);
     const out = stepwise ? candidates.filter(c => !xNames.includes(c)) : [];
-    let t = (stepwise
+    const hierTxt = !hier ? '' : `Se realizó una regresión lineal jerárquica en ${hm.length} pasos para predecir ${esc(yName)}. ` + hm.map((o, b) => b === 0
+      ? `En el modelo 1, ${list(o.added.map(esc))} explic${o.added.length > 1 ? 'aron' : 'ó'} el ${f(o.m.r2 * 100, 1)} % de la varianza, <i>F</i>(${o.m.df1}, ${o.m.dfr}) = ${f(o.m.F)}, ${pt(o.m.pF)}.`
+      : `Al añadir ${list(o.added.map(esc))} en el modelo ${b + 1}, la varianza explicada ${o.pc < .05 ? 'aumentó significativamente' : 'no aumentó significativamente'}, Δ<i>R</i>² = ${nz(o.dr2.toFixed(3))}, <i>F</i>(${o.dfc[0]}, ${o.dfc[1]}) = ${f(o.Fc)}, ${pt(o.pc)}.`).join(' ') + ' ';
+    let t = (hier ? hierTxt + `El modelo final (modelo ${hm.length})` : stepwise
       ? `Se realizó un análisis de regresión lineal múltiple ${mName} (criterio de entrada <i>p</i> < .05${method !== 'forward' ? ' y de salida <i>p</i> > .10' : ''}) para predecir ${esc(yName)} a partir de ${candidates.length} predictores candidatos. ${sel.steps.length ? `El procedimiento terminó en el paso ${sel.steps.length} con` : 'El modelo final incluyó'} ${xNames.length} predictor${xNames.length > 1 ? 'es' : ''}. El modelo final`
       : `Se realizó un análisis de regresión lineal ${multi ? 'múltiple' : 'simple'} para predecir ${esc(yName)} a partir de ${list(xNames.map(esc))}. El modelo`) + ` ${m.pF < .05 ? '' : 'no '}fue estadísticamente significativo, <i>F</i>(${m.df1}, ${m.dfr}) = ${f(m.F)}, ${pt(m.pF)}, y explicó el ${f(m.r2 * 100, 1)} % de la varianza (<i>R</i>² ajustado = ${nz(m.adjr2.toFixed(2))}). `;
     if (m.pF < .05) {
@@ -1354,7 +1375,10 @@
       (method !== 'backward' ? `  fuera <- setdiff(candidatos, dentro)\n  if (length(fuera)) {\n    pa <- pvals(add1(lm(ff(dentro), data = datos_c), scope = ff(candidatos), test = "F"))\n    if (min(pa) < .05) { dentro <- c(dentro, names(which.min(pa))); cambio <- TRUE }\n  }\n` : '') +
       (method !== 'forward' ? `  if (length(dentro)) {\n    pd <- pvals(drop1(lm(ff(dentro), data = datos_c), test = "F"))\n    if (max(pd) > .10) { dentro <- setdiff(dentro, names(which.max(pd))); cambio <- TRUE }\n  }\n` : '') +
       `  if (!cambio) break\n}\ndentro  # predictores seleccionados\n`;
-    sec.code = `# Regresión lineal${stepwise ? ` ${mName}` : ''}: ${yName}\n` + (stepwise ? `${stepCode}modelo <- lm(ff(dentro), data = datos_c)\n` : `modelo <- lm(${fml}, data = datos)\n`) + `summary(modelo)\nconfint(modelo)\nparameters::standardize_parameters(modelo, method = "basic")  # β como en SPSS\nshapiro.test(residuals(modelo))\nlmtest::bptest(modelo)\nlmtest::dwtest(modelo)\n` + (xNames.length > 1 ? 'car::vif(modelo)\n' : '') + `sum(cooks.distance(modelo) > 4 / nobs(modelo))` + (het ? '\nlmtest::coeftest(modelo, vcov = sandwich::vcovHC(modelo, type = "HC3"))' : '');
+    const hierCode = !hier ? '' : `# Regresión jerárquica: los mismos casos completos en todos los modelos\ndatos_c <- na.omit(datos[, c(${[yName].concat(blocks.flat()).map(rq).join(', ')})])\n` +
+      blocks.map((b, i) => `m${i + 1} <- ${i === 0 ? `lm(${rn(yName)} ~ ${b.map(rn).join(' + ')}, data = datos_c)` : `update(m${i}, . ~ . + ${b.map(rn).join(' + ')})`}\n`).join('') +
+      blocks.slice(1).map((_, i) => `anova(m${i + 1}, m${i + 2})  # F de cambio del modelo ${i + 2} (como SPSS y JASP)\n`).join('') + `sapply(list(${blocks.map((_, i) => 'm' + (i + 1)).join(', ')}), function(m) summary(m)$r.squared)  # R² de cada modelo\nmodelo <- m${blocks.length}\n`;
+    sec.code = `# Regresión lineal${stepwise ? ` ${mName}` : hier ? ' jerárquica' : ''}: ${yName}\n` + (stepwise ? `${stepCode}modelo <- lm(ff(dentro), data = datos_c)\n` : hier ? hierCode : `modelo <- lm(${fml}, data = datos)\n`) + `summary(modelo)\nconfint(modelo)\nparameters::standardize_parameters(modelo, method = "basic")  # β como en SPSS\nshapiro.test(residuals(modelo))\nlmtest::bptest(modelo)\nlmtest::dwtest(modelo)\n` + (xNames.length > 1 ? 'car::vif(modelo)\n' : '') + `sum(cooks.distance(modelo) > 4 / nobs(modelo))` + (het ? '\nlmtest::coeftest(modelo, vcov = sandwich::vcovHC(modelo, type = "HC3"))' : '');
     return sec;
   }
 
@@ -1376,7 +1400,10 @@
       if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
         add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1]) : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));
-      if (isOn('reg')) add(runRegression($('#rY').value, checkedVals('rX'), ($('#rM') || {}).value || 'enter'));
+      if (isOn('reg')) { const meth = ($('#rM') || {}).value || 'enter';
+        if (meth === 'blocks') { const bl = [checkedVals('rX'), checkedVals('rB2'), checkedVals('rB3')].map((b, i, all) => b.filter(x => !all.slice(0, i).flat().includes(x))).filter(b => b.length);
+          add(runRegression($('#rY').value, bl.flat(), 'blocks', bl)); }
+        else add(runRegression($('#rY').value, checkedVals('rX'), meth)); }
       if (isOn('logit')) add(runLogistic($('#lY').value, checkedVals('lX')));
       if (isOn('fact')) { const ys = checkedVals('fY');
         if (ys.length) ys.forEach(y => add(runFactorial(y, $('#fA').value, $('#fB').value)));
