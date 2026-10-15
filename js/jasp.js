@@ -27,21 +27,37 @@
       const q = (sql, p) => { const st = db.prepare(sql); if (p) st.bind(p); const out = []; while (st.step()) out.push(st.getAsObject()); st.free(); return out; };
       const ds = q('SELECT id, emptyValuesJson FROM DataSets ORDER BY id LIMIT 1')[0];
       if (!ds) throw new Error('El archivo JASP no contiene datos.');
-      let empty = []; try { empty = (JSON.parse(ds.emptyValuesJson || '{}').strings) || []; } catch (e) { /* sin valores vacíos propios */ }
-      const cols = q('SELECT id, name, columnType, hasLabels FROM Columns WHERE dataSet = ? ORDER BY colIdx', [ds.id]);
-      const table = `DataSet_${ds.id}`, emptySet = new Set(empty.map(String));
-      const rows = q(`SELECT ${cols.map(c => `Column_${c.id}`).join(', ')} FROM ${table} ORDER BY rowNumber`);
+      const emptyOf = json => { try { return (JSON.parse(json || '{}').strings) || []; } catch (e) { return []; } };
+      const empty = emptyOf(ds.emptyValuesJson);
+      const table = `DataSet_${ds.id}`;
+      // El esquema cambia entre versiones: JASP 0.97 tiene Columns.hasLabels y una columna Column_N por variable;
+      // JASP 0.19–0.95 no tiene hasLabels y guarda dos: Column_N_INT (código de etiqueta, INT_MIN = perdido) y Column_N_DBL (valor; texto «nan»/«inf» si no es número).
+      const colInfo = new Set(q('PRAGMA table_info(Columns)').map(r => r.name));
+      const dataCols = new Set(q(`PRAGMA table_info(${table})`).map(r => r.name));
+      const cols = q(`SELECT id, name, columnType${colInfo.has('hasLabels') ? ', hasLabels' : ''}${colInfo.has('emptyValuesJson') ? ', emptyValuesJson' : ''} FROM Columns WHERE dataSet = ? ORDER BY colIdx`, [ds.id]);
+      const split = c => !dataCols.has(`Column_${c.id}`) && dataCols.has(`Column_${c.id}_INT`);
+      const rows = q(`SELECT ${cols.map(c => split(c) ? `Column_${c.id}_INT, Column_${c.id}_DBL` : `Column_${c.id}`).join(', ')} FROM ${table} ORDER BY rowNumber`);
+      const INT_MIN = -2147483648;
       const out = cols.map(c => {
-        const map = new Map();
-        if (c.hasLabels) q('SELECT value, label, originalValueJson FROM Labels WHERE columnId = ?', [c.id]).forEach(l => {
+        const map = new Map(), emptySet = new Set(empty.concat(emptyOf(c.emptyValuesJson)).map(String));
+        const hasLabels = 'hasLabels' in c ? !!c.hasLabels : true;
+        if (hasLabels) q('SELECT value, label, originalValueJson FROM Labels WHERE columnId = ?', [c.id]).forEach(l => {
           let orig = null; try { orig = JSON.parse(l.originalValueJson); } catch (e) { orig = null; }
           const numeric = String(c.columnType).toLowerCase() === 'scale';
           let v = numeric ? (typeof orig === 'number' ? orig : asValue(l.label)) : (l.label !== '' && l.label !== null ? l.label : orig);
           if (v !== null && emptySet.has(String(v))) v = null;
           map.set(l.value, asValue(v));
         });
-        const vals = rows.map(r => { const raw = r[`Column_${c.id}`]; if (raw === null || raw === undefined) return null;
-          if (c.hasLabels && map.has(raw)) return map.get(raw); const v = asValue(raw); return v !== null && emptySet.has(String(v)) ? null : v; });
+        const clean = v => (v !== null && emptySet.has(String(v)) ? null : v);
+        const vals = rows.map(r => {
+          if (split(c)) {
+            const code = r[`Column_${c.id}_INT`], dbl = r[`Column_${c.id}_DBL`];
+            if (code !== null && code !== undefined && code !== INT_MIN && map.has(code)) return map.get(code);
+            return typeof dbl === 'number' && isFinite(dbl) ? clean(dbl) : null;
+          }
+          const raw = r[`Column_${c.id}`]; if (raw === null || raw === undefined) return null;
+          if (hasLabels && map.has(raw)) return map.get(raw); return clean(asValue(raw));
+        });
         return { name: c.name, measure: c.columnType, vals };
       });
       return out;
