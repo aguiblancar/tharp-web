@@ -388,7 +388,8 @@
     const dC = D.chi || {};
     h += card('chi', facs.length >= 2, 'Asociación entre variables categóricas', 'Tabla de contingencia, chi-cuadrado (o Fisher) y V de Cramér.',
       `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Variable en filas</span>${sel('cA', facs, pick(dC.a, facs[0] && facs[0].name))}</label>
-       <label class="field"><span>Variable en columnas</span>${sel('cB', facs, pick(dC.b, facs[1] && facs[1].name))}</label></div>`,
+       <label class="field"><span>Variable en columnas</span>${sel('cB', facs, pick(dC.b, facs[1] && facs[1].name))}</label></div>
+       <label class="field"><span>Estratificar por (opcional: Mantel-Haenszel, tablas 2×2)</span><select id="cS"><option value="">Ninguna</option>${facs.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label>`,
       facs.length < 2 ? 'Necesitas dos variables categóricas.' : '');
     h += card('prop', false, 'Proporciones: binomial y bondad de ajuste', '¿La proporción de una categoría difiere de un valor esperado (binomial exacta)? ¿Las frecuencias se ajustan a unas proporciones teóricas (χ² de bondad de ajuste)?',
       `<div class="field"><span>Variables categóricas (una prueba para cada una)</span>${chips('prV', cats, v => v === cats[0])}</div>
@@ -1082,7 +1083,7 @@
     sec.code = code; return sec;
   }
 
-  function runChi(aName, bName) {
+  function runChi(aName, bName, sName = '') {
     const sec = { title: `Asociación entre ${aName} y ${bName}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (aName === bName) { sec.error = 'Elige dos variables distintas.'; return sec; }
     const ca = catOf(vByName(aName)), cb = catOf(vByName(bName)), keep = ca.map((v, i) => v !== null && cb[i] !== null);
@@ -1101,7 +1102,9 @@
     sec.checks.push(chk('info', 'Independencia: cada participante debe aparecer en una sola casilla de la tabla.'));
     if (useFisher) { sec.why.push('En una tabla 2×2 con alguna frecuencia esperada < 5, la aproximación chi-cuadrado no es fiable: se usa la prueba exacta de Fisher.'); sec.decision = 'Se eligió la prueba exacta de Fisher porque la tabla es 2×2 y hay frecuencias esperadas menores que 5.'; }
     else sec.decision = 'Se eligió la prueba chi-cuadrado de independencia porque ambas variables son categóricas' + (r.pctSmall <= .2 ? ' y las frecuencias esperadas son suficientes.' : ', aunque hay frecuencias esperadas bajas (ver aviso).');
-    if (!is2x2 && (r.pctSmall > .2 || r.minE < 1)) sec.warn = 'Hay demasiadas casillas con frecuencias esperadas bajas: el resultado del chi-cuadrado puede no ser fiable. Considera agrupar categorías con pocos casos o consulta a un estadístico antes de continuar.';
+    const lowE = !is2x2 && (r.pctSmall > .2 || r.minE < 1), ffh = lowE ? S.fisherRxC(tab) : null;
+    if (lowE && !ffh) sec.warn = 'Hay demasiadas casillas con frecuencias esperadas bajas y la tabla es demasiado grande para la prueba exacta: el chi-cuadrado puede no ser fiable. Agrupa categorías con pocos casos (en «Preparar los datos»).';
+    if (ffh) { sec.why.push(`Hay frecuencias esperadas bajas, así que se usa la prueba exacta de Fisher-Freeman-Halton (extensión de Fisher a tablas ${la.length}×${lb.length}), calculada sobre las ${ffh.tables.toLocaleString('es-ES')} tablas posibles con los mismos totales.`); sec.test = 'Prueba exacta de Fisher-Freeman-Halton'; sec.decision = 'Se eligió la prueba exacta de Fisher-Freeman-Halton porque la tabla tiene frecuencias esperadas bajas.'; }
     sec.alt = is2x2 ? 'Prueba exacta de Fisher cuando hay frecuencias esperadas bajas.' : 'Agrupar categorías poco frecuentes si las frecuencias esperadas son bajas.';
     const rows = la.map((l, i) => [esc(l)].concat(lb.map((_, j) => { const a = r.adj[i][j]; const mark = a > 1.96 ? ' ▲' : a < -1.96 ? ' ▼' : '';
       return `${tab[i][j]} (${f(tab[i][j] / r.rs[i] * 100, 1)} %)${mark}`; })).concat([String(r.rs[i])]));
@@ -1112,6 +1115,7 @@
       'En cada casilla: frecuencia esperada si no hubiera asociación · residuo tipificado corregido (|valor| > 1.96 indica una diferencia significativa en esa casilla).'));
     const tr = [['χ² de Pearson', f(r.chi), r.df, pv(r.p)], ['Razón de verosimilitudes (<i>G</i>²)', f(r.G2), r.df, pv(r.pG2)]];
     if (is2x2) { tr.push(['χ² con corrección de Yates', f(r.yates.chi), 1, pv(r.yates.p)]); tr.push(['Prueba exacta de Fisher', '', '', pv(fisher.p)]); }
+    if (ffh) tr.push(['Prueba exacta de Fisher-Freeman-Halton', '', '', pv(ffh.p)]);
     sec.tables.push(apaTable('Resultado de las pruebas de independencia', ['Prueba', 'Valor', '<i>gl</i>', '<i>p</i>'], tr,
       `<i>N</i> = ${r.N}. Tamaño de la asociación: <i>V</i> de Cramér = ${nz(r.V.toFixed(3))}${is2x2 ? `, φ = ${nz(r.phi.toFixed(3))}` : ''}, coeficiente de contingencia = ${nz(r.Ccont.toFixed(3))}. ${useFisher ? 'Se interpreta la prueba exacta de Fisher (frecuencias esperadas bajas).' : 'Se interpreta el χ² de Pearson.'}`));
     let rk = null;
@@ -1122,15 +1126,37 @@
         [`Riesgo relativo de «${esc(lb[1])}» (${esc(la[0])} frente a ${esc(la[1])})`, f(rk.rr2), ci(rk.rr2CI)]],
         `Odds ratio = (a·d)/(b·c), con la primera fila y la primera columna como referencia de la tabla; IC por el método logarítmico (Woolf y Katz), como SPSS y JASP.${rk.haldane ? ' Como alguna casilla vale 0, se sumó 0.5 a todas (corrección de Haldane-Anscombe).' : ''} Un IC que no incluye el 1 indica asociación significativa.`));
       sec.why.push('En una tabla 2×2 se calculan además la odds ratio y el riesgo relativo, que expresan la magnitud de la asociación de forma interpretable (cuántas veces más probable).'); }
-    const P = useFisher ? fisher.p : r.p;
-    const st = useFisher ? `prueba exacta de Fisher, ${pt(fisher.p)}, <i>V</i> = ${nz(r.V.toFixed(2))}` : `χ²(${r.df}, <i>N</i> = ${r.N}) = ${f(r.chi)}, ${pt(r.p)}, <i>V</i> = ${nz(r.V.toFixed(2))}`;
+    const P = useFisher ? fisher.p : ffh ? ffh.p : r.p;
+    const st = useFisher ? `prueba exacta de Fisher, ${pt(fisher.p)}, <i>V</i> = ${nz(r.V.toFixed(2))}` : ffh ? `prueba exacta de Fisher-Freeman-Halton, ${pt(ffh.p)}, <i>V</i> = ${nz(r.V.toFixed(2))}` : `χ²(${r.df}, <i>N</i> = ${r.N}) = ${f(r.chi)}, ${pt(r.p)}, <i>V</i> = ${nz(r.V.toFixed(2))}`;
+    const va = vByName(aName), vb = vByName(bName), isOrd = v => !!v.order || levelsOf(v).every(l => toNum(l) !== null);
+    let oa = null;
+    if (isOrd(va) && isOrd(vb) && !is2x2) { oa = S.ordinalAssoc(tab);
+      const or_ = (k, lab) => [lab, f(oa[k].est, 3), f(oa[k].ase, 3), `[${f(oa[k].ci[0], 3)}, ${f(oa[k].ci[1], 3)}]`, f(oa[k].z), pv(oa[k].p)];
+      sec.tables.push(apaTable('Medidas de asociación ordinal', ['Medida', 'Valor', '<i>EE</i> asint.', 'IC 95 %', '<i>z</i>', '<i>p</i>'],
+        [or_('gamma', 'Gamma de Goodman y Kruskal'), or_('taub', 'Tau-b de Kendall'), or_('tauc', 'Tau-c de Stuart'), or_('somersCR', `d de Somers (${esc(bName)} dependiente)`), or_('somersRC', `d de Somers (${esc(aName)} dependiente)`)],
+        `Las dos variables son ordinales (orden: ${esc(aName)} = ${levelsOf(va).map(esc).join(' < ')}; ${esc(bName)} = ${levelsOf(vb).map(esc).join(' < ')}). Valores positivos: a más ${esc(aName)}, más ${esc(bName)}. Errores típicos asintóticos y contrastes como en SPSS.`));
+      sec.why.push('Como las dos variables tienen un orden, se añaden medidas de asociación ordinal (gamma, tau-b, tau-c y d de Somers), que indican la dirección de la relación, algo que la V de Cramér no recoge.'); }
+    let mh = null;
+    if (sName && sName !== aName && sName !== bName && is2x2) { const cs_ = catOf(vByName(sName)), ls = ordOf(vByName(sName), cs_.filter((v, i) => keep[i] && v !== null));
+      const strata = ls.map(sv => { const t2 = [[0, 0], [0, 0]]; ca.forEach((v, i) => { if (keep[i] && cs_[i] === sv) t2[la.indexOf(v)][lb.indexOf(cb[i])]++; }); return { sv, t2 }; }).filter(o => o.t2.flat().reduce((x, y) => x + y, 0) > 1);
+      if (strata.length >= 2) { mh = S.mantelHaenszel(strata.map(o => o.t2));
+        sec.tables.push(apaTable(`Análisis estratificado por ${sName} (Mantel-Haenszel)`, ['Estrato', '<i>n</i>', 'Odds ratio'], strata.map(o => { const [[a_, b_], [c_, d_]] = o.t2, rk_ = S.risk2x2(o.t2); return [esc(o.sv), a_ + b_ + c_ + d_, f(rk_.or)]; }).concat([['<b>Común (Mantel-Haenszel)</b>', '', `${f(mh.or)} [${f(mh.ci[0])}, ${f(mh.ci[1])}]`]]),
+          `χ² de Mantel-Haenszel (con corrección de continuidad) = ${f(mh.chi)}, <i>gl</i> = 1, ${pt(mh.p)}: contrasta la asociación controlando ${esc(sName)}. Homogeneidad de las odds ratio entre estratos (Breslow-Day con corrección de Tarone): χ²(${mh.bd.df}) = ${f(mh.bd.chi)}, ${pt(mh.bd.p)}. IC de la OR común de Robins, Breslow y Greenland.`));
+        sec.checks.push(chk(mh.bd.p >= .05 ? 'ok' : 'no', `Homogeneidad de las odds ratio entre los estratos de ${esc(sName)} (Breslow-Day): ${pt(mh.bd.p)}.${mh.bd.p >= .05 ? ' Se cumple: la OR común resume bien la asociación.' : ' No se cumple: la asociación cambia según el estrato; interpreta cada estrato por separado.'}`)); }
+      else sec.checks.push(chk('info', `No hay al menos dos estratos de ${esc(sName)} con datos: no se realiza el análisis estratificado.`)); }
+    else if (sName && !is2x2) sec.checks.push(chk('info', 'El análisis estratificado de Mantel-Haenszel solo está disponible para tablas 2×2.'));
     let t = P < .05 ? `Se encontró una asociación estadísticamente significativa entre ${esc(aName)} y ${esc(bName)}, ${st}.` : `No se encontró una asociación estadísticamente significativa entre ${esc(aName)} y ${esc(bName)}, ${st}.`;
     if (P < .05) { const hi = []; la.forEach((l, i) => lb.forEach((m, j) => { if (r.adj[i][j] > 1.96) hi.push(`${esc(m)} en el grupo ${esc(l)} (${f(tab[i][j] / r.rs[i] * 100, 1)} %)`); }));
       if (hi.length) t += ` En concreto, hubo más casos de los esperados de ${list(hi.slice(0, 4))}.`; }
     if (rk) t += ` La odds ratio fue ${f(rk.or)}, IC 95 % [${f(rk.orCI[0])}, ${f(rk.orCI[1])}]: la odds de «${esc(lb[0])}» en ${esc(la[0])} fue ${f(rk.or)} veces la de ${esc(la[1])}.`;
+    if (oa) t += ` La asociación ordinal fue ${oa.taub.est > 0 ? 'positiva' : 'negativa'}, τ<sub>b</sub> = ${nz(oa.taub.est.toFixed(2))}, ${pt(oa.taub.p)}.`;
+    if (mh) t += ` Controlando ${esc(sName)}, la odds ratio común de Mantel-Haenszel fue ${f(mh.or)}, IC 95 % [${f(mh.ci[0])}, ${f(mh.ci[1])}], χ²<sub>MH</sub>(1) = ${f(mh.chi)}, ${pt(mh.p)}.`;
     sec.text.push(t);
     if (lb.length <= 8) sec.charts.push(fig(`${bName} dentro de cada grupo de ${aName}`, CH.groupedBars(la, lb, tab.map((row, i) => row.map(c => c / r.rs[i] * 100))), CH.legend(lb)));
     sec.code = `# Asociación entre ${aName} y ${bName}\ntabla <- table(datos$${A}, datos$${B})\nprop.table(tabla, 1) * 100\nchisq.test(tabla, correct = FALSE)\nchisq.test(tabla, correct = FALSE)$expected\nchisq.test(tabla, correct = FALSE)$stdres\nDescTools::GTest(tabla)  # razón de verosimilitudes\nDescTools::CramerV(tabla); DescTools::ContCoef(tabla)` + (is2x2 ? '\nchisq.test(tabla, correct = TRUE)  # Yates\nfisher.test(tabla)\nDescTools::Phi(tabla)\nDescTools::OddsRatio(tabla, method = "wald")\nDescTools::RelRisk(tabla, method = "wald"); DescTools::RelRisk(tabla[, 2:1], method = "wald")' : '');
+    if (ffh) sec.code += '\nfisher.test(tabla)  # Fisher-Freeman-Halton (exacta R×C)';
+    if (oa) sec.code += '\nDescTools::GoodmanKruskalGamma(tabla, conf.level = .95)\nDescTools::KendallTauB(tabla, conf.level = .95)\nDescTools::StuartTauC(tabla, conf.level = .95)\nDescTools::SomersDelta(tabla, direction = "column", conf.level = .95)';
+    if (mh) sec.code += `\n# Mantel-Haenszel estratificado por ${sName}\nt3 <- table(datos$${rn(aName)}, datos$${rn(bName)}, datos$${rn(sName)})\nmantelhaen.test(t3)\nDescTools::BreslowDayTest(t3, correct = TRUE)`;
     return sec;
   }
 
@@ -2219,7 +2245,7 @@
         add(runRm2(checkedVals('pM'), [($('#pW1N').value || 'Factor 1').trim(), ($('#pW2N').value || 'Factor 2').trim()], [k1, k2], ($('#pB') || {}).value || '')); }
       else if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
         add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1], ($('#pAlt') || {}).value || 'two') : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
-      if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));
+      if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value, ($('#cS') || {}).value || ''));
       if (isOn('reg')) { const meth = ($('#rM') || {}).value || 'enter';
         if (meth === 'blocks') { const bl = [checkedVals('rX'), checkedVals('rB2'), checkedVals('rB3')].map((b, i, all) => b.filter(x => !all.slice(0, i).flat().includes(x))).filter(b => b.length);
           add(runRegression($('#rY').value, bl.flat(), 'blocks', bl)); }
