@@ -705,5 +705,5 @@
 
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
-    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, fisher2x2, chiSquare, ols, tcrit, pT };
+    tTestPaired, wilcoxonSigned, rmAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, fisher2x2, chiSquare, ols, olsCore, tcrit, pT, pF };
 })(typeof window !== 'undefined' ? window : this);

@@ -194,7 +194,8 @@
     const dR = D.reg || {}, regY = pick(dR.y, nums[0] && nums[0].name);
     h += card('reg', !!D.reg && nums.length >= 1, 'Regresión lineal', 'Coeficientes, β estandarizados, R², y diagnóstico completo: normalidad, homocedasticidad, multicolinealidad e influencia.',
       `<label class="field"><span>Variable dependiente</span>${sel('rY', nums, regY)}</label>
-       <div class="field"><span>Predictores</span>${chips('rX', nums.concat(facs), v => (dR.x ? dR.x.includes(v.name) : false))}</div>`,
+       <div class="field"><span>Predictores</span>${chips('rX', nums.concat(facs), v => (dR.x ? dR.x.includes(v.name) : false))}</div>
+       <label class="field"><span>Método de entrada de los predictores</span><select id="rM">${[['enter', 'Introducir: todos a la vez (recomendado)'], ['stepwise', 'Por pasos (entrada p < .05, salida p > .10)'], ['forward', 'Hacia delante (entrada p < .05)'], ['backward', 'Hacia atrás (salida p > .10)']].map(([k, l]) => `<option value="${k}"${(dR.method || 'enter') === k ? ' selected' : ''}>${l}</option>`).join('')}</select></label>`,
       nums.length < 1 ? 'Necesitas una variable cuantitativa como dependiente.' : '');
     const bins = cats.filter(v => levelsOf(v).length === 2), dL = D.logit || {};
     h += card('logit', !!D.logit && bins.length >= 1, 'Regresión logística binaria', 'Para variables dependientes dicotómicas (sí/no): odds ratios, R² de Nagelkerke, Hosmer-Lemeshow y tabla de clasificación.',
@@ -203,7 +204,7 @@
       !bins.length ? 'Necesitas una variable categórica con exactamente 2 categorías.' : '');
     const f6 = facs.filter(v => levelsOf(v).length <= 6), dF = D.fact || {};
     h += card('fact', !!D.fact && nums.length >= 1 && f6.length >= 2, 'ANOVA factorial (dos factores)', 'Efectos principales e interacción con sumas de cuadrados de tipo III, η² parcial y gráfico de interacción.',
-      `<label class="field"><span>Variable dependiente</span>${sel('fY', nums, pick(dF.y, nums[0] && nums[0].name))}</label>
+      `<div class="field"><span>Variables dependientes (un ANOVA para cada una)</span>${chips('fY', nums, v => v.name === pick(dF.y, nums[0] && nums[0].name))}</div>
        <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Factor 1</span>${sel('fA', f6, pick(dF.a, f6[0] && f6[0].name))}</label>
        <label class="field"><span>Factor 2</span>${sel('fB', f6, pick(dF.b, f6[1] && f6[1].name))}</label></div>`,
       !(nums.length >= 1 && f6.length >= 2) ? 'Necesitas una variable cuantitativa y dos categóricas de 2 a 6 niveles.' : '');
@@ -427,13 +428,16 @@
         const sig = ph.filter(c => c.padj < .05);
         if (!sig.length) return ` Las comparaciones post hoc (${kind}) no detectaron diferencias significativas entre pares concretos.`;
         return ` Las comparaciones post hoc (${kind}) mostraron diferencias significativas entre ` + list(sig.map(c => { const a = groups[c.i], b = groups[c.j], hi = (useMedian ? a.d.median >= b.d.median : a.d.mean >= b.d.mean) ? [a, b] : [b, a];
-          return `${esc(hi[0].name)} y ${esc(hi[1].name)} (${pt(c.padj)}; puntuaciones más altas en ${esc(hi[0].name)})`; })) + (sig.length < ph.length ? '. El resto de comparaciones no fueron significativas.' : '.');
+          return `${esc(hi[0].name)} y ${esc(hi[1].name)} (${pt(c.padj)}${c.d !== undefined ? `, <i>d</i> = ${f(Math.abs(c.d))}, efecto ${lbl.d(c.d)}` : ''}; puntuaciones más altas en ${esc(hi[0].name)})`; })) + (sig.length < ph.length ? '. El resto de comparaciones no fueron significativas.' : '.');
       };
       if (normOK) {
         const cl = S.anova(xs);
         let om, ph, phName;
         if (eqVar) { om = cl; sec.test = 'ANOVA de un factor'; phName = 'Tukey HSD'; ph = S.hasTukey ? S.tukeyHSD(xs, cl.msw, cl.df2) : S.pairwiseHolm(xs, true); if (!S.hasTukey) phName = 't por pares con corrección de Holm'; }
         else { om = S.welchAnova(xs); sec.test = 'ANOVA de Welch'; phName = 'Games-Howell'; ph = S.hasTukey ? S.gamesHowell(xs) : S.pairwiseHolm(xs, false); if (!S.hasTukey) phName = 't de Welch por pares con corrección de Holm'; }
+        // d de Cohen por pares: con varianzas homogéneas, sobre la DT del error del modelo (√MCE), como JASP y emmeans::eff_size;
+        // con varianzas distintas, sobre la media de las dos varianzas (d_av)
+        ph.forEach(c => { c.d = c.diff / Math.sqrt(eqVar ? cl.msw : (S.variance(xs[c.i]) + S.variance(xs[c.j])) / 2); });
         sec.why.push(eqVar ? 'Las varianzas son homogéneas: ANOVA clásico con post hoc de Tukey.' : 'Las varianzas no son homogéneas: ANOVA de Welch con post hoc de Games-Howell, que no asumen varianzas iguales.');
         sec.decision = `Se eligió el ${sec.test} porque se comparan ${k} grupos independientes en una variable cuantitativa con normalidad aceptable${eqVar ? ' y varianzas homogéneas' : ' y varianzas distintas'}.`;
         sec.alt = 'Prueba de Kruskal-Wallis si no se cumpliera la normalidad con muestras pequeñas.';
@@ -445,10 +449,11 @@
         let t = `Se aplicó un ${sec.test} para comparar ${esc(yName)} según ${esc(gName)} (${groups.map(q => `${esc(q.name)}: ${MD(q)}`).join('; ')}). `;
         if (om.p < .05) {
           t += `Se encontraron diferencias estadísticamente significativas, ${st}, con un tamaño del efecto ${lbl.eta(cl.eta2)}.` + posthocText(ph, phName, false);
-          sec.tables.push(apaTable(`Comparaciones post hoc (${phName})`, ['Comparación', 'Diferencia de medias', '<i>p</i> ajustada'], ph.map(c => [`${esc(names[c.i])} − ${esc(names[c.j])}`, f(c.diff), pv(c.padj)])));
+          sec.tables.push(apaTable(`Comparaciones post hoc (${phName})`, ['Comparación', 'Diferencia de medias', '<i>p</i> ajustada', '<i>d</i> de Cohen'], ph.map(c => [`${esc(names[c.i])} − ${esc(names[c.j])}`, f(c.diff), pv(c.padj), f(c.d)]),
+            eqVar ? '<i>d</i> = diferencia de medias / √<i>MC</i><sub>error</sub> (como JASP). Tamaño del efecto: 0.20 pequeño, 0.50 mediano, 0.80 grande (Cohen, 1988).' : '<i>d</i> = diferencia de medias / raíz de la media de las dos varianzas, adecuada cuando las varianzas difieren. Tamaño del efecto: 0.20 pequeño, 0.50 mediano, 0.80 grande (Cohen, 1988).'));
         } else t += `No se encontraron diferencias estadísticamente significativas, ${st}.`;
         sec.text.push(t);
-        code += eqVar ? `modelo <- aov(${Y} ~ ${G}, data = datos)\nsummary(modelo)\neffectsize::eta_squared(modelo)\nTukeyHSD(modelo)`
+        code += eqVar ? `modelo <- aov(${Y} ~ ${G}, data = datos)\nsummary(modelo)\neffectsize::eta_squared(modelo)\nTukeyHSD(modelo)\n# d de Cohen por pares (como JASP): diferencia de medias / √MCE\nemmeans::eff_size(emmeans::emmeans(modelo, ~ ${G}), sigma = sigma(modelo), edf = df.residual(modelo))`
           : `oneway.test(${Y} ~ ${G}, data = datos, var.equal = FALSE)\nrstatix::games_howell_test(datos, ${Y} ~ ${G})`;
       } else {
         const kw = S.kruskal(xs), ph = S.dunn(xs, kw); sec.test = 'Prueba de Kruskal-Wallis';
@@ -1127,35 +1132,102 @@
     const eff = [['A', esc(aName)], ['B', esc(bName)], ['AB', `${esc(aName)} × ${esc(bName)}`]];
     sec.tables.push(apaTable('Resultado del ANOVA factorial', ['Fuente', '<i>SC</i>', '<i>gl</i>', '<i>MC</i>', '<i>F</i>', '<i>p</i>', 'η²<sub>p</sub>'],
       eff.map(([k, nm]) => [nm, f(r[k].ss), r[k].df, f(r[k].ms), f(r[k].F), pv(r[k].p), nz(r[k].peta2.toFixed(3))]).concat([['Error', f(r.sse), r.dfE, f(r.mse), '', '', '']]), 'SC de tipo III. η²<sub>p</sub> = eta cuadrado parcial.'));
+    // Medias marginales estimadas (media no ponderada de las medias de casilla, como emmeans y JASP) y comparaciones por pares
+    // con ajuste de Tukey; d = diferencia / √MCE (emmeans::eff_size con sigma(modelo), como JASP)
+    const cm = cells.map(row => row.map(c => S.mean(c))), tc = S.tcrit(r.dfE), sdE = Math.sqrt(r.mse);
+    const marg = (levels, other, mean_, invn) => levels.map((lv, i) => {
+      const em = S.mean(other.map((_, j) => mean_(i, j))), se = Math.sqrt(r.mse * S.sum(other.map((_, j) => invn(i, j))) / other.length ** 2);
+      return { lv, em, se, ci: [em - tc * se, em + tc * se] }; });
+    const emA = marg(la, lb, (i, j) => cm[i][j], (i, j) => 1 / cells[i][j].length), emB = marg(lb, la, (j, i) => cm[i][j], (j, i) => 1 / cells[i][j].length);
+    const pairsOf = (em, other, invn) => { const out = [], k = em.length;
+      for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
+        const diff = em[i].em - em[j].em, se = Math.sqrt(r.mse * S.sum(other.map((_, o) => invn(i, o) + invn(j, o))) / other.length ** 2), tv = diff / se;
+        const p = k === 2 ? S.pT(tv, r.dfE) : Math.min(1, 1 - jStat.tukey.cdf(Math.abs(tv) * Math.SQRT2, k, r.dfE));
+        out.push({ a: em[i].lv, b: em[j].lv, diff, se, t: tv, p, d: diff / sdE }); }
+      return out; };
+    const pA = pairsOf(emA, lb, (i, j) => 1 / cells[i][j].length), pB = pairsOf(emB, la, (j, i) => 1 / cells[i][j].length);
+    const obs = (fac, lv) => S.describe(idx.filter(i => (fac === 'A' ? ca[i] : cb[i]) === lv).map(i => yv[i]));
+    sec.tables.push(apaTable(`Medias marginales estimadas de ${yName}`, ['Factor', 'Nivel', '<i>n</i>', '<i>M</i> observada (<i>DT</i>)', '<i>M</i> marginal estimada', '<i>EE</i>', 'IC 95 %'],
+      [['A', emA, la], ['B', emB, lb]].flatMap(([k, em]) => em.map((e, q) => { const o = obs(k, e.lv); return [q === 0 ? esc(k === 'A' ? aName : bName) : '', esc(e.lv), o.n, `${f(o.mean)} (${f(o.sd)})`, f(e.em), f(e.se), `[${f(e.ci[0])}, ${f(e.ci[1])}]`]; })),
+      'Las medias marginales estimadas promedian las medias de las casillas sin ponderar por su tamaño (como emmeans, JASP y SPSS); con casillas desiguales no coinciden con las medias observadas.'));
+    sec.tables.push(apaTable(`Comparaciones de las medias marginales estimadas de ${yName}`, ['Factor', 'Comparación', 'Diferencia', '<i>EE</i>', '<i>t</i>(' + r.dfE + ')', '<i>p</i>', '<i>d</i> de Cohen'],
+      [[aName, pA], [bName, pB]].flatMap(([nm, ps]) => ps.map((c, q) => [q === 0 ? esc(nm) : '', `${esc(c.a)} − ${esc(c.b)}`, f(c.diff), f(c.se), f(c.t), pv(c.p), f(c.d)])),
+      `<i>p</i> con ajuste de Tukey cuando el factor tiene más de dos niveles. <i>d</i> = diferencia / √<i>MC</i><sub>error</sub> (como JASP). Tamaño del efecto: 0.20 pequeño, 0.50 mediano, 0.80 grande (Cohen, 1988).`));
+    // con dos niveles, la redacción incluye las medias marginales y la d del efecto principal
+    const dTxt = (ps, em) => ps.length === 1 ? ` (${esc(em[0].lv)}: <i>M</i> = ${f(em[0].em)}; ${esc(em[1].lv)}: <i>M</i> = ${f(em[1].em)}; <i>d</i> = ${f(Math.abs(ps[0].d))}, efecto ${lbl.d(ps[0].d)})` : '';
     const st = k => `<i>F</i>(${r[k].df}, ${r.dfE}) = ${f(r[k].F)}, ${pt(r[k].p)}, η²<sub>p</sub> = ${nz(r[k].peta2.toFixed(3))}`;
     let t = `Se realizó un ANOVA factorial ${la.length}×${lb.length} para analizar el efecto de ${esc(aName)} y ${esc(bName)} sobre ${esc(yName)}. `;
-    t += `El efecto principal de ${esc(aName)} ${r.A.p < .05 ? 'fue' : 'no fue'} estadísticamente significativo, ${st('A')}. `;
-    t += `El efecto principal de ${esc(bName)} ${r.B.p < .05 ? 'fue' : 'no fue'} estadísticamente significativo, ${st('B')}. `;
+    t += `El efecto principal de ${esc(aName)} ${r.A.p < .05 ? 'fue' : 'no fue'} estadísticamente significativo, ${st('A')}${r.A.p < .05 ? dTxt(pA, emA) : ''}. `;
+    t += `El efecto principal de ${esc(bName)} ${r.B.p < .05 ? 'fue' : 'no fue'} estadísticamente significativo, ${st('B')}${r.B.p < .05 ? dTxt(pB, emB) : ''}. `;
     t += `La interacción ${esc(aName)} × ${esc(bName)} ${r.AB.p < .05 ? 'fue' : 'no fue'} estadísticamente significativa, ${st('AB')}.`;
     if (r.AB.p < .05) { t += ` Esto indica que el efecto de ${esc(aName)} depende del nivel de ${esc(bName)} (véase la figura), por lo que los efectos principales deben interpretarse con cautela.`;
       sec.checks.push(chk('info', 'La interacción es significativa: analiza los efectos simples (el efecto de un factor dentro de cada nivel del otro). El código R incluye cómo hacerlo con emmeans.')); }
     sec.text.push(t);
     if (lb.length <= 8) sec.charts.push(fig(`Interacción ${aName} × ${bName}: medias e IC 95 %`, CH.interaction(la, lb.map((b, j) => ({ name: b, means: la.map((_, i) => S.mean(cells[i][j])), ci: la.map((_, i) => S.meanCI(cells[i][j])) })), yName), CH.legend(lb)));
     const Y = rn(yName), A = rn(aName), B = rn(bName);
-    sec.code = `# ANOVA factorial: ${yName} ~ ${aName} × ${bName}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- aov(${Y} ~ ${A} * ${B}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::eta_squared(car::Anova(modelo, type = 3), partial = TRUE)\ncar::leveneTest(${Y} ~ ${A} * ${B}, data = datos, center = mean)\nshapiro.test(residuals(modelo))\n# Efectos simples\nemmeans::emmeans(modelo, pairwise ~ ${A} | ${B}, adjust = "holm")`;
+    sec.code = `# ANOVA factorial: ${yName} ~ ${aName} × ${bName}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- aov(${Y} ~ ${A} * ${B}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::eta_squared(car::Anova(modelo, type = 3), partial = TRUE)\ncar::leveneTest(${Y} ~ ${A} * ${B}, data = datos, center = mean)\nshapiro.test(residuals(modelo))\n# Medias marginales estimadas, comparaciones (Tukey) y d de Cohen (como JASP)\nfor (fac in c(${rq(aName)}, ${rq(bName)})) {\n  em <- emmeans::emmeans(modelo, fac)\n  print(em); print(pairs(em, adjust = "tukey"))\n  print(emmeans::eff_size(em, sigma = sigma(modelo), edf = df.residual(modelo)))\n}\n# Efectos simples\nemmeans::emmeans(modelo, pairwise ~ ${A} | ${B}, adjust = "holm")`;
     return sec;
   }
 
-  function runRegression(yName, xNames) {
-    const sec = { title: `Regresión lineal: ${yName}`, test: '', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+  // Selección de predictores con contrastes F parciales (cada variable categórica entra o sale como un bloque).
+  // Criterios por defecto de SPSS y JASP: entrada p < .05 y salida p > .10. Todos los pasos usan los mismos casos.
+  function stepSelect(X, y, cols, terms, method, PIN = .05, POUT = .10) {
+    const colsOf = t => cols.map((c, j) => (j > 0 && c.v.name === t ? j : -1)).filter(j => j >= 0);
+    const n = y.length, dfT = t => colsOf(t).length;
+    const fitT = ts => { const js = [0].concat(...ts.map(colsOf)); const m = S.olsCore(X.map(r => js.map(j => r[j])), y); return m && { sse: m.sse, r2: m.r2, p: js.length }; };
+    const partial = (small, big, t) => { const a = fitT(small), b = fitT(big); if (!a || !b || n - b.p <= 0) return null;
+      const F = ((a.sse - b.sse) / dfT(t)) / (b.sse / (n - b.p)); return { F, df: [dfT(t), n - b.p], p: S.pF(F, dfT(t), n - b.p) }; };
+    let cur = method === 'backward' ? terms.slice() : [], prevR2 = cur.length ? fitT(cur).r2 : 0;
+    const steps = [], seen = new Set([cur.slice().sort().join('|')]);
+    const log = (accion, t, test) => { const r2 = cur.length ? fitT(cur).r2 : 0; steps.push({ accion, t, r2, dr2: r2 - prevR2, ...test }); prevR2 = r2; };
+    for (let it = 0; it < 4 * terms.length + 4; it++) {
+      let moved = false;
+      if (method !== 'backward') {
+        const best = terms.filter(t => !cur.includes(t)).map(t => ({ t, r: partial(cur, cur.concat([t]), t) })).filter(o => o.r).sort((a, b) => a.r.p - b.r.p)[0];
+        if (best && best.r.p < PIN && !seen.has(cur.concat([best.t]).sort().join('|'))) { cur = cur.concat([best.t]); log('entra', best.t, best.r); seen.add(cur.slice().sort().join('|')); moved = true; }
+      }
+      if (method !== 'forward' && cur.length) {
+        const worst = cur.map(t => ({ t, r: partial(cur.filter(u => u !== t), cur, t) })).filter(o => o.r).sort((a, b) => b.r.p - a.r.p)[0];
+        if (worst && worst.r.p > POUT) { cur = cur.filter(t => t !== worst.t); log('sale', worst.t, worst.r); moved = true; }
+      }
+      if (!moved) break;
+    }
+    return { selected: cur, steps };
+  }
+  function runRegression(yName, xNames, method = 'enter') {
+    const stepwise = method !== 'enter', mName = { stepwise: 'por pasos', forward: 'hacia delante', backward: 'hacia atrás' }[method];
+    const sec = { title: `Regresión lineal${stepwise ? ` ${mName}` : ''}: ${yName}`, test: '', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     xNames = xNames.filter(n => n !== yName);
     if (!xNames.length) { sec.error = 'Selecciona al menos un predictor distinto de la variable dependiente.'; return sec; }
-    const yv = numOf(vByName(yName)), { idx, cols, X } = design(xNames, i => yv[i] !== null), n = idx.length, p = cols.length;
-    if (n < p + 2) { sec.error = `Hay pocos casos completos (${n}) para ${p - 1} predictores.`; return sec; }
+    const yv = numOf(vByName(yName)), candidates = xNames.slice(); let { idx, cols, X } = design(xNames, i => yv[i] !== null); const n = idx.length;
+    if (n < cols.length + 2) { sec.error = `Hay pocos casos completos (${n}) para ${cols.length - 1} predictores.`; return sec; }
     const y = idx.map(i => yv[i]); if (S.sd(y) === 0) { sec.error = `${yName} tiene el mismo valor en todos los casos: no se puede ajustar una regresión.`; return sec; }
+    let sel = null;
+    if (stepwise) {
+      if (!S.olsCore(X, y)) { sec.error = 'Hay colinealidad perfecta entre los predictores (por ejemplo, una variable es combinación exacta de otras). Elimina alguno.'; return sec; }
+      sel = stepSelect(X, y, cols, candidates, method);
+      if (!sel.selected.length) { sec.error = `Ningún predictor cumplió el criterio de entrada (p < .05): el método ${mName} no seleccionó ninguna variable para predecir ${yName}.`; return sec; }
+      // orden de entrada en la tabla de coeficientes, como SPSS y JASP
+      const entered = sel.steps.filter(s => s.accion === 'entra').map(s => s.t);
+      xNames = (method === 'backward' ? candidates : entered.filter((t, i) => entered.indexOf(t) === i)).filter(t => sel.selected.includes(t));
+      const ordered = [0].concat(...xNames.map(t => cols.map((c, j) => (j > 0 && c.v.name === t ? j : -1)).filter(j => j >= 0)));
+      X = X.map(r => ordered.map(j => r[j])); cols = ordered.map(j => cols[j]);
+    }
+    const p = cols.length;
     const m = S.ols(X, y);
     if (!m) { sec.error = 'Hay colinealidad perfecta entre los predictores (por ejemplo, una variable es combinación exacta de otras). Elimina alguno.'; return sec; }
     const multi = cols.length > 2, het = m.bp.p < .05, sdY = S.sd(y);
-    sec.test = `Regresión lineal ${multi ? 'múltiple' : 'simple'} (MCO)${het ? ' con errores robustos HC3' : ''}`;
+    sec.test = `Regresión lineal ${multi ? 'múltiple' : 'simple'} (MCO${stepwise ? `, ${mName}` : ''})${het ? ' con errores robustos HC3' : ''}`;
     sec.why.push(`Variable dependiente: ${esc(yName)} → cuantitativa.`);
-    sec.why.push(`${xNames.length} predictor${xNames.length > 1 ? 'es' : ''}: ${list(xNames.map(esc))}. Las variables categóricas se codifican como variables ficticias frente a una categoría de referencia.`);
+    if (stepwise) {
+      sec.why.push(`${candidates.length} predictores candidatos: ${list(candidates.map(esc))}. Las variables categóricas se codifican como variables ficticias frente a una categoría de referencia y entran o salen del modelo como un bloque.`);
+      sec.why.push(`Has elegido el método ${mName}: ${method === 'stepwise' ? 'en cada paso entra el predictor con menor valor <i>p</i> si es < .05, y sale cualquier predictor del modelo cuyo <i>p</i> supere .10 (criterios por defecto de SPSS y JASP)' : method === 'forward' ? 'en cada paso entra el predictor con menor valor <i>p</i> si es < .05, y los que entran no vuelven a salir' : 'se parte de todos los predictores y en cada paso sale el de mayor valor <i>p</i> si supera .10'}. Todos los pasos usan los mismos ${n} casos completos.`);
+    } else sec.why.push(`${xNames.length} predictor${xNames.length > 1 ? 'es' : ''}: ${list(xNames.map(esc))}. Las variables categóricas se codifican como variables ficticias frente a una categoría de referencia.`);
     sec.why.push('La regresión estima cuánto cambia la variable dependiente por cada unidad de cada predictor, manteniendo constantes los demás.');
-    sec.decision = `Se ajustó una regresión lineal ${multi ? 'múltiple' : 'simple'} con ${n} casos completos.` + (het ? ' Como no se cumple la homocedasticidad, los contrastes de los coeficientes usan errores típicos robustos (HC3).' : '');
+    sec.decision = (stepwise
+      ? `Se ajustó una regresión lineal ${mName} con ${n} casos completos y ${candidates.length} predictores candidatos; el modelo final incluye ${xNames.length}: ${list(xNames.map(esc))}.`
+      : `Se ajustó una regresión lineal ${multi ? 'múltiple' : 'simple'} con ${n} casos completos.`) + (het ? ' Como no se cumple la homocedasticidad, los contrastes de los coeficientes usan errores típicos robustos (HC3).' : '');
+    if (stepwise) sec.checks.push(chk('info', 'Selección automática de predictores: los métodos por pasos se ajustan a las particularidades de la muestra, por lo que tienden a sobrestimar el <i>R</i>², y los <i>p</i>-valores del modelo final no tienen en cuenta la selección. Justifica los candidatos con la teoría y, si puedes, compara con el modelo con todos los predictores (método «Introducir»).'));
     if (het) sec.why.push('La prueba de Breusch-Pagan indica heterocedasticidad: los errores típicos clásicos no son fiables, así que se usan errores robustos HC3 para los contrastes.');
     const swr = S.shapiro(m.e);
     if (swr && swr.p >= .05) sec.checks.push(chk('ok', `Normalidad de los residuos (Shapiro-Wilk): <i>W</i> = ${nz(swr.W.toFixed(3))}, ${pt(swr.p)}.`));
@@ -1167,25 +1239,45 @@
     sec.checks.push(chk(big ? 'no' : 'info', `Casos influyentes (distancia de Cook): ${infl} casos superan 4/<i>n</i>${big ? ` y ${big} superan 1, lo que indica una influencia excesiva: revísalos` : '; ninguno supera 1'}.`));
     if (n < 10 * (p - 1)) sec.checks.push(chk('no', `Tamaño muestral: ${n} casos para ${p - 1} coeficientes. Se recomiendan al menos 10–15 casos por predictor.`));
     sec.alt = 'Si hay heterocedasticidad, errores robustos (HC3); si la relación no es lineal, transformar variables o añadir términos cuadráticos.';
-    sec.tables.push(apaTable('Resumen del modelo de regresión', ['<i>R</i>²', '<i>R</i>² ajustado', '<i>F</i>', '<i>gl</i>', '<i>p</i>', '<i>n</i>'], [[nz(m.r2.toFixed(3)), nz(m.adjr2.toFixed(3)), f(m.F), `${m.df1}, ${m.dfr}`, pv(m.pF), n]]));
+    if (stepwise) {
+      const stepRows = sel.steps.map((st, k) => [k + 1, `${st.accion === 'entra' ? 'Entra' : 'Sale'}: ${esc(st.t)}`, nz(st.r2.toFixed(3)), (st.dr2 < 0 ? '−' : '') + nz(Math.abs(st.dr2).toFixed(3)), `${f(st.F)} (${st.df[0]}, ${st.df[1]})`, pv(st.p)]);
+      sec.tables.push(apaTable(`Pasos de la regresión ${mName}`, ['Paso', 'Cambio', '<i>R</i>²', 'Δ<i>R</i>²', '<i>F</i> de cambio (<i>gl</i>)', '<i>p</i>'], stepRows,
+        `Criterio de entrada: <i>p</i> < .05${method !== 'forward' ? '; criterio de salida: <i>p</i> > .10' : ''}. ${method === 'backward' ? 'Se parte del modelo con todos los predictores; cada paso elimina uno.' : 'Cada paso añade o elimina un predictor respecto al anterior.'}`));
+    }
+    sec.tables.push(apaTable(stepwise ? `Resumen del modelo final${sel.steps.length ? ` (paso ${sel.steps.length})` : ''}` : 'Resumen del modelo de regresión', ['<i>R</i>²', '<i>R</i>² ajustado', '<i>F</i>', '<i>gl</i>', '<i>p</i>', '<i>n</i>'], [[nz(m.r2.toFixed(3)), nz(m.adjr2.toFixed(3)), f(m.F), `${m.df1}, ${m.dfr}`, pv(m.pF), n]]));
     const head = ['Predictor', '<i>B</i>', '<i>EE</i>', 'IC 95 % (<i>B</i>)', 'β', '<i>t</i>', '<i>p</i>'].concat(het ? ['<i>EE</i> (HC3)', '<i>p</i> (HC3)'] : []).concat(multi ? ['VIF'] : []);
     const beta = cols.map((c, j) => (j === 0 ? null : m.b[j] * S.sd(X.map(r => r[j])) / sdY));
     const rows = cols.map((c, j) => [esc(c.name), f(m.b[j], 3), f(m.se[j], 3), `[${f(m.ci[j][0], 3)}, ${f(m.ci[j][1], 3)}]`, j ? r2s(beta[j]) : '', f(m.t[j]), pv(m.pv[j])]
       .concat(het ? [f(m.se3[j], 3), pv(m.p3[j])] : []).concat(multi ? [j ? f(m.vif[j]) : ''] : []));
     sec.tables.push(apaTable(`Coeficientes del modelo de regresión para ${yName}`, head, rows, '<i>B</i> = coeficiente no estandarizado; β = coeficiente estandarizado.' + (het ? ' HC3 = errores típicos robustos a la heterocedasticidad.' : '')));
     const pUse = het ? m.p3 : m.pv, sigP = cols.map((c, j) => ({ c, j })).filter(o => o.j > 0 && pUse[o.j] < .05);
-    let t = `Se realizó un análisis de regresión lineal ${multi ? 'múltiple' : 'simple'} para predecir ${esc(yName)} a partir de ${list(xNames.map(esc))}. El modelo ${m.pF < .05 ? '' : 'no '}fue estadísticamente significativo, <i>F</i>(${m.df1}, ${m.dfr}) = ${f(m.F)}, ${pt(m.pF)}, y explicó el ${f(m.r2 * 100, 1)} % de la varianza (<i>R</i>² ajustado = ${nz(m.adjr2.toFixed(2))}). `;
+    const out = stepwise ? candidates.filter(c => !xNames.includes(c)) : [];
+    let t = (stepwise
+      ? `Se realizó un análisis de regresión lineal múltiple ${mName} (criterio de entrada <i>p</i> < .05${method !== 'forward' ? ' y de salida <i>p</i> > .10' : ''}) para predecir ${esc(yName)} a partir de ${candidates.length} predictores candidatos. ${sel.steps.length ? `El procedimiento terminó en el paso ${sel.steps.length} con` : 'El modelo final incluyó'} ${xNames.length} predictor${xNames.length > 1 ? 'es' : ''}. El modelo final`
+      : `Se realizó un análisis de regresión lineal ${multi ? 'múltiple' : 'simple'} para predecir ${esc(yName)} a partir de ${list(xNames.map(esc))}. El modelo`) + ` ${m.pF < .05 ? '' : 'no '}fue estadísticamente significativo, <i>F</i>(${m.df1}, ${m.dfr}) = ${f(m.F)}, ${pt(m.pF)}, y explicó el ${f(m.r2 * 100, 1)} % de la varianza (<i>R</i>² ajustado = ${nz(m.adjr2.toFixed(2))}). `;
     if (m.pF < .05) {
       if (sigP.length) t += list(sigP.map(o => `${esc(o.c.name)} ${m.b[o.j] > 0 ? 'se asoció positivamente' : 'se asoció negativamente'} con ${esc(yName)} (<i>B</i> = ${f(m.b[o.j], 2)}, β = ${r2s(beta[o.j])}, ${pt(pUse[o.j])})`)) + '. ';
       const ns = cols.filter((c, j) => j > 0 && pUse[j] >= .05).map(c => esc(c.name));
       if (ns.length) t += `${list(ns)} no ${ns.length > 1 ? 'fueron predictores significativos' : 'fue un predictor significativo'}.`;
     }
+    if (out.length) t += ` ${list(out.map(esc))} no ${out.length > 1 ? 'entraron' : 'entró'} en el modelo.`;
     if (het) t += ' Los contrastes de los coeficientes se basan en errores típicos robustos (HC3).';
     sec.text.push(t);
     if (!multi && cols[1].level === undefined) sec.charts.push(fig(`${yName} según ${cols[1].name}`, CH.scatter(X.map(r => r[1]), y, cols[1].name, yName, { line: [m.b[0], m.b[1]] })));
     sec.charts.push(fig('Residuos frente a valores predichos', CH.scatter(m.fit, m.e, 'Valor predicho', 'Residuo', { zero: true })));
     const fml = `${rn(yName)} ~ ${xNames.map(rn).join(' + ')}`;
-    sec.code = `# Regresión lineal: ${yName}\nmodelo <- lm(${fml}, data = datos)\nsummary(modelo)\nconfint(modelo)\nparameters::standardize_parameters(modelo, method = "basic")  # β como en SPSS\nshapiro.test(residuals(modelo))\nlmtest::bptest(modelo)\nlmtest::dwtest(modelo)\n` + (multi ? 'car::vif(modelo)\n' : '') + `sum(cooks.distance(modelo) > 4 / nobs(modelo))` + (het ? '\nlmtest::coeftest(modelo, vcov = sandwich::vcovHC(modelo, type = "HC3"))' : '');
+    const stepCode = !stepwise ? '' : `# Selección ${mName} con contrastes F parciales (entrada p < .05, salida p > .10), como SPSS y JASP.\n` +
+      `# Las variables categóricas entran o salen como un bloque; todos los pasos usan los mismos casos completos.\n` +
+      `candidatos <- c(${candidates.map(rq).join(', ')})\n` +
+      `datos_c <- na.omit(datos[, c(${rq(yName)}, candidatos)])\n` +
+      `ff <- function(v) reformulate(if (length(v)) sprintf("\`%s\`", v) else "1", response = sprintf("\`%s\`", ${rq(yName)}))\n` +
+      `pvals <- function(tab) setNames(tab[-1, "Pr(>F)"], gsub("\`", "", rownames(tab)[-1]))\n` +
+      `dentro <- ${method === 'backward' ? 'candidatos' : 'character(0)'}\n` +
+      `repeat {\n  cambio <- FALSE\n` +
+      (method !== 'backward' ? `  fuera <- setdiff(candidatos, dentro)\n  if (length(fuera)) {\n    pa <- pvals(add1(lm(ff(dentro), data = datos_c), scope = ff(candidatos), test = "F"))\n    if (min(pa) < .05) { dentro <- c(dentro, names(which.min(pa))); cambio <- TRUE }\n  }\n` : '') +
+      (method !== 'forward' ? `  if (length(dentro)) {\n    pd <- pvals(drop1(lm(ff(dentro), data = datos_c), test = "F"))\n    if (max(pd) > .10) { dentro <- setdiff(dentro, names(which.max(pd))); cambio <- TRUE }\n  }\n` : '') +
+      `  if (!cambio) break\n}\ndentro  # predictores seleccionados\n`;
+    sec.code = `# Regresión lineal${stepwise ? ` ${mName}` : ''}: ${yName}\n` + (stepwise ? `${stepCode}modelo <- lm(ff(dentro), data = datos_c)\n` : `modelo <- lm(${fml}, data = datos)\n`) + `summary(modelo)\nconfint(modelo)\nparameters::standardize_parameters(modelo, method = "basic")  # β como en SPSS\nshapiro.test(residuals(modelo))\nlmtest::bptest(modelo)\nlmtest::dwtest(modelo)\n` + (xNames.length > 1 ? 'car::vif(modelo)\n' : '') + `sum(cooks.distance(modelo) > 4 / nobs(modelo))` + (het ? '\nlmtest::coeftest(modelo, vcov = sandwich::vcovHC(modelo, type = "HC3"))' : '');
     return sec;
   }
 
@@ -1207,9 +1299,11 @@
       if (isOn('paired')) { const m = checkedVals('pM');
         add(m.length === 2 ? runPaired(m[0], m[1]) : m.length > 2 ? runRepeated(m) : { title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));
-      if (isOn('reg')) add(runRegression($('#rY').value, checkedVals('rX')));
+      if (isOn('reg')) add(runRegression($('#rY').value, checkedVals('rX'), ($('#rM') || {}).value || 'enter'));
       if (isOn('logit')) add(runLogistic($('#lY').value, checkedVals('lX')));
-      if (isOn('fact')) add(runFactorial($('#fY').value, $('#fA').value, $('#fB').value));
+      if (isOn('fact')) { const ys = checkedVals('fY');
+        if (ys.length) ys.forEach(y => add(runFactorial(y, $('#fA').value, $('#fB').value)));
+        else add({ title: 'ANOVA factorial', error: 'Selecciona al menos una variable dependiente.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('ancova')) add(runAncova($('#acY').value, $('#acG').value, checkedVals('acC')));
       if (isOn('binrel')) add(runBinRel(checkedVals('bR')));
       if (isOn('cfa')) add(runCfa([0, 1, 2, 3].map(k => ({ name: $('#cfN' + k).value.trim() || `Factor ${k + 1}`, items: checkedVals('cfI' + k) })).filter(fc => fc.items.length)));
