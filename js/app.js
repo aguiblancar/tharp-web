@@ -105,10 +105,35 @@
     });
     const rows = aoa.slice(1).map(r => headers.map((_, i) => norm(r[i]))).filter(r => r.some(v => v !== null));
     if (!rows.length) throw new Error('No se han encontrado filas con datos.');
-    Object.assign(ST, { fileName, headers, rows, defaults: defaults || null });
+    Object.assign(ST, { fileName, headers, rows, defaults: defaults || null, ordOpen: null });
     ST.vars = headers.map((name, i) => detect(name, i, rows.map(r => r[i]), hints && hints[String(aoa[0][i])])).filter(v => !(v.valid === 0 && /^var_\d+$/.test(v.name)));
     renderVars(); show(2);
     track('datos_cargados', { formato: fileName === 'tharp_datos_ejemplo.csv' && defaults ? 'ejemplo' : (fileName.split('.').pop() || '').toLowerCase() });
+  }
+
+  // escalas ordinales habituales (español e inglés); se usa la primera en la que encajan todas las categorías presentes
+  const ORD_SCALES = [
+    ['nunca', 'casi nunca', 'rara vez', 'pocas veces', 'a veces', 'algunas veces', 'a menudo', 'frecuentemente', 'muchas veces', 'bastantes veces', 'casi siempre', 'siempre'],
+    ['totalmente en desacuerdo', 'muy en desacuerdo', 'en desacuerdo', 'algo en desacuerdo', 'ni de acuerdo ni en desacuerdo', 'neutral', 'indiferente', 'algo de acuerdo', 'de acuerdo', 'muy de acuerdo', 'totalmente de acuerdo'],
+    ['nada', 'muy poco', 'poco', 'algo', 'regular', 'bastante', 'mucho', 'muchisimo'],
+    ['muy bajo', 'muy baja', 'bajo', 'baja', 'medio bajo', 'media baja', 'medio', 'media', 'medio alto', 'media alta', 'alto', 'alta', 'muy alto', 'muy alta'],
+    ['inferior', 'bajo', 'baja', 'medio', 'media', 'superior', 'alto', 'alta'],
+    ['ninguno', 'ninguna', 'leve', 'ligero', 'ligera', 'moderado', 'moderada', 'grave', 'severo', 'severa', 'muy grave', 'extremo', 'extrema'],
+    ['muy malo', 'muy mala', 'malo', 'mala', 'regular', 'normal', 'aceptable', 'bueno', 'buena', 'muy bueno', 'muy buena', 'excelente'],
+    ['muy insatisfecho', 'muy insatisfecha', 'insatisfecho', 'insatisfecha', 'neutral', 'satisfecho', 'satisfecha', 'muy satisfecho', 'muy satisfecha'],
+    ['sin estudios', 'primaria', 'estudios primarios', 'eso', 'secundaria', 'estudios secundarios', 'secundaria o fp medio', 'bachillerato', 'fp', 'fp medio', 'fp grado medio', 'fp superior', 'fp grado superior', 'fp superior o universitarios', 'universitarios', 'universitaria', 'grado', 'master', 'máster', 'doctorado'],
+    ['pre', 'pretest', 'antes', 'post', 'postest', 'despues', 'seguimiento'],
+    ['never', 'rarely', 'sometimes', 'often', 'always'],
+    ['strongly disagree', 'disagree', 'neutral', 'agree', 'strongly agree'],
+    ['none', 'mild', 'moderate', 'severe'],
+    ['low', 'medium', 'high'],
+  ];
+  const normTxt = t => String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+  function knownOrder(levels) {
+    if (levels.length < 2 || levels.length > 12) return null;
+    const nl = levels.map(normTxt);
+    for (const sc of ORD_SCALES) { const sn = sc.map(normTxt); if (nl.every(l => sn.includes(l))) return levels.slice().sort((a, b) => sn.indexOf(normTxt(a)) - sn.indexOf(normTxt(b))); }
+    return null;
   }
 
   // ---------- detección de variables ----------
@@ -134,11 +159,20 @@
       if (hint.type === 'cat' && isId && uniqAll === valid.length) { v.type = 'ign'; v.note = ['Identificador']; }
       else { v.type = hint.type === 'num' && okN.length / valid.length < .95 ? 'cat' : hint.type; v.note = [hint.note].concat(v.nonNum && v.type === 'num' ? [v.nonNum + ' valores no numéricos se tratarán como perdidos'] : []); }
     }
-    v.labelled = !!(hint && hint.labels); v.auto = v.type; return v;
+    v.labelled = !!(hint && hint.labels); v.auto = v.type;
+    // orden de las categorías: el de las etiquetas del archivo de origen o el de una escala ordinal reconocida
+    const present = [...new Set(valid.map(String))];
+    if (hint && hint.order) v.order = hint.order.map(String).filter(l => present.includes(l));
+    else { const o = knownOrder(present); if (o) { v.order = o; v.orderNote = 'Orden de escala ordinal reconocido'; } }
+    return v;
   }
   const numOf = v => v._num || (v._num = v.raw.map(toNum));
   const catOf = v => v.raw.map(x => (x === null ? null : String(x)));
-  const levelsOf = v => [...new Set(catOf(v).filter(x => x !== null))].sort(cmp);
+  // orden de las categorías: el de la variable (etiquetas de SPSS/JASP, escala ordinal reconocida o el que elija la persona);
+  // si no hay, numérico o alfabético. ordOf limita el orden a los valores presentes en un subconjunto de casos
+  const ordOf = (v, present) => { const pr = [...new Set(present.filter(x => x !== null && x !== undefined).map(String))];
+    if (!v || !v.order) return pr.sort(cmp); return v.order.filter(l => pr.includes(l)).concat(pr.filter(l => !v.order.includes(l)).sort(cmp)); };
+  const levelsOf = v => ordOf(v, catOf(v));
   const byType = t => ST.vars.filter(v => v.type === t);
   const vByName = n => ST.vars.find(v => v.name === n);
 
@@ -155,12 +189,21 @@
     ST.vars.forEach((v, idx) => {
       let sum = '';
       if (v.type === 'num') { const x = numOf(v).filter(a => a !== null); if (x.length) { const d = S.describe(x); sum = `<i>M</i> = ${f(d.mean)} · <i>DT</i> = ${f(d.sd)} · rango ${+d.min.toFixed(3)}–${+d.max.toFixed(3)}`; } }
-      else if (v.type === 'cat') { const lv = levelsOf(v), c = catOf(v); sum = `${lv.length} categorías: ` + lv.slice(0, 4).map(l => `${esc(l)} (${c.filter(x => x === l).length})`).join(', ') + (lv.length > 4 ? '…' : ''); }
+      else if (v.type === 'cat') { const lv = levelsOf(v), c = catOf(v); sum = `${lv.length} categorías: ` + lv.slice(0, 4).map(l => `${esc(l)} (${c.filter(x => x === l).length})`).join(', ') + (lv.length > 4 ? '…' : '');
+        if (lv.length >= 2 && lv.length <= 30) sum += ` <button class="btn btn-line btn-sm" data-ord="${idx}" style="padding:2px 10px;margin-left:6px">Orden</button>`;
+        if (ST.ordOpen === idx) sum += `<div class="ordEd" style="margin-top:8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:#fff"><div class="muted small" style="margin-bottom:6px">Orden de las categorías (la primera es la de referencia en las regresiones; importa en tablas, gráficos, kappa ponderada y tendencias):</div>` +
+          lv.map((l, q) => `<div style="display:flex;align-items:center;gap:6px;margin:2px 0"><button class="btn btn-line btn-sm" data-up="${q}" ${q === 0 ? 'disabled' : ''} style="padding:0 8px">↑</button><button class="btn btn-line btn-sm" data-dn="${q}" ${q === lv.length - 1 ? 'disabled' : ''} style="padding:0 8px">↓</button><span>${q + 1}. ${esc(l)}</span></div>`).join('') +
+          `<button class="btn btn-line btn-sm" data-ordclose="1" style="margin-top:6px">Hecho</button></div>`; }
       h += `<tr><td><b>${esc(v.name)}</b></td><td><select data-v="${idx}"><option value="num"${v.type === 'num' ? ' selected' : ''}>Cuantitativa</option><option value="cat"${v.type === 'cat' ? ' selected' : ''}>Categórica</option><option value="ign"${v.type === 'ign' ? ' selected' : ''}>Ignorar</option></select></td>
-        <td>${v.valid}</td><td>${v.missing ? `<span class="pill warn">${v.missing}</span>` : '0'}</td><td class="small">${sum}</td><td>${v.note.map(t => `<span class="pill">${esc(t)}</span>`).join('')}${v.type !== v.auto ? '<span class="pill">Cambiado por ti</span>' : ''}</td></tr>`;
+        <td>${v.valid}</td><td>${v.missing ? `<span class="pill warn">${v.missing}</span>` : '0'}</td><td class="small">${sum}</td><td>${v.note.map(t => `<span class="pill">${esc(t)}</span>`).join('')}${v.type === 'cat' && v.orderUser ? '<span class="pill">Orden elegido por ti</span>' : v.type === 'cat' && v.orderNote ? `<span class="pill">${esc(v.orderNote)}</span>` : ''}${v.type !== v.auto ? '<span class="pill">Cambiado por ti</span>' : ''}</td></tr>`;
     });
     $('#varTable').innerHTML = h + '</tbody>';
     $$('#varTable select').forEach(s => s.onchange = () => { ST.vars[+s.dataset.v].type = s.value; renderVars(); });
+    $$('#varTable [data-ord]').forEach(b => b.onclick = () => { ST.ordOpen = ST.ordOpen === +b.dataset.ord ? null : +b.dataset.ord; renderVars(); });
+    $$('#varTable [data-ordclose]').forEach(b => b.onclick = () => { ST.ordOpen = null; renderVars(); });
+    const move = (q, d) => { const v = ST.vars[ST.ordOpen], lv = levelsOf(v); [lv[q], lv[q + d]] = [lv[q + d], lv[q]]; v.order = lv; v.orderUser = true; renderVars(); };
+    $$('#varTable [data-up]').forEach(b => b.onclick = () => move(+b.dataset.up, -1));
+    $$('#varTable [data-dn]').forEach(b => b.onclick = () => move(+b.dataset.dn, 1));
   }
 
   // ---------- configuración de análisis ----------
@@ -212,6 +255,12 @@
        <label class="field"><span>Hipótesis (2 categorías)</span><select id="prAlt"><option value="two">Bilateral (recomendada)</option><option value="greater">Unilateral: mayor que la esperada</option><option value="less">Unilateral: menor que la esperada</option></select></label>
        <label class="field"><span>Proporciones esperadas (3 o más categorías, en su orden; vacío = iguales)</span><input id="prProbs" placeholder="p. ej., 0.5, 0.3, 0.2" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:240px"></label></div>`,
       !cats.length ? 'Necesitas una variable categórica.' : '');
+    h += card('agree', false, 'Acuerdo entre jueces y fiabilidad test-retest (CCI y kappa)', 'Puntuaciones de varios evaluadores o de dos aplicaciones del mismo test: coeficiente de correlación intraclase (cuantitativas) o kappa de Cohen y de Fleiss (categóricas).',
+      `<div class="field"><span>Jueces o aplicaciones (una columna por juez o momento; todas cuantitativas o todas categóricas)</span>${chips('agV', nums.concat(cats), () => false)}</div>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>CCI que se interpreta</span><select id="agM"><option value="ICC2">Dos factores, aleatorios, acuerdo absoluto (recomendado: jueces o momentos representativos)</option><option value="ICC3">Dos factores, mixtos, consistencia (solo estos jueces; importa el orden, no el valor exacto)</option><option value="ICC1">Un factor, aleatorios (cada sujeto valorado por jueces distintos)</option></select></label>
+       <label class="field"><span>Unidad</span><select id="agU"><option value="single">Medida única (la puntuación de un juez)</option><option value="average">Promedio de los jueces (si usarás la media)</option></select></label>
+       <label class="field"><span>Kappa de Cohen (categorías ordenadas)</span><select id="agW"><option value="none">Sin ponderar (categorías nominales)</option><option value="linear">Ponderada lineal</option><option value="quadratic">Ponderada cuadrática</option></select></label></div>`,
+      (nums.length + cats.length) < 2 ? 'Necesitas al menos dos variables.' : '');
     const dR = D.reg || {}, regY = pick(dR.y, nums[0] && nums[0].name);
     h += card('reg', !!D.reg && nums.length >= 1, 'Regresión lineal', 'Coeficientes, β estandarizados, R², y diagnóstico completo: normalidad, homocedasticidad, multicolinealidad e influencia.',
       `<label class="field"><span>Variable dependiente</span>${sel('rY', nums, regY)}</label>
@@ -650,7 +699,7 @@
     const sec = { title: `${names.join(', ')} × ${gName} (ANOVA mixta)`, test: 'ANOVA mixta (SC tipo III)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (names.includes(gName)) { sec.error = 'El factor entre sujetos no puede ser una de las medidas.'; return sec; }
     const idx = ST.rows.map((_, i) => i).filter(i => cg[i] !== null && cols.every(c => c[i] !== null));
-    const lv = [...new Set(idx.map(i => cg[i]))].sort(cmp), G = lv.length;
+    const lv = ordOf(vByName(gName), idx.map(i => cg[i])), G = lv.length;
     if (G < 2) { sec.error = `${gName} necesita al menos 2 grupos con datos completos.`; return sec; }
     const Y = idx.map(i => cols.map(c => c[i])), g = idx.map(i => lv.indexOf(cg[i])), n = Y.length, ng = lv.map((_, j) => g.filter(x => x === j).length);
     if (ng.some(c => c < 2)) { sec.error = 'Cada grupo necesita al menos 2 personas con todas las medidas.'; return sec; }
@@ -797,7 +846,7 @@
     const sec = { title: `Asociación entre ${aName} y ${bName}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (aName === bName) { sec.error = 'Elige dos variables distintas.'; return sec; }
     const ca = catOf(vByName(aName)), cb = catOf(vByName(bName)), keep = ca.map((v, i) => v !== null && cb[i] !== null);
-    const la = [...new Set(ca.filter((v, i) => keep[i]))].sort(cmp), lb = [...new Set(cb.filter((v, i) => keep[i]))].sort(cmp);
+    const la = ordOf(vByName(aName), ca.filter((v, i) => keep[i])), lb = ordOf(vByName(bName), cb.filter((v, i) => keep[i]));
     if (la.length < 2 || lb.length < 2) { sec.error = 'Cada variable necesita al menos 2 categorías con datos.'; return sec; }
     const tab = la.map(() => lb.map(() => 0)); ca.forEach((v, i) => { if (keep[i]) tab[la.indexOf(v)][lb.indexOf(cb[i])]++; });
     const r = S.chiSquare(tab), is2x2 = la.length === 2 && lb.length === 2, A = rn(aName), B = rn(bName);
@@ -881,13 +930,70 @@
     return sec;
   }
 
+  // Acuerdo entre jueces: CCI (cuantitativas) o kappa (categóricas)
+  function runAgree(names, opts) {
+    const sec = { title: 'Acuerdo entre jueces', why: [], checks: [], tables: [], charts: [], text: [], code: '' }, vs = names.map(vByName);
+    if (vs.length < 2) { sec.error = 'Selecciona al menos dos variables: una por juez o por aplicación.'; return sec; }
+    const types = [...new Set(vs.map(v => v.type))];
+    if (types.length > 1) { sec.error = 'Las variables deben ser todas cuantitativas (CCI) o todas categóricas (kappa).'; return sec; }
+    const Q = `c(${names.map(rq).join(', ')})`;
+    if (types[0] === 'num') {
+      const cols = vs.map(numOf), idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null)), Y = idx.map(i => cols.map(c => c[i]));
+      if (Y.length < 3) { sec.error = 'Se necesitan al menos 3 casos con todas las puntuaciones.'; return sec; }
+      const r = S.icc(Y), key = opts.model + (opts.unit === 'average' ? 'k' : ''), sel = r.forms.find(q => q.type === key);
+      const MW = { ICC1: 'Un factor, aleatorios, medida única', ICC1k: 'Un factor, aleatorios, promedio', ICC2: 'Dos factores, aleatorios, acuerdo absoluto, medida única', ICC2k: 'Dos factores, aleatorios, acuerdo absoluto, promedio', ICC3: 'Dos factores, mixtos, consistencia, medida única', ICC3k: 'Dos factores, mixtos, consistencia, promedio' };
+      const lvl = v => v < .5 ? 'pobre' : v < .75 ? 'moderada' : v < .9 ? 'buena' : 'excelente';
+      sec.test = `Coeficiente de correlación intraclase (${key})`;
+      sec.why.push(`${vs.length} jueces o aplicaciones cuantitativas (${list(names.map(esc))}) sobre ${Y.length} sujetos: el CCI mide qué parte de la variabilidad se debe a diferencias reales entre sujetos y no a desacuerdos entre jueces.`);
+      sec.why.push(`Se interpreta el ${MW[key]} (${key}; McGraw y Wong, 1996). ${opts.model === 'ICC2' ? 'Es la forma recomendada para fiabilidad entre jueces y test-retest cuando se quiere generalizar a otros jueces o momentos (Koo y Li, 2016).' : opts.model === 'ICC3' ? 'Solo valora la consistencia (que ordenen igual a los sujetos), no que den exactamente la misma puntuación.' : 'Adecuado cuando cada sujeto es evaluado por jueces distintos.'}`);
+      sec.decision = `Se calculó el CCI ${MW[key].toLowerCase()} con ${Y.length} sujetos y ${vs.length} jueces o aplicaciones.`;
+      sec.checks.push(chk('info', 'Interpretación (Koo y Li, 2016): < .50 pobre, .50–.75 moderada, .75–.90 buena, > .90 excelente; conviene basarla en el intervalo de confianza.'));
+      if (ST.rows.length - Y.length) sec.checks.push(chk('info', `Se excluyeron ${ST.rows.length - Y.length} casos sin todas las puntuaciones.`));
+      sec.tables.push(apaTable('Coeficientes de correlación intraclase', ['Forma', 'Modelo', 'CCI', 'IC 95 %', '<i>F</i>', '<i>gl</i><sub>1</sub>', '<i>gl</i><sub>2</sub>', '<i>p</i>'],
+        r.forms.map(q => [(q.type === key ? '<b>' : '') + q.type + (q.type === key ? '</b>' : ''), MW[q.type], nz(q.icc.toFixed(3)), `[${nz(q.ci[0].toFixed(3))}, ${nz(q.ci[1].toFixed(3))}]`, f(q.F), q.df1, q.df2, pv(q.p)]),
+        `En negrita, la forma elegida. Nomenclatura de Shrout y Fleiss (1979); modelos e IC de McGraw y Wong (1996). <i>F</i> contrasta CCI = 0.`));
+      sec.text.push(`Se calculó el coeficiente de correlación intraclase (${MW[key].toLowerCase()}) para evaluar el acuerdo entre ${list(names.map(esc))} en ${Y.length} sujetos. El CCI fue ${nz(sel.icc.toFixed(2))}, IC 95 % [${nz(sel.ci[0].toFixed(2))}, ${nz(sel.ci[1].toFixed(2))}], <i>F</i>(${sel.df1}, ${sel.df2}) = ${f(sel.F)}, ${pt(sel.p)}, lo que indica una fiabilidad ${lvl(sel.icc)} según los criterios de Koo y Li (2016).`);
+      sec.code = `# Coeficiente de correlación intraclase\nd <- na.omit(datos[, ${Q}])\nirr::icc(d, model = "${opts.model === 'ICC1' ? 'oneway' : 'twoway'}", type = "${opts.model === 'ICC3' ? 'consistency' : 'agreement'}", unit = "${opts.unit}")\npsych::ICC(d)  # las 6 formas`;
+      return sec;
+    }
+    const cols = vs.map(catOf), idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null)), R = idx.map(i => cols.map(c => c[i]));
+    if (R.length < 3) { sec.error = 'Se necesitan al menos 3 casos valorados por todos los jueces.'; return sec; }
+    const lv = ordOf(vs.find(v => v.order) || vs[0], R.flat());
+    if (vs.length === 2) {
+      const w = opts.weight, r = S.cohenKappa(R.map(x => x[0]), R.map(x => x[1]), lv, w), wn = { none: '', linear: ' ponderada lineal', quadratic: ' ponderada cuadrática' }[w];
+      const lk = v => v < 0 ? 'peor que el azar' : v <= .2 ? 'leve' : v <= .4 ? 'aceptable' : v <= .6 ? 'moderado' : v <= .8 ? 'considerable' : 'casi perfecto';
+      sec.test = `Kappa de Cohen${wn}`;
+      sec.why.push(`Dos jueces asignan categorías (${list(lv.map(esc))}) a los mismos ${R.length} casos: la kappa de Cohen mide el acuerdo corrigiendo el que se esperaría por azar.`);
+      if (w !== 'none') sec.why.push(`Kappa ponderada (${w === 'linear' ? 'lineal' : 'cuadrática'}): los desacuerdos entre categorías cercanas penalizan menos que entre categorías lejanas; adecuada si las categorías están ordenadas (orden usado: ${list(lv.map(esc))}).`);
+      sec.decision = `Se calculó la kappa de Cohen${wn} entre ${esc(names[0])} y ${esc(names[1])} con ${R.length} casos.`;
+      sec.checks.push(chk('info', 'Interpretación (Landis y Koch, 1977): ≤ .20 leve, .21–.40 aceptable, .41–.60 moderado, .61–.80 considerable, > .80 casi perfecto.'));
+      const tab = lv.map(a => lv.map(b => R.filter(x => x[0] === a && x[1] === b).length));
+      sec.tables.push(apaTable(`Tabla de acuerdo entre ${names[0]} (filas) y ${names[1]} (columnas)`, [''].concat(lv.map(esc)), lv.map((a, i) => [esc(a)].concat(tab[i].map((c, j) => (i === j ? `<b>${c}</b>` : String(c))))), 'En negrita, los acuerdos.'));
+      sec.tables.push(apaTable(`Kappa de Cohen${wn}`, ['κ', '<i>EE</i>', 'IC 95 %', '<i>z</i>', '<i>p</i>', 'Acuerdo observado', 'Acuerdo esperado', '<i>n</i>'],
+        [[nz(r.kappa.toFixed(3)), nz(r.se.toFixed(3)), `[${nz(r.ci[0].toFixed(3))}, ${nz(r.ci[1].toFixed(3))}]`, f(r.z), pv(r.p), `${f(r.po * 100, 1)} %`, `${f(r.pe * 100, 1)} %`, r.n]],
+        '<i>z</i> y <i>p</i> contrastan κ = 0 (Fleiss, Cohen y Everitt, 1969); IC con el error típico asintótico.'));
+      sec.text.push(`Se calculó la kappa de Cohen${wn} para evaluar el acuerdo entre ${esc(names[0])} y ${esc(names[1])} (${R.length} casos). El acuerdo observado fue del ${f(r.po * 100, 1)} % y la kappa fue ${nz(r.kappa.toFixed(2))}, IC 95 % [${nz(r.ci[0].toFixed(2))}, ${nz(r.ci[1].toFixed(2))}], <i>z</i> = ${f(r.z)}, ${pt(r.p)}, lo que indica un acuerdo ${lk(r.kappa)} (Landis y Koch, 1977).`);
+      sec.code = `# Kappa de Cohen\nd <- na.omit(datos[, ${Q}])\nirr::kappa2(d, weight = "${{ none: 'unweighted', linear: 'equal', quadratic: 'squared' }[w]}")\npsych::cohen.kappa(d)  # IC de kappa y kappa ponderada`;
+      return sec;
+    }
+    const r = S.fleissKappa(R, lv);
+    sec.test = 'Kappa de Fleiss';
+    sec.why.push(`${vs.length} jueces asignan categorías (${list(lv.map(esc))}) a los mismos ${R.length} casos: la kappa de Fleiss generaliza la de Cohen a más de dos jueces.`);
+    sec.decision = `Se calculó la kappa de Fleiss entre ${vs.length} jueces con ${R.length} casos.`;
+    sec.tables.push(apaTable('Kappa de Fleiss', ['', 'κ', '<i>z</i>', '<i>p</i>'], [['Global', nz(r.kappa.toFixed(3)), f(r.z), pv(r.p)]].concat(r.byCat.map(c => [`Categoría ${esc(c.level)}`, nz(c.kappa.toFixed(3)), '', ''])),
+      `<i>z</i> y <i>p</i> contrastan κ = 0. ${R.length} casos, ${vs.length} jueces.`));
+    sec.text.push(`Se calculó la kappa de Fleiss para evaluar el acuerdo entre ${vs.length} jueces (${list(names.map(esc))}) en ${R.length} casos: κ = ${nz(r.kappa.toFixed(2))}, <i>z</i> = ${f(r.z)}, ${pt(r.p)}.`);
+    sec.code = `# Kappa de Fleiss\nd <- na.omit(datos[, ${Q}])\nirr::kappam.fleiss(d, detail = TRUE)`;
+    return sec;
+  }
+
   // matriz de diseño: constante + predictores numéricos + variables ficticias (primera categoría = referencia)
   function design(xNames, rowOk) {
     const pv_ = xNames.map(vByName);
     const idx = ST.rows.map((_, i) => i).filter(i => rowOk(i) && pv_.every(v => (v.type === 'num' ? numOf(v)[i] !== null : v.raw[i] !== null)));
     const cols = [{ name: '(Constante)' }];
     pv_.forEach(v => { if (v.type === 'num') cols.push({ name: v.name, v });
-      else { const lv = [...new Set(idx.map(i => String(v.raw[i])))].sort(cmp); lv.slice(1).forEach(l => cols.push({ name: `${v.name}: ${l} (ref. ${lv[0]})`, v, level: l })); } });
+      else { const lv = ordOf(v, idx.map(i => String(v.raw[i]))); lv.slice(1).forEach(l => cols.push({ name: `${v.name}: ${l} (ref. ${lv[0]})`, v, level: l })); } });
     const X = idx.map(i => cols.map(c => (!c.v ? 1 : c.level === undefined ? numOf(c.v)[i] : (String(c.v.raw[i]) === c.level ? 1 : 0))));
     return { idx, cols, X };
   }
@@ -1266,7 +1372,7 @@
     if (!covNames.length) { sec.error = 'Selecciona al menos una covariable distinta de la variable dependiente.'; return sec; }
     const yv = numOf(vByName(yName)), gc = catOf(vByName(gName)), cv = covNames.map(n => numOf(vByName(n)));
     const idx = ST.rows.map((_, i) => i).filter(i => yv[i] !== null && gc[i] !== null && cv.every(c => c[i] !== null));
-    const lv = [...new Set(idx.map(i => gc[i]))].sort(cmp), L = lv.length, n = idx.length;
+    const lv = ordOf(vByName(gName), idx.map(i => gc[i])), L = lv.length, n = idx.length;
     if (L < 2) { sec.error = 'El factor necesita al menos 2 grupos con datos.'; return sec; }
     if (lv.some(l => idx.filter(i => gc[i] === l).length < 3)) { sec.error = 'Algún grupo tiene menos de 3 casos completos: no se puede estimar la ANCOVA. Agrupa categorías o elige otro factor.'; return sec; }
     if (n < L + covNames.length + 3) { sec.error = `Hay pocos casos completos (${n}) para este modelo.`; return sec; }
@@ -1314,7 +1420,7 @@
   function runBinRel(names) {
     const k = names.length, sec = { title: `${names.join(', ')} (cambio en una variable sí/no)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (k < 2) { sec.error = 'Selecciona al menos dos variables (momentos).'; return sec; }
-    const cs = names.map(n => catOf(vByName(n))), lv = [...new Set(cs.flat().filter(x => x !== null))].sort(cmp);
+    const cs = names.map(n => catOf(vByName(n))), lv = ordOf(names.map(vByName).find(v => v.order) || vByName(names[0]), cs.flat());
     if (lv.length !== 2) { sec.error = `Las variables deben tener las mismas dos categorías (se han encontrado ${lv.length}: ${list(lv.slice(0, 6).map(esc))}).`; return sec; }
     const idx = ST.rows.map((_, i) => i).filter(i => cs.every(c => c[i] !== null)), n = idx.length, ev = lv[1];
     if (n < 5) { sec.error = 'Hay muy pocos casos con todas las respuestas.'; return sec; }
@@ -1361,7 +1467,7 @@
     if (aName === bName) { sec.error = 'Elige dos factores distintos.'; return sec; }
     const yv = numOf(vByName(yName)), ca = catOf(vByName(aName)), cb = catOf(vByName(bName));
     const idx = ST.rows.map((_, i) => i).filter(i => yv[i] !== null && ca[i] !== null && cb[i] !== null);
-    const la = [...new Set(idx.map(i => ca[i]))].sort(cmp), lb = [...new Set(idx.map(i => cb[i]))].sort(cmp);
+    const la = ordOf(vByName(aName), idx.map(i => ca[i])), lb = ordOf(vByName(bName), idx.map(i => cb[i]));
     if (la.length < 2 || lb.length < 2) { sec.error = 'Cada factor necesita al menos 2 niveles con datos.'; return sec; }
     const cells = la.map(() => lb.map(() => [])); idx.forEach(i => cells[la.indexOf(ca[i])][lb.indexOf(cb[i])].push(yv[i]));
     if (cells.flat().some(c => c.length < 2)) { sec.error = 'Alguna combinación de niveles tiene menos de 2 casos: el ANOVA factorial no puede estimarse. Agrupa niveles o usa un único factor.'; return sec; }
@@ -1562,6 +1668,7 @@
     if (ST.source) log.push(`Archivo de ${esc(ST.source)}: se han respetado los tipos de medida (escala, ordinal, nominal) y las etiquetas de valor definidos en ${ST.sourceApp}.`, ...ST.sourceNotes.map(esc));
     if (ign.length) log.push(`Variables excluidas del análisis: ${list(ign.map(esc))}.`);
     if (changed.length) log.push(`Tipos de variable modificados por ti: ${list(changed.map(v => `${esc(v.name)} → ${{ num: 'cuantitativa', cat: 'categórica', ign: 'ignorada' }[v.type]}`))}.`);
+    const ordU = ST.vars.filter(v => v.type === 'cat' && v.orderUser); if (ordU.length) log.push(`Orden de categorías elegido por ti: ${ordU.map(v => `${esc(v.name)} (${list(levelsOf(v).map(esc))})`).join('; ')}.`);
     const nn = ST.vars.filter(v => v.type === 'num' && v.nonNum); if (nn.length) log.push(`Valores no numéricos tratados como perdidos en ${list(nn.map(v => `${esc(v.name)} (${v.nonNum})`))}.`);
     log.push('Valores perdidos: cada análisis usa los casos con datos completos en sus variables (las correlaciones, por parejas).');
     const add = s => { secs.push(s); if (s.decision) log.push(`<b>${esc(s.title)}:</b> ${s.decision}`); else if (s.error) log.push(`<b>${esc(s.title)}:</b> no se pudo realizar. ${esc(s.error)}`); };
@@ -1575,6 +1682,7 @@
       if (isOn('prop')) { const vs = checkedVals('prV'), p0 = parseFloat(String(($('#prP0') || {}).value || '0.5').replace(',', '.')), pr = String(($('#prProbs') || {}).value || '').trim();
         if (vs.length) vs.forEach(v => add(runProp(v, p0, ($('#prAlt') || {}).value || 'two', pr)));
         else add({ title: 'Proporciones', error: 'Selecciona al menos una variable categórica.', why: [], checks: [], tables: [], charts: [], text: [] }); }
+      if (isOn('agree')) add(runAgree(checkedVals('agV'), { model: ($('#agM') || {}).value || 'ICC2', unit: ($('#agU') || {}).value || 'single', weight: ($('#agW') || {}).value || 'none' }));
       if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
         add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1], ($('#pAlt') || {}).value || 'two') : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));

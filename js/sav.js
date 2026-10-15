@@ -188,14 +188,16 @@
       }
       const valid = vals.filter(x => x !== null), distinct = new Set(valid), labeled = v.labels.size > 0 && valid.every(x => v.labels.has(x));
       const asLabels = () => vals.map(x => (x !== null && v.labels.has(x) ? v.labels.get(x) : x));
-      if (v.measure === 1) { hints[v.name] = { type: 'cat', note: 'Nominal en SPSS', labels: true }; return { name: v.name, vals: asLabels() }; }
+      // orden de las categorías: el de los códigos numéricos de las etiquetas (1 = …, 2 = …), como en SPSS
+      const order = () => [...v.labels.entries()].sort((a, b) => (typeof a[0] === 'number' && typeof b[0] === 'number' ? a[0] - b[0] : String(a[0]).localeCompare(String(b[0])))).map(e => String(e[1]));
+      if (v.measure === 1) { hints[v.name] = { type: 'cat', note: 'Nominal en SPSS', labels: true, order: order() }; return { name: v.name, vals: asLabels() }; }
       if (labeled && distinct.size <= 3) {
-        hints[v.name] = { type: 'cat', note: `${{ 2: 'Ordinal', 3: 'Escala' }[v.measure] || 'Sin medida'} en SPSS, con ${distinct.size} valores etiquetados: tratada como categórica`, labels: true };
+        hints[v.name] = { type: 'cat', note: `${{ 2: 'Ordinal', 3: 'Escala' }[v.measure] || 'Sin medida'} en SPSS, con ${distinct.size} valores etiquetados: tratada como categórica`, labels: true, order: order() };
         return { name: v.name, vals: asLabels() };
       }
       if (v.measure === 2) hints[v.name] = { type: 'num', note: 'Ordinal en SPSS: tratada como cuantitativa' };
       else if (v.measure === 3) hints[v.name] = { type: 'num', note: 'Escala en SPSS' };
-      else if (labeled) { hints[v.name] = { type: 'cat', note: 'Con etiquetas de valor en SPSS', labels: true }; return { name: v.name, vals: asLabels() }; }
+      else if (labeled) { hints[v.name] = { type: 'cat', note: 'Con etiquetas de valor en SPSS', labels: true, order: order() }; return { name: v.name, vals: asLabels() }; }
       return { name: v.name, vals };
     });
     const aoa = [cols.map(c => c.name)];

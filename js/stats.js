@@ -674,6 +674,66 @@
     const E = pr.map(q => q * N), chi = sum(counts.map((o, i) => (o - E[i]) ** 2 / E[i])), df = k - 1;
     return { chi, df, p: pChi(chi, df), E, N, probs: pr, resid: counts.map((o, i) => (o - E[i]) / Math.sqrt(E[i])), minE: Math.min(...E), w: Math.sqrt(chi / N) };
   }
+  // ---------- acuerdo entre jueces ----------
+  // CCI de Shrout y Fleiss / McGraw y Wong: Y n sujetos × k jueces (casos completos); las 6 formas con F, p e IC 95 %
+  function icc(Y, level = .95) {
+    const n = Y.length, k = Y[0].length, gm = mean(Y.flat()), rm = Y.map(mean), cm = Y[0].map((_, j) => mean(Y.map(r => r[j])));
+    const ssR = k * sum(rm.map(m => (m - gm) ** 2)), ssC = n * sum(cm.map(m => (m - gm) ** 2)), ssT = sum(Y.flat().map(v => (v - gm) ** 2)), ssE = ssT - ssR - ssC;
+    const MSR = ssR / (n - 1), MSC = ssC / (k - 1), MSE = ssE / ((n - 1) * (k - 1)), MSW = (ssC + ssE) / (n * (k - 1));
+    const a2 = (1 - level) / 2, qf = (p, d1, d2) => J.centralF.inv(p, d1, d2);
+    const out = [];
+    { // un factor, efectos aleatorios
+      const F = MSR / MSW, d1 = n - 1, d2 = n * (k - 1), FL = F / qf(1 - a2, d1, d2), FU = F * qf(1 - a2, d2, d1);
+      out.push({ type: 'ICC1', model: 'oneway', unit: 'single', icc: (MSR - MSW) / (MSR + (k - 1) * MSW), F, df1: d1, df2: d2, p: pF(F, d1, d2), ci: [(FL - 1) / (FL + k - 1), (FU - 1) / (FU + k - 1)] });
+      out.push({ type: 'ICC1k', model: 'oneway', unit: 'average', icc: (MSR - MSW) / MSR, F, df1: d1, df2: d2, p: pF(F, d1, d2), ci: [1 - 1 / FL, 1 - 1 / FU] });
+    }
+    { // dos factores, acuerdo absoluto
+      const F = MSR / MSE, d1 = n - 1, d2 = (n - 1) * (k - 1), r1 = (MSR - MSE) / (MSR + (k - 1) * MSE + k * (MSC - MSE) / n);
+      const a = k * r1 / (n * (1 - r1)), b = 1 + k * r1 * (n - 1) / (n * (1 - r1)), v = (a * MSC + b * MSE) ** 2 / ((a * MSC) ** 2 / (k - 1) + (b * MSE) ** 2 / ((n - 1) * (k - 1)));
+      const FL = qf(1 - a2, n - 1, v), FU = qf(1 - a2, v, n - 1);
+      const lo = n * (MSR - FL * MSE) / (FL * (k * MSC + (k * n - k - n) * MSE) + n * MSR), hi = n * (FU * MSR - MSE) / (k * MSC + (k * n - k - n) * MSE + n * FU * MSR);
+      out.push({ type: 'ICC2', model: 'twoway', agreement: 'absolute', unit: 'single', icc: r1, F, df1: d1, df2: d2, p: pF(F, d1, d2), ci: [lo, hi] });
+      // medida promedio: IC de McGraw y Wong (1996), con gl de Satterthwaite calculados con el CCI promedio (como SPSS e irr)
+      const rk = (MSR - MSE) / (MSR + (MSC - MSE) / n), ak = k * rk / (n * (1 - rk)), bk = 1 + k * rk * (n - 1) / (n * (1 - rk));
+      const vk = (ak * MSC + bk * MSE) ** 2 / ((ak * MSC) ** 2 / (k - 1) + (bk * MSE) ** 2 / ((n - 1) * (k - 1))), FLk = qf(1 - a2, n - 1, vk), FUk = qf(1 - a2, vk, n - 1);
+      out.push({ type: 'ICC2k', model: 'twoway', agreement: 'absolute', unit: 'average', icc: rk, F, df1: d1, df2: d2, p: pF(F, d1, d2),
+        ci: [n * (MSR - FLk * MSE) / (FLk * (MSC - MSE) + n * MSR), n * (FUk * MSR - MSE) / (MSC - MSE + n * FUk * MSR)] });
+    }
+    { // dos factores, consistencia
+      const F = MSR / MSE, d1 = n - 1, d2 = (n - 1) * (k - 1), FL = F / qf(1 - a2, d1, d2), FU = F * qf(1 - a2, d2, d1);
+      out.push({ type: 'ICC3', model: 'twoway', agreement: 'consistency', unit: 'single', icc: (MSR - MSE) / (MSR + (k - 1) * MSE), F, df1: d1, df2: d2, p: pF(F, d1, d2), ci: [(FL - 1) / (FL + k - 1), (FU - 1) / (FU + k - 1)] });
+      out.push({ type: 'ICC3k', model: 'twoway', agreement: 'consistency', unit: 'average', icc: (MSR - MSE) / MSR, F, df1: d1, df2: d2, p: pF(F, d1, d2), ci: [1 - 1 / FL, 1 - 1 / FU] });
+    }
+    return { n, k, MSR, MSC, MSE, MSW, forms: out };
+  }
+  // kappa de Cohen (2 jueces), opcionalmente ponderada ('linear' | 'quadratic') para categorías ordenadas;
+  // z y p con la varianza bajo H0 (Fleiss, Cohen y Everitt, 1969), IC con la varianza asintótica, como irr::kappa2 y psych::cohen.kappa
+  function cohenKappa(a, b, levels, weight = 'none') {
+    const k = levels.length, n = a.length, idx = v => levels.indexOf(v), P = Array.from({ length: k }, () => new Array(k).fill(0));
+    a.forEach((v, t) => { P[idx(v)][idx(b[t])] += 1 / n; });
+    const W = Array.from({ length: k }, (_, i) => Array.from({ length: k }, (_, j) => (weight === 'linear' ? 1 - Math.abs(i - j) / (k - 1) : weight === 'quadratic' ? 1 - ((i - j) / (k - 1)) ** 2 : i === j ? 1 : 0)));
+    const pr = P.map(r => sum(r)), pc = P[0].map((_, j) => sum(P.map(r => r[j])));
+    let po = 0, pe = 0; for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) { po += W[i][j] * P[i][j]; pe += W[i][j] * pr[i] * pc[j]; }
+    const kap = (po - pe) / (1 - pe);
+    const wr = pr.map((_, i) => sum(pc.map((c, j) => W[i][j] * c))), wc = pc.map((_, j) => sum(pr.map((r, i) => W[i][j] * r)));
+    let v0 = 0, v1 = 0;
+    for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) {
+      v0 += pr[i] * pc[j] * (W[i][j] - (wr[i] + wc[j])) ** 2;
+      v1 += P[i][j] * (W[i][j] - (wr[i] + wc[j]) * (1 - kap)) ** 2;
+    }
+    const var0 = (v0 - pe * pe) / (n * (1 - pe) ** 2), var1 = (v1 - (kap - pe * (1 - kap)) ** 2) / (n * (1 - pe) ** 2);
+    const z = kap / Math.sqrt(var0), se = Math.sqrt(Math.max(0, var1));
+    return { kappa: kap, po, pe, n, z, p: pZ(z), se, ci: [kap - 1.959963984540054 * se, kap + 1.959963984540054 * se], weight };
+  }
+  // kappa de Fleiss (3 o más jueces, categorías nominales), con z y p como irr::kappam.fleiss
+  function fleissKappa(R, levels) { // R: n sujetos × m jueces
+    const n = R.length, m = R[0].length, k = levels.length, cnt = R.map(r => levels.map(l => r.filter(v => v === l).length));
+    const pj = levels.map((_, j) => sum(cnt.map(c => c[j])) / (n * m)), Pi = cnt.map(c => (sum(c.map(x => x * x)) - m) / (m * (m - 1)));
+    const Pbar = mean(Pi), Pe = sum(pj.map(p => p * p)), kap = (Pbar - Pe) / (1 - Pe);
+    const se0 = Math.sqrt(2) / (sum(pj.map(p => p * (1 - p))) * Math.sqrt(n * m * (m - 1))) * Math.sqrt(sum(pj.map(p => p * (1 - p))) ** 2 - sum(pj.map(p => p * (1 - p) * (1 - 2 * p))));
+    const z = kap / se0;
+    return { kappa: kap, n, m, z, p: pZ(z), byCat: levels.map((l, j) => { const q = pj[j]; const kj = 1 - sum(cnt.map(c => c[j] * (m - c[j]))) / (n * m * (m - 1) * q * (1 - q)); return { level: l, kappa: kj }; }) };
+  }
   function mcnemar(b, c) { // b: 0→1, c: 1→0 (casos discordantes)
     const nd = b + c, chi = nd ? (Math.abs(b - c) - 1) ** 2 / nd : 0;
     return { b, c, chi, df: 1, p: nd ? pChi(chi, 1) : 1, pExact: nd ? binomTwoSided(Math.min(b, c), nd) : 1 };
@@ -978,5 +1038,5 @@
 
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
-    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
+    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, icc, cohenKappa, fleissKappa, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

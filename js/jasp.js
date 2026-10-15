@@ -41,12 +41,13 @@
       const out = cols.map(c => {
         const map = new Map(), emptySet = new Set(empty.concat(emptyOf(c.emptyValuesJson)).map(String));
         const hasLabels = 'hasLabels' in c ? !!c.hasLabels : true;
-        if (hasLabels) q('SELECT value, label, originalValueJson FROM Labels WHERE columnId = ?', [c.id]).forEach(l => {
+        const order = [];
+        if (hasLabels) q('SELECT value, label, originalValueJson FROM Labels WHERE columnId = ? ORDER BY ordering, value', [c.id]).forEach(l => {
           let orig = null; try { orig = JSON.parse(l.originalValueJson); } catch (e) { orig = null; }
           const numeric = String(c.columnType).toLowerCase() === 'scale';
           let v = numeric ? (typeof orig === 'number' ? orig : asValue(l.label)) : (l.label !== '' && l.label !== null ? l.label : orig);
           if (v !== null && emptySet.has(String(v))) v = null;
-          map.set(l.value, asValue(v));
+          map.set(l.value, asValue(v)); if (v !== null) order.push(String(asValue(v)));
         });
         const clean = v => (v !== null && emptySet.has(String(v)) ? null : v);
         const vals = rows.map(r => {
@@ -58,7 +59,7 @@
           const raw = r[`Column_${c.id}`]; if (raw === null || raw === undefined) return null;
           if (hasLabels && map.has(raw)) return map.get(raw); return clean(asValue(raw));
         });
-        return { name: c.name, measure: c.columnType, vals };
+        return { name: c.name, measure: c.columnType, vals, order };
       });
       return out;
     } finally { db.close(); }
@@ -77,7 +78,7 @@
       }
       const labels = x[fl.name] && x[fl.name].labels ? new Map(x[fl.name].labels.map(l => [l[0], l[1]])) : null;
       const out = vals.map(v => { if (v === null) return null; const m = labels && labels.has(v) ? asValue(labels.get(v)) : v; return m !== null && empty.has(String(m)) ? null : m; });
-      return { name: fl.name, measure: fl.measureType, vals: out };
+      return { name: fl.name, measure: fl.measureType, vals: out, order: labels ? [...labels.values()].map(l => String(asValue(l))) : [] };
     });
   }
 
@@ -92,7 +93,7 @@
     if (!cols.length) throw new Error('El archivo JASP no contiene variables.');
     const n = Math.max(...cols.map(c => c.vals.length)), aoa = [cols.map(c => c.name)];
     for (let i = 0; i < n; i++) aoa.push(cols.map(c => (c.vals[i] === undefined ? null : c.vals[i])));
-    const hints = {}; cols.forEach(c => { hints[c.name] = hintOf(c.measure, c.vals); });
+    const hints = {}; cols.forEach(c => { hints[c.name] = hintOf(c.measure, c.vals); if (c.order && c.order.length) hints[c.name].order = [...new Set(c.order)]; });
     return { aoa, hints, version };
   }
   root.TharpJasp = { read };
