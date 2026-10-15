@@ -35,6 +35,52 @@
   const pChi = (x, df) => 1 - J.chisquare.cdf(x, df);
   const pZ = z => 2 * (1 - J.normal.cdf(Math.abs(z), 0, 1));
   const tcrit = df => J.studentt.inv(0.975, df);
+  // p según la hipótesis alternativa: 'two' (bilateral), 'greater' (estadístico mayor que lo esperado), 'less'
+  const pTalt = (t, df, alt) => (alt === 'greater' ? 1 - J.studentt.cdf(t, df) : alt === 'less' ? J.studentt.cdf(t, df) : pT(t, df));
+  const pZalt = (z, alt) => (alt === 'greater' ? 1 - J.normal.cdf(z, 0, 1) : alt === 'less' ? J.normal.cdf(z, 0, 1) : pZ(z));
+  // función de distribución de la t no central (algoritmo AS 243 de Lenth, como pt(ncp =) de R)
+  function pnct(t, df, ncp) {
+    let tt = t, del = ncp, neg = false;
+    if (t < 0) { neg = true; tt = -t; del = -ncp; }
+    if (df > 4e5 || del * del > 2 * Math.LN2 * 1021) { // como R: aproximación de Abramowitz y Stegun 26.7.10 cuando la serie desborda
+      const s = 1 / (4 * df), pr = J.normal.cdf(tt * (1 - s), del, Math.sqrt(1 + tt * tt * 2 * s)); return neg ? 1 - pr : pr; }
+    const x = tt * tt / (tt * tt + df); let tnc = 0;
+    if (x > 0) {
+      const lambda = del * del; let p = .5 * Math.exp(-.5 * lambda), q = Math.sqrt(2 / Math.PI) * p * del, s = .5 - p;
+      if (s < 1e-7) s = -.5 * Math.expm1(-.5 * lambda);
+      let a = .5; const b = .5 * df, rxb = Math.pow(1 - x, b), albeta = .5 * Math.log(Math.PI) + J.gammaln(b) - J.gammaln(.5 + b);
+      let xodd = J.ibeta(x, a, b), godd = 2 * rxb * Math.exp(a * Math.log(x) - albeta), xeven = b * x < 2.2e-16 ? b * x : 1 - rxb, geven = b * x * rxb;
+      tnc = p * xodd + q * xeven;
+      for (let it = 1; it <= 2000; it++) {
+        a += 1; xodd -= godd; xeven -= geven; godd *= x * (a + b - 1) / a; geven *= x * (a + b - .5) / (a + .5);
+        p *= lambda / (2 * it); q *= lambda / (2 * it + 1); tnc += p * xodd + q * xeven; s -= p;
+        if (s < -1e-10 || (s <= 0 && it > 1)) break;
+        if (Math.abs(2 * s * (xodd - godd)) < 1e-12) break;
+      }
+    }
+    tnc += J.normal.cdf(-del, 0, 1); tnc = Math.min(tnc, 1);
+    return neg ? 1 - tnc : tnc;
+  }
+  // límites del parámetro de no centralidad para un t observado (como MBESS::conf.limits.nct, que usa JASP)
+  function ncpCI(t, df, level = .95, alt = 'two') {
+    const aL = alt === 'two' ? (1 - level) / 2 : 1 - level;
+    const solve = target => { let lo = t - 10 - Math.abs(t), hi = t + 10 + Math.abs(t);
+      while (pnct(t, df, lo) < target) lo -= 10; while (pnct(t, df, hi) > target) hi += 10;
+      for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (pnct(t, df, mid) > target) lo = mid; else hi = mid; if (hi - lo < 1e-10) break; } return (lo + hi) / 2; };
+    return [alt === 'less' ? -Infinity : solve(1 - aL), alt === 'greater' ? Infinity : solve(aL)];
+  }
+  // distribuciones exactas (como pwilcox y psignrank de R) para muestras pequeñas sin empates
+  function wilcoxCounts(n1, n2) { // número de formas de obtener cada U (0..n1·n2)
+    const N = n1 + n2, maxS = n1 * (2 * N - n1 + 1) / 2; let dp = Array.from({ length: n1 + 1 }, () => new Float64Array(maxS + 1)); dp[0][0] = 1;
+    for (let r = 1; r <= N; r++) for (let j = Math.min(r, n1); j >= 1; j--) { const row = dp[j], prev = dp[j - 1]; for (let s = maxS; s >= r; s--) row[s] += prev[s - r]; }
+    const base = n1 * (n1 + 1) / 2, out = new Float64Array(n1 * n2 + 1); for (let u = 0; u <= n1 * n2; u++) out[u] = dp[n1][u + base]; return out;
+  }
+  function signrankCounts(n) { const max = n * (n + 1) / 2, c = new Float64Array(max + 1); c[0] = 1;
+    for (let r = 1; r <= n; r++) for (let s = max; s >= r; s--) c[s] += c[s - r]; return c; }
+  const cdfCounts = (c, x) => { let tot = 0, acc = 0; for (let i = 0; i < c.length; i++) { tot += c[i]; if (i <= x) acc += c[i]; } return acc / tot; };
+  const exactP = (c, stat, mid, alt) => { const lower = cdfCounts(c, stat), upper = 1 - cdfCounts(c, stat - 1);
+    if (alt === 'greater') return upper; if (alt === 'less') return lower;
+    return Math.min(1, 2 * (stat > mid ? 1 - cdfCounts(c, stat - 1) : cdfCounts(c, stat))); };
   function meanCI(a) { const n = a.length, m = mean(a); if (n < 2) return [m, m]; const h = tcrit(n - 1) * sd(a) / Math.sqrt(n); return [m - h, m + h]; }
   function describe(a) {
     const s = sorted(a), n = a.length;
@@ -104,22 +150,35 @@
     const B = 1 + 2 * (k - 2) / (k * k - 1) * tmp, F = A / B, df1 = k - 1, df2 = (k * k - 1) / (3 * tmp);
     return { F, df1, df2, p: pF(F, df1, df2) };
   }
-  function tTestInd(a, b, equalVar) {
+  // intervalo de la diferencia de medias según la alternativa
+  const ciAlt = (est, se, df, alt) => { if (alt === 'two') { const h = tcrit(df) * se; return [est - h, est + h]; }
+    const h = J.studentt.inv(0.95, df) * se; return alt === 'greater' ? [est - h, Infinity] : [-Infinity, est + h]; };
+  // d de Cohen como JASP: varianza combinada (Student) o media de las dos varianzas (Welch); IC por la t no central (MBESS)
+  function tTestInd(a, b, equalVar, alt = 'two') {
     const n1 = a.length, n2 = b.length, m1 = mean(a), m2 = mean(b), v1 = variance(a), v2 = variance(b);
-    const sp2 = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2), d = (m1 - m2) / Math.sqrt(sp2);
+    const sp2 = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2), d = (m1 - m2) / Math.sqrt(equalVar ? sp2 : (v1 + v2) / 2);
     let se, df;
     if (equalVar) { se = Math.sqrt(sp2 * (1 / n1 + 1 / n2)); df = n1 + n2 - 2; }
     else { se = Math.sqrt(v1 / n1 + v2 / n2); df = (v1 / n1 + v2 / n2) ** 2 / ((v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1)); }
-    const t = (m1 - m2) / se, h = tcrit(df) * se;
-    return { t, df, p: pT(t, df), diff: m1 - m2, ci: [m1 - m2 - h, m1 - m2 + h], d };
+    const t = (m1 - m2) / se, k = Math.sqrt(n1 * n2 / (n1 + n2)), nc = ncpCI(d * k, df, .95, alt);
+    const dfg = n1 + n2 - 2, J_ = Math.exp(J.gammaln(dfg / 2) - Math.log(Math.sqrt(dfg / 2)) - J.gammaln((dfg - 1) / 2));
+    return { t, df, p: pTalt(t, df, alt), alt, diff: m1 - m2, ci: ciAlt(m1 - m2, se, df, alt), d, dCI: nc.map(v => v / k), g: d * J_, se };
   }
-  function mannWhitney(a, b) {
+  // U de Mann-Whitney (W de R, del primer grupo); p exacta sin empates y n < 50 en ambos grupos (como wilcox.test);
+  // correlación biserial por rangos con IC (Kerby, 2014; como JASP)
+  function mannWhitney(a, b, alt = 'two') {
     const n1 = a.length, n2 = b.length, N = n1 + n2, { r, ties } = ranks(a.concat(b));
     const R1 = sum(r.slice(0, n1)), U = R1 - n1 * (n1 + 1) / 2, mu = n1 * n2 / 2;
     const sig = Math.sqrt(n1 * n2 / 12 * ((N + 1) - ties / (N * (N - 1))));
     const dlt = U - mu, z = (Math.abs(dlt) - .5) * Math.sign(dlt) / sig;
-    return { U, z, p: pZ(z), r: Math.abs(z) / Math.sqrt(N) };
+    const zA = (dlt - (alt === 'two' ? Math.sign(dlt) * .5 : alt === 'greater' ? .5 : -.5)) / sig;
+    const exact = n1 < 50 && n2 < 50 && ties === 0, p = exact ? exactP(wilcoxCounts(n1, n2), U, mu, alt) : pZalt(zA, alt);
+    const rb = 2 * U / (n1 * n2) - 1, seRb = Math.sqrt(4 / (n1 * n2) ** 2 * (n1 * n2 * (N + 1) / 12));
+    return { U, z, p, exact, alt, r: Math.abs(z) / Math.sqrt(N), rb, rbCI: rbCI(rb, seRb, alt) };
   }
+  function rbCI(rb, se, alt) { const z = Math.atanh(Math.max(-0.9999999, Math.min(0.9999999, rb)));
+    if (alt === 'two') return [Math.tanh(z - 1.959963984540054 * se), Math.tanh(z + 1.959963984540054 * se)];
+    return alt === 'greater' ? [Math.tanh(z - 1.6448536269514722 * se), 1] : [-1, Math.tanh(z + 1.6448536269514722 * se)]; }
   function kruskal(groups) {
     const all = groups.flat(), N = all.length, k = groups.length, { r, ties } = ranks(all);
     let off = 0, H = 0; const meanRanks = [];
@@ -162,18 +221,30 @@
   }
 
   // ---------- medidas relacionadas ----------
-  function tTestPaired(a, b) { // a = momento 1, b = momento 2; diferencia b - a
-    const d = b.map((v, i) => v - a[i]), n = d.length, md = mean(d), sdd = sd(d), se = sdd / Math.sqrt(n), df = n - 1, t = md / se, h = tcrit(df) * se;
-    return { t, df, p: pT(t, df), diff: md, ci: [md - h, md + h], dz: md / sdd };
+  // t para una muestra frente a un valor de referencia mu; d = (M − mu) / DT, IC por la t no central (como JASP)
+  function tTestOne(x, mu = 0, alt = 'two') {
+    const n = x.length, m = mean(x), s = sd(x), se = s / Math.sqrt(n), df = n - 1, t = (m - mu) / se, d = (m - mu) / s;
+    const nc = ncpCI(d * Math.sqrt(n), df, .95, alt);
+    return { t, df, p: pTalt(t, df, alt), alt, diff: m - mu, ci: ciAlt(m - mu, se, df, alt), d, dCI: nc.map(v => v / Math.sqrt(n)), mean: m, sd: s, n };
   }
-  function wilcoxonSigned(a, b) {
-    const d = b.map((v, i) => v - a[i]).filter(v => v !== 0), n = d.length;
+  function tTestPaired(a, b, alt = 'two') { // a = momento 1, b = momento 2; diferencia b - a
+    const d = b.map((v, i) => v - a[i]), r = tTestOne(d, 0, alt);
+    return { t: r.t, df: r.df, p: r.p, alt, diff: r.diff, ci: r.ci, dz: r.d, dzCI: r.dCI };
+  }
+  // Wilcoxon de rangos con signo para una muestra (x − mu); p exacta sin empates ni ceros y n < 50 (como wilcox.test);
+  // biserial por rangos de pares emparejados con IC (como JASP)
+  function wilcoxonOne(x, mu = 0, alt = 'two') {
+    const dAll = x.map(v => v - mu), zeros = dAll.filter(v => v === 0).length, d = dAll.filter(v => v !== 0), n = d.length;
+    if (!n) return { V: 0, z: 0, p: 1, r: 0, n, rb: 0, rbCI: [NaN, NaN], exact: false, alt };
     const { r, ties } = ranks(d.map(Math.abs));
-    const Wp = sum(r.filter((_, i) => d[i] > 0)), mu = n * (n + 1) / 4;
-    const sig = Math.sqrt(n * (n + 1) * (2 * n + 1) / 24 - ties / 48), dlt = Wp - mu;
-    const z = (Math.abs(dlt) - .5) * Math.sign(dlt) / sig;
-    return { V: Wp, z, p: pZ(z), r: Math.abs(z) / Math.sqrt(n), n };
+    const Wp = sum(r.filter((_, i) => d[i] > 0)), mu0 = n * (n + 1) / 4;
+    const sig = Math.sqrt(n * (n + 1) * (2 * n + 1) / 24 - ties / 48), dlt = Wp - mu0;
+    const z = (Math.abs(dlt) - .5) * Math.sign(dlt) / sig, zA = (dlt - (alt === 'two' ? Math.sign(dlt) * .5 : alt === 'greater' ? .5 : -.5)) / sig;
+    const exact = n < 50 && ties === 0 && zeros === 0, p = exact ? exactP(signrankCounts(n), Wp, mu0, alt) : pZalt(zA, alt);
+    const maxw = n * (n + 1) / 2, rb = Wp / maxw * 2 - 1, seRb = Math.sqrt((Math.sqrt(n * (n + 1) * (2 * n + 1) / 6) / 2) ** 2 * 4 / maxw ** 2);
+    return { V: Wp, z, p, exact, alt, r: Math.abs(z) / Math.sqrt(n), n, rb, rbCI: rbCI(rb, seRb, alt) };
   }
+  function wilcoxonSigned(a, b, alt = 'two') { return wilcoxonOne(b.map((v, i) => v - a[i]), 0, alt); }
 
   // ---------- medidas repetidas (3 o más momentos) ----------
   function det(A) { // determinante por eliminación gaussiana con pivote parcial
@@ -748,5 +819,5 @@
 
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
-    tTestPaired, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, fisher2x2, chiSquare, ols, olsCore, tcrit, pT, pF };
+    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, fisher2x2, chiSquare, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

@@ -13,6 +13,9 @@
   const r2s = r => nz(r.toFixed(2));
   const dfF = d => (Math.abs(d - Math.round(d)) < 1e-9 ? String(Math.round(d)) : d.toFixed(2));
   const stars = p => (p < .001 ? '***' : p < .01 ? '**' : p < .05 ? '*' : '');
+  // intervalo con extremos infinitos (hipótesis unilaterales) y valor de referencia sin ceros sobrantes
+  const ciTxt = c => `[${isFinite(c[0]) ? f(c[0]) : '−∞'}, ${isFinite(c[1]) ? f(c[1]) : '∞'}]`;
+  const fmtNum = v => String(Math.round(v * 1e6) / 1e6);
   const lbl = { d: v => { v = Math.abs(v); return v < .2 ? 'trivial' : v < .5 ? 'pequeño' : v < .8 ? 'mediano' : 'grande'; },
     eta: v => (v < .01 ? 'trivial' : v < .06 ? 'pequeño' : v < .14 ? 'mediano' : 'grande'),
     r: v => { v = Math.abs(v); return v < .1 ? 'trivial' : v < .3 ? 'pequeño' : v < .5 ? 'mediano' : 'grande'; },
@@ -179,12 +182,19 @@
     const dComp = D.comp || {};
     h += card('comp', nums.length >= 1 && facs.length >= 1, 'Comparación entre grupos', 'Prueba t, ANOVA o sus alternativas no paramétricas, con comprobación automática de supuestos y post hoc.',
       `<div class="field"><span>Variables dependientes (cuantitativas)</span>${chips('compY', nums, v => (dComp.y ? dComp.y.includes(v.name) : v === nums[0]))}</div>
-       <label class="field"><span>Variable de agrupación</span>${sel('compG', facs, pick(dComp.g, facs[0] && facs[0].name))}</label>`,
+       <label class="field"><span>Variable de agrupación</span>${sel('compG', facs, pick(dComp.g, facs[0] && facs[0].name))}</label>
+       <label class="field"><span>Hipótesis (solo con 2 grupos)</span><select id="compAlt"><option value="two">Bilateral: los grupos difieren (recomendada)</option><option value="greater">Unilateral: el primer grupo puntúa más</option><option value="less">Unilateral: el primer grupo puntúa menos</option></select></label>`,
       !(nums.length >= 1 && facs.length >= 1) ? 'Necesitas una variable cuantitativa y una categórica con 2 a 12 grupos.' : '');
+    h += card('one', false, 'Comparación con un valor de referencia (una muestra)', '¿La media difiere de un valor fijo, como el punto medio de una escala o una norma publicada? Prueba t para una muestra o Wilcoxon, según la normalidad.',
+      `<div class="field"><span>Variables (una prueba para cada una)</span>${chips('oY', nums, v => v === nums[0])}</div>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Valor de referencia</span><input id="oMu" type="number" step="any" value="0" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:140px"></label>
+       <label class="field"><span>Hipótesis</span><select id="oAlt"><option value="two">Bilateral: la media difiere (recomendada)</option><option value="greater">Unilateral: la media es mayor</option><option value="less">Unilateral: la media es menor</option></select></label></div>`,
+      nums.length < 1 ? 'Necesitas una variable cuantitativa.' : '');
     const dP = D.paired || {};
     const pDef = (dP.vars || []).filter(has);
     h += card('paired', !!D.paired && nums.length >= 2, 'Comparación de medidas relacionadas (pre/post o varios momentos)', 'Las mismas personas medidas dos o más veces: t relacionada o Wilcoxon (2 momentos); ANOVA de medidas repetidas o Friedman (3 o más). Con un factor entre sujetos (por ejemplo, control frente a tratamiento): ANOVA mixta.',
       `<div class="field"><span>Momentos o condiciones (en el orden de las columnas del archivo)</span>${chips('pM', nums, v => (pDef.length ? pDef.includes(v.name) : nums.indexOf(v) < 2))}</div>
+       <label class="field"><span>Hipótesis (solo con 2 medidas y sin factor entre sujetos)</span><select id="pAlt"><option value="two">Bilateral: las medidas difieren (recomendada)</option><option value="greater">Unilateral: la segunda medida es mayor</option><option value="less">Unilateral: la segunda medida es menor</option></select></label>
        <label class="field"><span>Factor entre sujetos (opcional: ANOVA mixta)</span><select id="pB"><option value="">Ninguno</option>${facs.map(v => `<option value="${esc(v.name)}"${dP.between === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>`,
       nums.length < 2 ? 'Necesitas dos variables cuantitativas.' : '');
     const dC = D.chi || {};
@@ -364,7 +374,7 @@
     return sec;
   }
 
-  function runCompare(yName, gName) {
+  function runCompare(yName, gName, alt = 'two') {
     const yv = vByName(yName), gv = vByName(gName), y = numOf(yv), g = catOf(gv), lv = levelsOf(gv);
     const sec = { title: `${yName} según ${gName}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     let groups = lv.map(l => ({ name: l, x: [] }));
@@ -398,32 +408,38 @@
     sec.why.push(normWhy);
     if (k === 2) {
       const [A, B] = groups;
+      const one = alt !== 'two', hyp = one ? ` (hipótesis unilateral: ${esc(A.name)} ${alt === 'greater' ? '>' : '<'} ${esc(B.name)})` : '';
+      const rAlt = { two: 'two.sided', greater: 'greater', less: 'less' }[alt];
+      if (one) sec.why.push(`Has elegido una hipótesis unilateral: se contrasta si ${esc(A.name)} puntúa ${alt === 'greater' ? 'más' : 'menos'} que ${esc(B.name)}. Debe decidirse antes de ver los datos; si no, usa la bilateral.`);
       if (normOK) {
-        const r = S.tTestInd(A.x, B.x, eqVar), name = eqVar ? 'prueba t de Student para muestras independientes' : 'prueba t de Welch para muestras independientes';
-        sec.test = eqVar ? 'Prueba t de Student' : 'Prueba t de Welch';
+        const r = S.tTestInd(A.x, B.x, eqVar, alt), name = eqVar ? 'prueba t de Student para muestras independientes' : 'prueba t de Welch para muestras independientes';
+        sec.test = (eqVar ? 'Prueba t de Student' : 'Prueba t de Welch') + (one ? ' (unilateral)' : '');
         sec.why.push(eqVar ? 'Las varianzas son homogéneas (Levene p ≥ .05): se usa la prueba t clásica.' : 'Las varianzas no son homogéneas (Levene p < .05): se usa la corrección de Welch, que no asume varianzas iguales.');
-        sec.decision = `Se eligió la ${name} porque se comparan 2 grupos independientes en una variable cuantitativa, la normalidad es aceptable y las varianzas ${eqVar ? 'son homogéneas' : 'difieren (corrección de Welch)'}.`;
+        sec.decision = `Se eligió la ${name}${hyp} porque se comparan 2 grupos independientes en una variable cuantitativa, la normalidad es aceptable y las varianzas ${eqVar ? 'son homogéneas' : 'difieren (corrección de Welch)'}.`;
         sec.alt = 'U de Mann-Whitney si no se cumpliera la normalidad con muestras pequeñas.';
-        sec.tables.push(apaTable(`Resultado de la ${name}`, ['', '<i>t</i>', '<i>gl</i>', '<i>p</i>', 'Diferencia de medias', 'IC 95 %', '<i>d</i> de Cohen'],
-          [[`${esc(A.name)} − ${esc(B.name)}`, f(r.t), dfF(r.df), pv(r.p), f(r.diff), `[${f(r.ci[0])}, ${f(r.ci[1])}]`, f(r.d)]]));
-        const mw = S.mannWhitney(A.x, B.x); sec.sens = `Análisis de sensibilidad: la U de Mann-Whitney da ${pt(mw.p)}, ${(mw.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión de la prueba t.`;
-        const st = `<i>t</i>(${dfF(r.df)}) = ${f(r.t)}, ${pt(r.p)}, <i>d</i> = ${f(r.d)}, IC 95 % de la diferencia [${f(r.ci[0])}, ${f(r.ci[1])}]`;
-        sec.text.push(`Se aplicó una ${name} para comparar ${esc(yName)} entre ${esc(A.name)} y ${esc(B.name)}. ` + (r.p < .05
+        sec.tables.push(apaTable(`Resultado de la ${name}`, ['', '<i>t</i>', '<i>gl</i>', '<i>p</i>' + (one ? ' (unilateral)' : ''), 'Diferencia de medias', `IC ${one ? '95 % unilateral' : '95 %'}`, '<i>d</i> de Cohen', 'IC 95 % (<i>d</i>)', '<i>g</i> de Hedges'],
+          [[`${esc(A.name)} − ${esc(B.name)}`, f(r.t), dfF(r.df), pv(r.p), f(r.diff), ciTxt(r.ci), f(r.d), ciTxt(r.dCI), f(r.g)]],
+          (eqVar ? '<i>d</i> = diferencia de medias / desviación típica combinada.' : '<i>d</i> = diferencia de medias / raíz de la media de las dos varianzas (como JASP con Welch).') + ' IC de <i>d</i> por la distribución <i>t</i> no central. <i>g</i> = <i>d</i> con la corrección de Hedges para muestras pequeñas.'));
+        const mw = S.mannWhitney(A.x, B.x, alt); sec.sens = `Análisis de sensibilidad: la U de Mann-Whitney da ${pt(mw.p)}, ${(mw.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión de la prueba t.`;
+        const st = `<i>t</i>(${dfF(r.df)}) = ${f(r.t)}, ${pt(r.p)}${one ? ' (unilateral)' : ''}, <i>d</i> = ${f(r.d)}, IC 95 % [${ciTxt(r.dCI).slice(1, -1)}]`;
+        sec.text.push(`Se aplicó una ${name}${hyp} para comparar ${esc(yName)} entre ${esc(A.name)} y ${esc(B.name)}. ` + (r.p < .05
           ? `${esc(A.name)} (${MD(A)}) obtuvo puntuaciones significativamente ${r.diff > 0 ? 'más altas' : 'más bajas'} que ${esc(B.name)} (${MD(B)}), ${st}. El tamaño del efecto fue ${lbl.d(r.d)}.`
           : `No se encontraron diferencias estadísticamente significativas entre ${esc(A.name)} (${MD(A)}) y ${esc(B.name)} (${MD(B)}), ${st}.`));
-        code += `t.test(${Y} ~ ${G}, data = datos, var.equal = ${eqVar ? 'TRUE' : 'FALSE'})\neffectsize::cohens_d(${Y} ~ ${G}, data = datos)`;
+        code += `t.test(${Y} ~ ${G}, data = datos, var.equal = ${eqVar ? 'TRUE' : 'FALSE'}${one ? `, alternative = "${rAlt}"` : ''})\n` +
+          (eqVar ? `effectsize::cohens_d(${Y} ~ ${G}, data = datos${one ? `, alternative = "${rAlt}"` : ''})  # d con IC (t no central)\neffectsize::hedges_g(${Y} ~ ${G}, data = datos)`
+            : `# d de Welch como JASP: diferencia / sqrt((s1^2 + s2^2) / 2)\nwith(datos, diff(rev(tapply(${Y}, ${G}, mean))) / sqrt(mean(tapply(${Y}, ${G}, var))))`);
       } else {
-        const r = S.mannWhitney(A.x, B.x); sec.test = 'U de Mann-Whitney';
-        sec.decision = 'Se eligió la U de Mann-Whitney porque se comparan 2 grupos independientes y la normalidad no se cumple en algún grupo con muestra pequeña.';
+        const r = S.mannWhitney(A.x, B.x, alt); sec.test = 'U de Mann-Whitney' + (one ? ' (unilateral)' : '');
+        sec.decision = `Se eligió la U de Mann-Whitney${hyp} porque se comparan 2 grupos independientes y la normalidad no se cumple en algún grupo con muestra pequeña.`;
         sec.alt = 'Prueba t para muestras independientes si los datos fueran aproximadamente normales.';
-        sec.tables.push(apaTable('Resultado de la prueba U de Mann-Whitney', ['', '<i>U</i>', '<i>z</i>', '<i>p</i>', '<i>r</i>'], [[`${esc(A.name)} vs. ${esc(B.name)}`, f(r.U, 1), f(r.z), pv(r.p), nz(r.r.toFixed(2))]],
-          '<i>r</i> = |<i>z</i>| / √<i>N</i>. Se aplicó la aproximación normal con corrección por continuidad y por empates.'));
-        const w = S.tTestInd(A.x, B.x, false); sec.sens = `Análisis de sensibilidad: la prueba t de Welch da ${pt(w.p)}, ${(w.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
-        const st = `<i>U</i> = ${f(r.U, 1)}, <i>z</i> = ${f(r.z)}, ${pt(r.p)}, <i>r</i> = ${nz(r.r.toFixed(2))}`;
-        sec.text.push(`Dado que no se cumplía el supuesto de normalidad, se aplicó la prueba U de Mann-Whitney. ` + (r.p < .05
-          ? `${esc(A.name)} (${MdnD(A)}) obtuvo puntuaciones significativamente ${A.d.median >= B.d.median ? 'más altas' : 'más bajas'} en ${esc(yName)} que ${esc(B.name)} (${MdnD(B)}), ${st}, con un tamaño del efecto ${lbl.r(r.r)}.`
+        sec.tables.push(apaTable('Resultado de la prueba U de Mann-Whitney', ['', '<i>U</i>', '<i>z</i>', '<i>p</i>' + (one ? ' (unilateral)' : ''), '<i>r</i><sub>rb</sub>', 'IC 95 % (<i>r</i><sub>rb</sub>)'], [[`${esc(A.name)} vs. ${esc(B.name)}`, f(r.U, 1), f(r.z), pv(r.p), f(r.rb), ciTxt(r.rbCI)]],
+          `<i>U</i> del grupo ${esc(A.name)}. ${r.exact ? '<i>p</i> exacta (sin empates y menos de 50 casos por grupo, como R y JASP).' : '<i>p</i> por la aproximación normal con corrección por continuidad y por empates.'} <i>r</i><sub>rb</sub> = correlación biserial por rangos (positiva si ${esc(A.name)} tiende a puntuar más), como JASP.`));
+        const w = S.tTestInd(A.x, B.x, false, alt); sec.sens = `Análisis de sensibilidad: la prueba t de Welch da ${pt(w.p)}, ${(w.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
+        const st = `<i>U</i> = ${f(r.U, 1)}, ${pt(r.p)}${one ? ' (unilateral)' : ''}, <i>r</i><sub>rb</sub> = ${f(r.rb)}, IC 95 % [${ciTxt(r.rbCI).slice(1, -1)}]`;
+        sec.text.push(`Dado que no se cumplía el supuesto de normalidad, se aplicó la prueba U de Mann-Whitney${hyp}. ` + (r.p < .05
+          ? `${esc(A.name)} (${MdnD(A)}) obtuvo puntuaciones significativamente ${r.rb >= 0 ? 'más altas' : 'más bajas'} en ${esc(yName)} que ${esc(B.name)} (${MdnD(B)}), ${st}, con un tamaño del efecto ${lbl.r(Math.abs(r.rb))}.`
           : `No se encontraron diferencias estadísticamente significativas en ${esc(yName)} entre ${esc(A.name)} (${MdnD(A)}) y ${esc(B.name)} (${MdnD(B)}), ${st}.`));
-        code += `wilcox.test(${Y} ~ ${G}, data = datos, exact = FALSE, correct = TRUE)`;
+        code += `wilcox.test(${Y} ~ ${G}, data = datos${one ? `, alternative = "${rAlt}"` : ''})  # exacta si no hay empates y n < 50, como Tharp\neffectsize::rank_biserial(${Y} ~ ${G}, data = datos)`;
       }
     } else {
       const names = groups.map(q => q.name), posthocText = (ph, kind, useMedian) => {
@@ -478,7 +494,7 @@
     sec.code = code; return sec;
   }
 
-  function runPaired(aName, bName) {
+  function runPaired(aName, bName, alt = 'two') {
     const sec = { title: `${aName} frente a ${bName} (medidas relacionadas)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (aName === bName) { sec.error = 'Elige dos variables distintas.'; return sec; }
     const xa = numOf(vByName(aName)), xb = numOf(vByName(bName)), a = [], b = [];
@@ -493,30 +509,74 @@
     sec.tables.push(apaTable('Estadísticos descriptivos de las medidas relacionadas', ['Medida', '<i>n</i>', '<i>M</i>', '<i>DT</i>', '<i>Mdn</i>'],
       [[esc(aName), n, f(da.mean), f(da.sd), f(da.median)], [esc(bName), n, f(db.mean), f(db.sd), f(db.median)]], ST.rows.length - n ? `Se excluyeron ${ST.rows.length - n} casos sin ambas medidas.` : ''));
     sec.charts.push(fig(`${aName} y ${bName}: medias e IC 95 %`, CH.meansCI([{ name: aName, x: a, mean: da.mean, ci: da.ci }, { name: bName, x: b, mean: db.mean, ci: db.ci }], 'Puntuación', { connect: true })));
+    const one = alt !== 'two', rAlt = { two: 'two.sided', greater: 'greater', less: 'less' }[alt], ALT = one ? `, alternative = "${rAlt}"` : '';
+    const hyp = one ? ` (hipótesis unilateral: ${esc(bName)} ${alt === 'greater' ? '>' : '<'} ${esc(aName)})` : '';
+    if (one) sec.why.push(`Has elegido una hipótesis unilateral: se contrasta si ${esc(bName)} es ${alt === 'greater' ? 'mayor' : 'menor'} que ${esc(aName)}. Debe decidirse antes de ver los datos.`);
     if (normOK) {
-      const r = S.tTestPaired(a, b); sec.test = 'Prueba t para muestras relacionadas';
+      const r = S.tTestPaired(a, b, alt); sec.test = 'Prueba t para muestras relacionadas' + (one ? ' (unilateral)' : '');
       sec.why.push('Las diferencias son aproximadamente normales (o n ≥ 30): se usa la prueba t para muestras relacionadas.');
-      sec.decision = 'Se eligió la prueba t para muestras relacionadas porque son dos medidas de las mismas personas y la normalidad de las diferencias es aceptable.';
+      sec.decision = `Se eligió la prueba t para muestras relacionadas${hyp} porque son dos medidas de las mismas personas y la normalidad de las diferencias es aceptable.`;
       sec.alt = 'Prueba de rangos con signo de Wilcoxon si las diferencias no fueran normales.';
-      sec.tables.push(apaTable('Resultado de la prueba t para muestras relacionadas', ['', '<i>t</i>', '<i>gl</i>', '<i>p</i>', 'Diferencia de medias', 'IC 95 %', '<i>d</i><sub>z</sub>'],
-        [[`${esc(bName)} − ${esc(aName)}`, f(r.t), r.df, pv(r.p), f(r.diff), `[${f(r.ci[0])}, ${f(r.ci[1])}]`, f(r.dz)]], '<i>d</i><sub>z</sub> = media de las diferencias / desviación típica de las diferencias.'));
-      const w = S.wilcoxonSigned(a, b); sec.sens = `Análisis de sensibilidad: la prueba de Wilcoxon da ${pt(w.p)}, ${(w.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
-      const st = `<i>t</i>(${r.df}) = ${f(r.t)}, ${pt(r.p)}, <i>d</i><sub>z</sub> = ${f(r.dz)}, IC 95 % de la diferencia [${f(r.ci[0])}, ${f(r.ci[1])}]`;
-      sec.text.push(`Se aplicó una prueba t para muestras relacionadas para comparar ${esc(aName)} (<i>M</i> = ${f(da.mean)}, <i>DT</i> = ${f(da.sd)}) y ${esc(bName)} (<i>M</i> = ${f(db.mean)}, <i>DT</i> = ${f(db.sd)}). ` +
+      sec.tables.push(apaTable('Resultado de la prueba t para muestras relacionadas', ['', '<i>t</i>', '<i>gl</i>', '<i>p</i>' + (one ? ' (unilateral)' : ''), 'Diferencia de medias', 'IC 95 %', '<i>d</i><sub>z</sub>', 'IC 95 % (<i>d</i><sub>z</sub>)'],
+        [[`${esc(bName)} − ${esc(aName)}`, f(r.t), r.df, pv(r.p), f(r.diff), ciTxt(r.ci), f(r.dz), ciTxt(r.dzCI)]], '<i>d</i><sub>z</sub> = media de las diferencias / desviación típica de las diferencias (como JASP); IC por la distribución <i>t</i> no central.'));
+      const w = S.wilcoxonSigned(a, b, alt); sec.sens = `Análisis de sensibilidad: la prueba de Wilcoxon da ${pt(w.p)}, ${(w.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
+      const st = `<i>t</i>(${r.df}) = ${f(r.t)}, ${pt(r.p)}${one ? ' (unilateral)' : ''}, <i>d</i><sub>z</sub> = ${f(r.dz)}, IC 95 % [${ciTxt(r.dzCI).slice(1, -1)}]`;
+      sec.text.push(`Se aplicó una prueba t para muestras relacionadas${hyp} para comparar ${esc(aName)} (<i>M</i> = ${f(da.mean)}, <i>DT</i> = ${f(da.sd)}) y ${esc(bName)} (<i>M</i> = ${f(db.mean)}, <i>DT</i> = ${f(db.sd)}). ` +
         (r.p < .05 ? `Las puntuaciones ${r.diff > 0 ? 'aumentaron' : 'disminuyeron'} de forma estadísticamente significativa, ${st}, con un tamaño del efecto ${lbl.d(r.dz)}.` : `No se encontraron diferencias estadísticamente significativas, ${st}.`));
-      sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nt.test(datos$${B}, datos$${A}, paired = TRUE)`;
+      sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nt.test(datos$${B}, datos$${A}, paired = TRUE${ALT})\neffectsize::cohens_d(datos$${B}, datos$${A}, paired = TRUE${ALT})  # d_z con IC`;
     } else {
-      const r = S.wilcoxonSigned(a, b); sec.test = 'Prueba de rangos con signo de Wilcoxon';
+      const r = S.wilcoxonSigned(a, b, alt); sec.test = 'Prueba de rangos con signo de Wilcoxon' + (one ? ' (unilateral)' : '');
       sec.why.push('Las diferencias no son normales y la muestra es pequeña: se usa la prueba de Wilcoxon, que no requiere normalidad.');
-      sec.decision = 'Se eligió la prueba de Wilcoxon porque son dos medidas de las mismas personas y las diferencias no siguen una distribución normal.';
+      sec.decision = `Se eligió la prueba de Wilcoxon${hyp} porque son dos medidas de las mismas personas y las diferencias no siguen una distribución normal.`;
       sec.alt = 'Prueba t para muestras relacionadas si las diferencias fueran normales.';
-      sec.tables.push(apaTable('Resultado de la prueba de rangos con signo de Wilcoxon', ['', '<i>V</i>', '<i>z</i>', '<i>p</i>', '<i>r</i>'], [[`${esc(bName)} − ${esc(aName)}`, f(r.V, 1), f(r.z), pv(r.p), nz(r.r.toFixed(2))]],
-        `<i>V</i> = suma de rangos de las diferencias positivas. Se excluyeron ${n - r.n} diferencias nulas. Aproximación normal con corrección por continuidad.`));
-      const t = S.tTestPaired(a, b); sec.sens = `Análisis de sensibilidad: la prueba t relacionada da ${pt(t.p)}, ${(t.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
-      const st = `<i>z</i> = ${f(r.z)}, ${pt(r.p)}, <i>r</i> = ${nz(r.r.toFixed(2))}`;
-      sec.text.push(`Dado que las diferencias no seguían una distribución normal, se aplicó la prueba de rangos con signo de Wilcoxon para comparar ${esc(aName)} (<i>Mdn</i> = ${f(da.median)}) y ${esc(bName)} (<i>Mdn</i> = ${f(db.median)}). ` +
-        (r.p < .05 ? `Se encontraron diferencias estadísticamente significativas, ${st}, con un tamaño del efecto ${lbl.r(r.r)}.` : `No se encontraron diferencias estadísticamente significativas, ${st}.`));
-      sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nwilcox.test(datos$${B}, datos$${A}, paired = TRUE, exact = FALSE, correct = TRUE)`;
+      sec.tables.push(apaTable('Resultado de la prueba de rangos con signo de Wilcoxon', ['', '<i>V</i>', '<i>z</i>', '<i>p</i>' + (one ? ' (unilateral)' : ''), '<i>r</i><sub>rb</sub>', 'IC 95 % (<i>r</i><sub>rb</sub>)'], [[`${esc(bName)} − ${esc(aName)}`, f(r.V, 1), f(r.z), pv(r.p), f(r.rb), ciTxt(r.rbCI)]],
+        `<i>V</i> = suma de rangos de las diferencias positivas. Se excluyeron ${n - r.n} diferencias nulas. ${r.exact ? '<i>p</i> exacta (sin empates ni ceros y menos de 50 pares, como R y JASP).' : '<i>p</i> por la aproximación normal con corrección por continuidad.'} <i>r</i><sub>rb</sub> = correlación biserial por rangos de pares emparejados (como JASP).`));
+      const t = S.tTestPaired(a, b, alt); sec.sens = `Análisis de sensibilidad: la prueba t relacionada da ${pt(t.p)}, ${(t.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
+      const st = `<i>V</i> = ${f(r.V, 1)}, ${pt(r.p)}${one ? ' (unilateral)' : ''}, <i>r</i><sub>rb</sub> = ${f(r.rb)}, IC 95 % [${ciTxt(r.rbCI).slice(1, -1)}]`;
+      sec.text.push(`Dado que las diferencias no seguían una distribución normal, se aplicó la prueba de rangos con signo de Wilcoxon${hyp} para comparar ${esc(aName)} (<i>Mdn</i> = ${f(da.median)}) y ${esc(bName)} (<i>Mdn</i> = ${f(db.median)}). ` +
+        (r.p < .05 ? `Se encontraron diferencias estadísticamente significativas, ${st}, con un tamaño del efecto ${lbl.r(Math.abs(r.rb))}.` : `No se encontraron diferencias estadísticamente significativas, ${st}.`));
+      sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nwilcox.test(datos$${B}, datos$${A}, paired = TRUE${ALT})  # exacta si no hay empates ni ceros y n < 50\neffectsize::rank_biserial(datos$${B}, datos$${A}, paired = TRUE)`;
+    }
+    return sec;
+  }
+
+  // Una muestra frente a un valor de referencia (por ejemplo, el punto medio de una escala o una norma publicada)
+  function runOneSample(name, mu, alt = 'two') {
+    const sec = { title: `${name} frente a ${fmtNum(mu)} (una muestra)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const x = numOf(vByName(name)).filter(v => v !== null), n = x.length;
+    if (!isFinite(mu)) { sec.error = 'Escribe un valor de referencia numérico.'; return sec; }
+    if (n < 3) { sec.error = 'Se necesitan al menos 3 casos.'; return sec; }
+    if (S.sd(x) === 0) { sec.error = `${name} tiene el mismo valor en todos los casos: no se puede realizar la prueba.`; return sec; }
+    const one = alt !== 'two', rAlt = { two: 'two.sided', greater: 'greater', less: 'less' }[alt], ALT = one ? `, alternative = "${rAlt}"` : '', X = rn(name);
+    const hyp = one ? ` (hipótesis unilateral: media ${alt === 'greater' ? '>' : '<'} ${fmtNum(mu)})` : '';
+    const ds = S.describe(x), sw = S.shapiro(x), normOK = n >= 30 || (sw && sw.p >= .05);
+    sec.why.push(`Se compara la media de ${esc(name)} con un valor de referencia fijo (${fmtNum(mu)}), por ejemplo el punto medio de una escala o una norma publicada.`);
+    if (one) sec.why.push(`Has elegido una hipótesis unilateral: se contrasta si la media es ${alt === 'greater' ? 'mayor' : 'menor'} que ${fmtNum(mu)}. Debe decidirse antes de ver los datos.`);
+    const swT = sw ? `Shapiro-Wilk: <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}` : 'Shapiro-Wilk no calculable';
+    sec.checks.push(sw && sw.p >= .05 ? chk('ok', swT + '. Se cumple la normalidad.') : n >= 30 ? chk('info', swT + `. No es normal, pero con <i>n</i> = ${n} ≥ 30 la prueba t es robusta.`) : chk('no', swT + '. No se cumple y la muestra es pequeña.'));
+    sec.tables.push(apaTable(`Estadísticos descriptivos de ${name}`, ['<i>n</i>', '<i>M</i>', '<i>DT</i>', '<i>Mdn</i>', 'IC 95 % (<i>M</i>)'], [[n, f(ds.mean), f(ds.sd), f(ds.median), `[${f(ds.ci[0])}, ${f(ds.ci[1])}]`]], ST.rows.length - n ? `Se excluyeron ${ST.rows.length - n} casos sin dato.` : ''));
+    if (normOK) {
+      const r = S.tTestOne(x, mu, alt); sec.test = 'Prueba t para una muestra' + (one ? ' (unilateral)' : '');
+      sec.decision = `Se eligió la prueba t para una muestra${hyp} porque se compara una media con un valor de referencia y la normalidad es aceptable (o <i>n</i> ≥ 30).`;
+      sec.alt = 'Prueba de rangos con signo de Wilcoxon para una muestra si los datos no fueran normales.';
+      sec.tables.push(apaTable('Resultado de la prueba t para una muestra', ['', '<i>t</i>', '<i>gl</i>', '<i>p</i>' + (one ? ' (unilateral)' : ''), 'Diferencia', 'IC 95 % (diferencia)', '<i>d</i> de Cohen', 'IC 95 % (<i>d</i>)'],
+        [[`${esc(name)} − ${fmtNum(mu)}`, f(r.t), r.df, pv(r.p), f(r.diff), ciTxt(r.ci), f(r.d), ciTxt(r.dCI)]], '<i>d</i> = (media − valor de referencia) / desviación típica (como JASP); IC por la distribución <i>t</i> no central.'));
+      const w = S.wilcoxonOne(x, mu, alt); sec.sens = `Análisis de sensibilidad: la prueba de Wilcoxon da ${pt(w.p)}, ${(w.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
+      sec.text.push(`Se aplicó una prueba t para una muestra${hyp} para comparar la media de ${esc(name)} (<i>M</i> = ${f(ds.mean)}, <i>DT</i> = ${f(ds.sd)}) con el valor ${fmtNum(mu)}. ` + (r.p < .05
+        ? `La media fue significativamente ${r.diff > 0 ? 'superior' : 'inferior'}, <i>t</i>(${r.df}) = ${f(r.t)}, ${pt(r.p)}, <i>d</i> = ${f(r.d)}, IC 95 % [${ciTxt(r.dCI).slice(1, -1)}], con un tamaño del efecto ${lbl.d(r.d)}.`
+        : `No se encontraron diferencias estadísticamente significativas, <i>t</i>(${r.df}) = ${f(r.t)}, ${pt(r.p)}, <i>d</i> = ${f(r.d)}.`));
+      sec.code = `# ${name} frente a ${mu}\nshapiro.test(datos$${X})\nt.test(datos$${X}, mu = ${mu}${ALT})\neffectsize::cohens_d(datos$${X}, mu = ${mu}${ALT})  # d con IC`;
+    } else {
+      const r = S.wilcoxonOne(x, mu, alt); sec.test = 'Prueba de rangos con signo de Wilcoxon para una muestra' + (one ? ' (unilateral)' : '');
+      sec.decision = `Se eligió la prueba de Wilcoxon para una muestra${hyp} porque los datos no siguen una distribución normal y la muestra es pequeña.`;
+      sec.alt = 'Prueba t para una muestra si los datos fueran normales.';
+      sec.tables.push(apaTable('Resultado de la prueba de Wilcoxon para una muestra', ['', '<i>V</i>', '<i>z</i>', '<i>p</i>' + (one ? ' (unilateral)' : ''), '<i>r</i><sub>rb</sub>', 'IC 95 % (<i>r</i><sub>rb</sub>)'], [[`${esc(name)} − ${fmtNum(mu)}`, f(r.V, 1), f(r.z), pv(r.p), f(r.rb), ciTxt(r.rbCI)]],
+        `Se excluyeron ${n - r.n} valores iguales a ${fmtNum(mu)}. ${r.exact ? '<i>p</i> exacta (como R y JASP).' : '<i>p</i> por la aproximación normal con corrección por continuidad.'} <i>r</i><sub>rb</sub> = correlación biserial por rangos (como JASP).`));
+      const t = S.tTestOne(x, mu, alt); sec.sens = `Análisis de sensibilidad: la prueba t para una muestra da ${pt(t.p)}, ${(t.p < .05) === (r.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
+      sec.text.push(`Dado que los datos no seguían una distribución normal, se aplicó la prueba de rangos con signo de Wilcoxon${hyp} para comparar ${esc(name)} (<i>Mdn</i> = ${f(ds.median)}) con el valor ${fmtNum(mu)}. ` + (r.p < .05
+        ? `Se encontraron diferencias estadísticamente significativas, <i>V</i> = ${f(r.V, 1)}, ${pt(r.p)}, <i>r</i><sub>rb</sub> = ${f(r.rb)}, con un tamaño del efecto ${lbl.r(Math.abs(r.rb))}.`
+        : `No se encontraron diferencias estadísticamente significativas, <i>V</i> = ${f(r.V, 1)}, ${pt(r.p)}, <i>r</i><sub>rb</sub> = ${f(r.rb)}.`));
+      sec.code = `# ${name} frente a ${mu}\nshapiro.test(datos$${X})\nwilcox.test(datos$${X}, mu = ${mu}${ALT})  # exacta si no hay empates ni ceros y n < 50\neffectsize::rank_biserial(datos$${X}, mu = ${mu})`;
     }
     return sec;
   }
@@ -1396,9 +1456,12 @@
     try {
       if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v)); }
       if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value));
-      if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g))); }
+      if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g, ($('#compAlt') || {}).value || 'two'))); }
+      if (isOn('one')) { const ys = checkedVals('oY'), mu = parseFloat(String(($('#oMu') || {}).value || '').replace(',', '.'));
+        if (ys.length) ys.forEach(y => add(runOneSample(y, mu, ($('#oAlt') || {}).value || 'two')));
+        else add({ title: 'Una muestra', error: 'Selecciona al menos una variable.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
-        add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1]) : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
+        add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1], ($('#pAlt') || {}).value || 'two') : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));
       if (isOn('reg')) { const meth = ($('#rM') || {}).value || 'enter';
         if (meth === 'blocks') { const bl = [checkedVals('rX'), checkedVals('rB2'), checkedVals('rB3')].map((b, i, all) => b.filter(x => !all.slice(0, i).flat().includes(x))).filter(b => b.length);
