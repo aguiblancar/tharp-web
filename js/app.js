@@ -183,7 +183,10 @@
     h += card('comp', nums.length >= 1 && facs.length >= 1, 'Comparación entre grupos', 'Prueba t, ANOVA o sus alternativas no paramétricas, con comprobación automática de supuestos y post hoc.',
       `<div class="field"><span>Variables dependientes (cuantitativas)</span>${chips('compY', nums, v => (dComp.y ? dComp.y.includes(v.name) : v === nums[0]))}</div>
        <label class="field"><span>Variable de agrupación</span>${sel('compG', facs, pick(dComp.g, facs[0] && facs[0].name))}</label>
-       <label class="field"><span>Hipótesis (solo con 2 grupos)</span><select id="compAlt"><option value="two">Bilateral: los grupos difieren (recomendada)</option><option value="greater">Unilateral: el primer grupo puntúa más</option><option value="less">Unilateral: el primer grupo puntúa menos</option></select></label>`,
+       <label class="field"><span>Hipótesis (solo con 2 grupos)</span><select id="compAlt"><option value="two">Bilateral: los grupos difieren (recomendada)</option><option value="greater">Unilateral: el primer grupo puntúa más</option><option value="less">Unilateral: el primer grupo puntúa menos</option></select></label>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Comparaciones post hoc (3 o más grupos)</span><select id="compPH" onchange="document.getElementById('compCtrlW').style.display = this.value === 'dunnett' ? '' : 'none'"><option value="auto">Automáticas: Tukey o Games-Howell según las varianzas (recomendado)</option><option value="tukey">Tukey HSD</option><option value="gh">Games-Howell</option><option value="bonferroni">Bonferroni</option><option value="holm">Holm</option><option value="sidak">Šidák</option><option value="scheffe">Scheffé</option><option value="tamhane">T2 de Tamhane</option><option value="dunnett">Dunnett (frente a un grupo control)</option><option value="lsd">DMS de Fisher (sin corrección)</option></select></label>
+       <label class="field" id="compCtrlW" style="display:none"><span>Grupo control</span><select id="compCtrl"></select></label>
+       <label class="field"><span>Contrastes planificados (opcional)</span><select id="compCon"><option value="">Ninguno</option><option value="polynomial">Polinómicos: tendencia lineal, cuadrática…</option><option value="simple">Simples: cada grupo frente al primero</option><option value="repeated">Repetidos: cada grupo frente al siguiente</option><option value="helmert">Helmert: cada grupo frente a la media de los siguientes</option><option value="difference">Diferencia: cada grupo frente a la media de los anteriores</option><option value="deviation">Desviación: cada grupo frente a la media global</option></select></label></div>`,
       !(nums.length >= 1 && facs.length >= 1) ? 'Necesitas una variable cuantitativa y una categórica con 2 a 12 grupos.' : '');
     h += card('one', false, 'Comparación con un valor de referencia (una muestra)', '¿La media difiere de un valor fijo, como el punto medio de una escala o una norma publicada? Prueba t para una muestra o Wilcoxon, según la normalidad.',
       `<div class="field"><span>Variables (una prueba para cada una)</span>${chips('oY', nums, v => v === nums[0])}</div>
@@ -270,6 +273,10 @@
        <div class="field"><span>Ítems inversos (se recodifican)</span>${chips('aR', nums, v => (dA.rev ? dA.rev.includes(v.name) : false))}</div>`,
       nums.length < 2 ? 'Necesitas al menos dos ítems cuantitativos.' : '');
     $('#anList').innerHTML = h;
+    // el grupo control de Dunnett depende de la variable de agrupación elegida
+    const fillCtrl = () => { const g = $('#compG') && vByName($('#compG').value), c = $('#compCtrl'); if (!g || !c) return;
+      c.innerHTML = levelsOf(g).map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join(''); };
+    if ($('#compG')) { $('#compG').addEventListener('change', fillCtrl); fillCtrl(); }
     $$('.an>label input').forEach(i => i.onchange = () => i.closest('.an').classList.toggle('on', i.checked));
   }
   const isOn = id => { const el = $(`.an[data-an="${id}"] > label input`); return el && el.checked; };
@@ -374,7 +381,7 @@
     return sec;
   }
 
-  function runCompare(yName, gName, alt = 'two') {
+  function runCompare(yName, gName, alt = 'two', opts = {}) {
     const yv = vByName(yName), gv = vByName(gName), y = numOf(yv), g = catOf(gv), lv = levelsOf(gv);
     const sec = { title: `${yName} según ${gName}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     let groups = lv.map(l => ({ name: l, x: [] }));
@@ -450,29 +457,63 @@
       };
       if (normOK) {
         const cl = S.anova(xs);
+        code += `dd <- data.frame(y = datos[[${rq(yName)}]], g = factor(datos[[${rq(gName)}]]))  # nombres simples para aov y TukeyHSD\ndd <- dd[complete.cases(dd), ]\n`;
         let om, ph, phName;
         if (eqVar) { om = cl; sec.test = 'ANOVA de un factor'; phName = 'Tukey HSD'; ph = S.hasTukey ? S.tukeyHSD(xs, cl.msw, cl.df2) : S.pairwiseHolm(xs, true); if (!S.hasTukey) phName = 't por pares con corrección de Holm'; }
         else { om = S.welchAnova(xs); sec.test = 'ANOVA de Welch'; phName = 'Games-Howell'; ph = S.hasTukey ? S.gamesHowell(xs) : S.pairwiseHolm(xs, false); if (!S.hasTukey) phName = 't de Welch por pares con corrección de Holm'; }
+        // prueba post hoc elegida por la persona (si no, la automática según la homogeneidad de varianzas)
+        const PHN = { tukey: 'Tukey HSD', gh: 'Games-Howell', bonferroni: 'Bonferroni', holm: 'Holm', sidak: 'Šidák', scheffe: 'Scheffé', lsd: 'DMS de Fisher, sin corrección', tamhane: 'T2 de Tamhane', dunnett: 'Dunnett' };
+        const userPH = opts.ph && opts.ph !== 'auto' ? opts.ph : null, robustPH = m => m === 'gh' || m === 'tamhane';
+        if (userPH) {
+          phName = PHN[userPH];
+          if (userPH === 'tukey') ph = S.tukeyHSD(xs, cl.msw, cl.df2);
+          else if (userPH === 'gh') ph = S.gamesHowell(xs);
+          else if (userPH === 'dunnett') { const ci = Math.max(0, names.indexOf(opts.ctrl)); ph = S.dunnett(xs, ci, cl.msw, cl.df2); phName = `Dunnett, frente a ${esc(names[ci])}`; }
+          else ph = S.posthocMethod(xs, cl.msw, cl.df2, userPH);
+          sec.why.push(`Comparaciones post hoc elegidas por ti: ${phName}.${robustPH(userPH) !== !eqVar ? ` Ten en cuenta que ${eqVar ? 'las varianzas son homogéneas, así que Tukey sería suficiente' : 'las varianzas no son homogéneas: es preferible una prueba que no las asuma iguales (Games-Howell o T2 de Tamhane)'}.` : ''}`);
+        }
         // d de Cohen por pares: con varianzas homogéneas, sobre la DT del error del modelo (√MCE), como JASP y emmeans::eff_size;
         // con varianzas distintas, sobre la media de las dos varianzas (d_av)
-        ph.forEach(c => { c.d = c.diff / Math.sqrt(eqVar ? cl.msw : (S.variance(xs[c.i]) + S.variance(xs[c.j])) / 2); });
+        const useAv = userPH ? robustPH(userPH) : !eqVar;
+        ph.forEach(c => { c.d = c.diff / Math.sqrt(!useAv ? cl.msw : (S.variance(xs[c.i]) + S.variance(xs[c.j])) / 2); });
         sec.why.push(eqVar ? 'Las varianzas son homogéneas: ANOVA clásico con post hoc de Tukey.' : 'Las varianzas no son homogéneas: ANOVA de Welch con post hoc de Games-Howell, que no asumen varianzas iguales.');
         sec.decision = `Se eligió el ${sec.test} porque se comparan ${k} grupos independientes en una variable cuantitativa con normalidad aceptable${eqVar ? ' y varianzas homogéneas' : ' y varianzas distintas'}.`;
         sec.alt = 'Prueba de Kruskal-Wallis si no se cumpliera la normalidad con muestras pequeñas.';
-        if (eqVar) sec.tables.push(apaTable('Resultado del ANOVA de un factor', ['Fuente', '<i>SC</i>', '<i>gl</i>', '<i>MC</i>', '<i>F</i>', '<i>p</i>', 'η²'],
-          [[esc(gName), f(cl.ssb), cl.df1, f(cl.ssb / cl.df1), f(cl.F), pv(cl.p), nz(cl.eta2.toFixed(3))], ['Error', f(cl.ssw), cl.df2, f(cl.msw), '', '', ''], ['Total', f(cl.ssb + cl.ssw), cl.df1 + cl.df2, '', '', '', '']]));
-        else sec.tables.push(apaTable('Resultado del ANOVA de Welch', ['', '<i>F</i>', '<i>gl</i><sub>1</sub>', '<i>gl</i><sub>2</sub>', '<i>p</i>', 'η²'], [[esc(gName), f(om.F), om.df1, f(om.df2), pv(om.p), nz(cl.eta2.toFixed(3))]], 'η² calculado a partir del ANOVA clásico, como medida descriptiva del tamaño del efecto.'));
+        if (eqVar) sec.tables.push(apaTable('Resultado del ANOVA de un factor', ['Fuente', '<i>SC</i>', '<i>gl</i>', '<i>MC</i>', '<i>F</i>', '<i>p</i>', 'η²', 'ω²'],
+          [[esc(gName), f(cl.ssb), cl.df1, f(cl.ssb / cl.df1), f(cl.F), pv(cl.p), nz(cl.eta2.toFixed(3)), nz(cl.omega2.toFixed(3))], ['Error', f(cl.ssw), cl.df2, f(cl.msw), '', '', '', ''], ['Total', f(cl.ssb + cl.ssw), cl.df1 + cl.df2, '', '', '', '', '']],
+          'ω² = omega cuadrado, estimación menos sesgada del tamaño del efecto en la población.'));
+        else { const bf = S.brownForsythe(xs);
+          sec.tables.push(apaTable('Resultado del ANOVA robusto (varianzas distintas)', ['Prueba', '<i>F</i>', '<i>gl</i><sub>1</sub>', '<i>gl</i><sub>2</sub>', '<i>p</i>', 'η²', 'ω²'],
+            [['Welch', f(om.F), om.df1, f(om.df2), pv(om.p), nz(cl.eta2.toFixed(3)), nz(cl.omega2.toFixed(3))], ['Brown-Forsythe', f(bf.F), bf.df1, f(bf.df2), pv(bf.p), '', '']],
+            'Se interpreta la prueba de Welch; Brown-Forsythe se muestra como comprobación. η² y ω² se calculan a partir del ANOVA clásico, como medidas descriptivas del tamaño del efecto.')); }
+        if (opts.con) {
+          const cs = S.contrasts(xs, cl.msw, cl.df2, opts.con), CN = { polynomial: 'polinómicos (tendencia)', helmert: 'de Helmert (cada grupo frente a la media de los siguientes)', difference: 'de diferencia (cada grupo frente a la media de los anteriores)', repeated: 'repetidos (cada grupo frente al siguiente)', simple: `simples (cada grupo frente a ${esc(names[0])})`, deviation: 'de desviación (cada grupo frente a la media global)' };
+          const lab = c => c.name || ({ helmert: `${esc(names[c.i])} vs. media de ${list(names.slice(c.i + 1).map(esc))}`, difference: `${esc(names[c.i + 1])} vs. media de ${list(names.slice(0, c.i + 1).map(esc))}`, repeated: `${esc(names[c.i])} − ${esc(names[c.i + 1])}`, simple: `${esc(names[c.i + 1])} − ${esc(names[0])}`, deviation: `${esc(names[c.i + 1])} − media global` }[opts.con]);
+          sec.tables.push(apaTable(`Contrastes planificados ${CN[opts.con]}`, ['Contraste', 'Pesos', 'Estimación', '<i>EE</i>', `<i>t</i>(${cl.df2})`, '<i>p</i>'],
+            cs.map(c => [lab(c), c.w.map(w => fmtNum(Math.round(w * 1000) / 1000)).join(', '), f(c.est), f(c.se), f(c.t), pv(c.p)]),
+            `Pesos en el orden de los grupos (${list(names.map(esc))}). Contrastes planificados con el error del ANOVA y sin corrección por comparaciones múltiples, como en SPSS: deben decidirse antes de ver los datos.${opts.con === 'polynomial' ? ' Los contrastes de tendencia solo tienen sentido si los grupos siguen un orden (por ejemplo, dosis o niveles crecientes).' : ''}`));
+          sec.why.push(`Contrastes planificados ${CN[opts.con]}, elegidos por ti.`);
+          code += `# Contrastes planificados (sin corrección)\nem <- emmeans::emmeans(aov(y ~ g, data = dd), ~ g)\nemmeans::contrast(em, list(${cs.map((c, q) => `${rq('c' + (q + 1))} = c(${c.w.map(w => +w.toFixed(6)).join(', ')})`).join(', ')}), adjust = "none")\n`;
+        }
         const kw = S.kruskal(xs); sec.sens = `Análisis de sensibilidad: la prueba de Kruskal-Wallis da ${pt(kw.p)}, ${(kw.p < .05) === (om.p < .05) ? 'coincidiendo con' : 'lo que <b>no coincide</b> con'} la conclusión.`;
         const st = `<i>F</i>(${om.df1}, ${dfF(om.df2)}) = ${f(om.F)}, ${pt(om.p)}, η² = ${nz(cl.eta2.toFixed(3))}`;
         let t = `Se aplicó un ${sec.test} para comparar ${esc(yName)} según ${esc(gName)} (${groups.map(q => `${esc(q.name)}: ${MD(q)}`).join('; ')}). `;
+        const phNote = (useAv ? '<i>d</i> = diferencia de medias / raíz de la media de las dos varianzas, adecuada cuando las varianzas difieren.' : '<i>d</i> = diferencia de medias / √<i>MC</i><sub>error</sub> (como JASP).')
+          + ' Tamaño del efecto: 0.20 pequeño, 0.50 mediano, 0.80 grande (Cohen, 1988).'
+          + (userPH === 'lsd' ? ' <b>Sin corrección por comparaciones múltiples</b>: el riesgo de falsos positivos aumenta con el número de comparaciones.' : '');
+        const phRows = ph.map(c => [`${esc(names[c.i])} − ${esc(names[c.j])}`, f(c.diff), pv(c.padj), f(c.d)]);
+        const phTable = () => sec.tables.push(apaTable(`Comparaciones post hoc (${phName})`, ['Comparación', 'Diferencia de medias', '<i>p</i> ajustada', '<i>d</i> de Cohen'], phRows, phNote));
         if (om.p < .05) {
           t += `Se encontraron diferencias estadísticamente significativas, ${st}, con un tamaño del efecto ${lbl.eta(cl.eta2)}.` + posthocText(ph, phName, false);
-          sec.tables.push(apaTable(`Comparaciones post hoc (${phName})`, ['Comparación', 'Diferencia de medias', '<i>p</i> ajustada', '<i>d</i> de Cohen'], ph.map(c => [`${esc(names[c.i])} − ${esc(names[c.j])}`, f(c.diff), pv(c.padj), f(c.d)]),
-            eqVar ? '<i>d</i> = diferencia de medias / √<i>MC</i><sub>error</sub> (como JASP). Tamaño del efecto: 0.20 pequeño, 0.50 mediano, 0.80 grande (Cohen, 1988).' : '<i>d</i> = diferencia de medias / raíz de la media de las dos varianzas, adecuada cuando las varianzas difieren. Tamaño del efecto: 0.20 pequeño, 0.50 mediano, 0.80 grande (Cohen, 1988).'));
-        } else t += `No se encontraron diferencias estadísticamente significativas, ${st}.`;
+          phTable();
+        } else { t += `No se encontraron diferencias estadísticamente significativas, ${st}.`; if (userPH) { phTable(); t += ` Las comparaciones ${phName} se muestran porque las pediste, pero con una prueba global no significativa deben interpretarse con mucha cautela.`; } }
         sec.text.push(t);
-        code += eqVar ? `modelo <- aov(${Y} ~ ${G}, data = datos)\nsummary(modelo)\neffectsize::eta_squared(modelo)\nTukeyHSD(modelo)\n# d de Cohen por pares (como JASP): diferencia de medias / √MCE\nemmeans::eff_size(emmeans::emmeans(modelo, ~ ${G}), sigma = sigma(modelo), edf = df.residual(modelo))`
-          : `oneway.test(${Y} ~ ${G}, data = datos, var.equal = FALSE)\nrstatix::games_howell_test(datos, ${Y} ~ ${G})`;
+        code += eqVar ? `modelo <- aov(y ~ g, data = dd)\nsummary(modelo)\neffectsize::eta_squared(modelo)\neffectsize::omega_squared(modelo)\nTukeyHSD(modelo)\n# d de Cohen por pares (como JASP): diferencia de medias / √MCE\nemmeans::eff_size(emmeans::emmeans(modelo, ~ g), sigma = sigma(modelo), edf = df.residual(modelo))`
+          : `oneway.test(y ~ g, data = dd, var.equal = FALSE)\nonewaytests::bf.test(y ~ g, data = dd)  # Brown-Forsythe\nrstatix::games_howell_test(dd, y ~ g)`;
+        if (userPH) code += '\n# Comparaciones post hoc elegidas\n' + ({ bonferroni: 'pairwise.t.test(dd$y, dd$g, p.adjust.method = "bonferroni", pool.sd = TRUE)', holm: 'pairwise.t.test(dd$y, dd$g, p.adjust.method = "holm", pool.sd = TRUE)',
+          lsd: 'pairwise.t.test(dd$y, dd$g, p.adjust.method = "none", pool.sd = TRUE)', sidak: 'p <- pairwise.t.test(dd$y, dd$g, p.adjust.method = "none", pool.sd = TRUE)$p.value; m <- sum(!is.na(p)); 1 - (1 - p)^m  # Šidák',
+          scheffe: 'DescTools::ScheffeTest(aov(y ~ g, data = dd))', tamhane: 'PMCMRplus::tamhaneT2Test(y ~ g, data = dd)', tukey: 'TukeyHSD(aov(y ~ g, data = dd))', gh: 'rstatix::games_howell_test(dd, y ~ g)',
+          dunnett: `dd$g <- relevel(dd$g, ref = ${rq(opts.ctrl || names[0])})\nsummary(multcomp::glht(aov(y ~ g, data = dd), linfct = multcomp::mcp(g = "Dunnett")))` })[userPH];
       } else {
         const kw = S.kruskal(xs), ph = S.dunn(xs, kw); sec.test = 'Prueba de Kruskal-Wallis';
         sec.decision = `Se eligió la prueba de Kruskal-Wallis porque se comparan ${k} grupos independientes y la normalidad no se cumple en algún grupo con muestra pequeña.`;
@@ -1456,7 +1497,7 @@
     try {
       if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v)); }
       if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value));
-      if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g, ($('#compAlt') || {}).value || 'two'))); }
+      if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g, ($('#compAlt') || {}).value || 'two', { ph: ($('#compPH') || {}).value || 'auto', ctrl: ($('#compCtrl') || {}).value || '', con: ($('#compCon') || {}).value || '' }))); }
       if (isOn('one')) { const ys = checkedVals('oY'), mu = parseFloat(String(($('#oMu') || {}).value || '').replace(',', '.'));
         if (ys.length) ys.forEach(y => add(runOneSample(y, mu, ($('#oAlt') || {}).value || 'two')));
         else add({ title: 'Una muestra', error: 'Selecciona al menos una variable.', why: [], checks: [], tables: [], charts: [], text: [] }); }

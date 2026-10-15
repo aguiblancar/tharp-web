@@ -203,6 +203,76 @@
     }
     return out;
   }
+  // ---------- comparaciones múltiples a elegir (como SPSS/JASP/jamovi) ----------
+  // métodos con el error combinado del ANOVA (MCE): lsd, bonferroni, holm, sidak, scheffe; Tamhane T2 (Welch + Šidák)
+  function posthocMethod(groups, msw, dfw, method) {
+    const k = groups.length, m = k * (k - 1) / 2, out = [];
+    for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
+      const a = groups[i], b = groups[j], diff = mean(a) - mean(b);
+      if (method === 'tamhane') { const r = tTestInd(a, b, false); out.push({ i, j, diff, t: r.t, df: r.df, p: r.p, se: r.se }); continue; }
+      const se = Math.sqrt(msw * (1 / a.length + 1 / b.length)), t = diff / se;
+      out.push({ i, j, diff, t, df: dfw, se, p: pT(t, dfw), F: t * t / (k - 1) });
+    }
+    if (method === 'bonferroni') out.forEach(c => { c.padj = Math.min(1, c.p * m); });
+    else if (method === 'holm') { const a = holm(out.map(c => c.p)); out.forEach((c, q) => { c.padj = a[q]; }); }
+    else if (method === 'sidak' || method === 'tamhane') out.forEach(c => { c.padj = 1 - Math.pow(1 - c.p, m); });
+    else if (method === 'scheffe') out.forEach(c => { c.padj = pF(c.F, k - 1, dfw); });
+    else out.forEach(c => { c.padj = c.p; }); // lsd: sin corrección
+    return out;
+  }
+  // Dunnett: cada grupo frente a un grupo control, con la t multivariante exacta (correlaciones λi·λj)
+  function dunnettProb(c, lam, nu) { // P(max |Tj| < c)
+    const zN = 241, zs = [], zw = []; for (let q = 0; q < zN; q++) { const z = -8 + 16 * q / (zN - 1); zs.push(z); zw.push((q === 0 || q === zN - 1 ? 1 : q % 2 ? 4 : 2) * (16 / (zN - 1)) / 3 * J.normal.pdf(z, 0, 1)); }
+    const inner = s => { let acc = 0; for (let q = 0; q < zN; q++) { let pr = 1; for (const l of lam) { const r = Math.sqrt(1 - l * l); pr *= J.normal.cdf((c * s + l * zs[q]) / r, 0, 1) - J.normal.cdf((-c * s + l * zs[q]) / r, 0, 1); } acc += zw[q] * pr; } return acc; };
+    if (!isFinite(nu) || nu > 1e5) return inner(1);
+    // densidad de S = sqrt(χ²ν/ν) integrada con Simpson en una ventana amplia alrededor de 1
+    const lo = Math.max(1e-6, 1 - 9 / Math.sqrt(nu + 1)), hi = 1 + 9 / Math.sqrt(nu + 1), sN = 241, h = (hi - lo) / (sN - 1);
+    const logC = (nu / 2) * Math.log(nu) - (nu / 2 - 1) * Math.LN2 - J.gammaln(nu / 2);
+    let tot = 0; for (let q = 0; q < sN; q++) { const s = lo + q * h, w = (q === 0 || q === sN - 1 ? 1 : q % 2 ? 4 : 2) * h / 3;
+      tot += w * Math.exp(logC + (nu - 1) * Math.log(s) - nu * s * s / 2) * inner(s); }
+    return tot;
+  }
+  function dunnett(groups, ctrl, msw, dfw, alt = 'two') {
+    const n0 = groups[ctrl].length, m0 = mean(groups[ctrl]), idx = groups.map((_, i) => i).filter(i => i !== ctrl);
+    const lam = idx.map(i => Math.sqrt(groups[i].length / (groups[i].length + n0)));
+    return idx.map(i => { const diff = mean(groups[i]) - m0, se = Math.sqrt(msw * (1 / groups[i].length + 1 / n0)), t = diff / se;
+      const padj = Math.min(1, Math.max(0, 1 - dunnettProb(Math.abs(t), lam, dfw)));
+      return { i, j: ctrl, diff, se, t, df: dfw, p: pT(t, dfw), padj }; });
+  }
+  // contrastes planificados sobre las medias de grupo con el MCE del ANOVA (como SPSS «Contrastes» y emmeans::contrast)
+  function contrastWeights(k, type) {
+    const W = [];
+    if (type === 'polynomial') { // polinomios ortogonales con niveles equiespaciados (como contr.poly de R, sin normalizar)
+      const x = Array.from({ length: k }, (_, i) => i + 1); let basis = [x.map(() => 1)];
+      for (let d = 1; d < Math.min(k, 4); d++) { let v = x.map(xx => xx ** d);
+        basis.forEach(bv => { const pr = sum(v.map((q, i) => q * bv[i])) / sum(bv.map(q => q * q)); v = v.map((q, i) => q - pr * bv[i]); });
+        basis.push(v);
+        // pesos enteros clásicos (−1, 0, 1; 1, −2, 1; −3, −1, 1, 3…), como emmeans y los manuales: no cambian t ni p
+        const mn = Math.min(...v.map(Math.abs).filter(q => q > 1e-9)), wi = v.map(q => Math.round(q / mn * 1e6) / 1e6);
+        W.push({ name: ['Lineal', 'Cuadrático', 'Cúbico'][d - 1], w: wi }); }
+    } else for (let i = 0; i < k - 1; i++) {
+      const w = new Array(k).fill(0);
+      if (type === 'helmert') { w[i] = 1; for (let j = i + 1; j < k; j++) w[j] = -1 / (k - i - 1); }
+      else if (type === 'difference') { for (let j = 0; j <= i; j++) w[j] = -1 / (i + 1); w[i + 1] = 1; } // reverse Helmert
+      else if (type === 'repeated') { w[i] = 1; w[i + 1] = -1; }
+      else if (type === 'simple') { w[i + 1] = 1; w[0] = -1; }
+      else if (type === 'deviation') { w.fill(-1 / k); w[i + 1] = 1 - 1 / k; }
+      W.push({ i, w });
+    }
+    return W;
+  }
+  function contrasts(groups, msw, dfw, type) {
+    return contrastWeights(groups.length, type).map(c => {
+      const est = sum(c.w.map((w, i) => w * mean(groups[i]))), se = Math.sqrt(msw * sum(c.w.map((w, i) => w * w / groups[i].length))), t = est / se;
+      return Object.assign(c, { est, se, t, df: dfw, p: pT(t, dfw) }); });
+  }
+  // ANOVA de Brown-Forsythe para medias (F*), robusta a varianzas distintas
+  function brownForsythe(groups) {
+    const k = groups.length, n = groups.map(g => g.length), N = sum(n), m = groups.map(mean), v = groups.map(variance), gm = sum(groups.map(g => sum(g))) / N;
+    const num = sum(n.map((ni, i) => ni * (m[i] - gm) ** 2)), den = sum(n.map((ni, i) => (1 - ni / N) * v[i]));
+    const c = n.map((ni, i) => (1 - ni / N) * v[i] / den), df2 = 1 / sum(c.map((ci, i) => ci * ci / (n[i] - 1))), F = num / den;
+    return { F, df1: k - 1, df2, p: pF(F, k - 1, df2) };
+  }
   function gamesHowell(groups) {
     const k = groups.length, out = [];
     for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
@@ -818,6 +888,6 @@
   }
 
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
-    shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey,
+    shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
     tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, fisher2x2, chiSquare, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);
