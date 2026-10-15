@@ -183,8 +183,9 @@
       !(nums.length >= 1 && facs.length >= 1) ? 'Necesitas una variable cuantitativa y una categórica con 2 a 12 grupos.' : '');
     const dP = D.paired || {};
     const pDef = (dP.vars || []).filter(has);
-    h += card('paired', !!D.paired && nums.length >= 2, 'Comparación de medidas relacionadas (pre/post o varios momentos)', 'Las mismas personas medidas dos o más veces: t relacionada o Wilcoxon (2 momentos); ANOVA de medidas repetidas o Friedman (3 o más).',
-      `<div class="field"><span>Momentos o condiciones (en el orden de las columnas del archivo)</span>${chips('pM', nums, v => (pDef.length ? pDef.includes(v.name) : nums.indexOf(v) < 2))}</div>`,
+    h += card('paired', !!D.paired && nums.length >= 2, 'Comparación de medidas relacionadas (pre/post o varios momentos)', 'Las mismas personas medidas dos o más veces: t relacionada o Wilcoxon (2 momentos); ANOVA de medidas repetidas o Friedman (3 o más). Con un factor entre sujetos (por ejemplo, control frente a tratamiento): ANOVA mixta.',
+      `<div class="field"><span>Momentos o condiciones (en el orden de las columnas del archivo)</span>${chips('pM', nums, v => (pDef.length ? pDef.includes(v.name) : nums.indexOf(v) < 2))}</div>
+       <label class="field"><span>Factor entre sujetos (opcional: ANOVA mixta)</span><select id="pB"><option value="">Ninguno</option>${facs.map(v => `<option value="${esc(v.name)}"${dP.between === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>`,
       nums.length < 2 ? 'Necesitas dos variables cuantitativas.' : '');
     const dC = D.chi || {};
     h += card('chi', facs.length >= 2, 'Asociación entre variables categóricas', 'Tabla de contingencia, chi-cuadrado (o Fisher) y V de Cramér.',
@@ -519,6 +520,82 @@
     return sec;
   }
 
+  // ANOVA mixta: k medidas de las mismas personas (intrasujeto) × un factor entre sujetos
+  function runMixed(names, gName) {
+    const k = names.length, cols = names.map(n => numOf(vByName(n))), cg = catOf(vByName(gName));
+    const sec = { title: `${names.join(', ')} × ${gName} (ANOVA mixta)`, test: 'ANOVA mixta (SC tipo III)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (names.includes(gName)) { sec.error = 'El factor entre sujetos no puede ser una de las medidas.'; return sec; }
+    const idx = ST.rows.map((_, i) => i).filter(i => cg[i] !== null && cols.every(c => c[i] !== null));
+    const lv = [...new Set(idx.map(i => cg[i]))].sort(cmp), G = lv.length;
+    if (G < 2) { sec.error = `${gName} necesita al menos 2 grupos con datos completos.`; return sec; }
+    const Y = idx.map(i => cols.map(c => c[i])), g = idx.map(i => lv.indexOf(cg[i])), n = Y.length, ng = lv.map((_, j) => g.filter(x => x === j).length);
+    if (ng.some(c => c < 2)) { sec.error = 'Cada grupo necesita al menos 2 personas con todas las medidas.'; return sec; }
+    if (n - G < k) { sec.error = `Hay pocos casos (${n}) para ${k} medidas y ${G} grupos.`; return sec; }
+    const r = S.mixedAnova(Y, g, G); const L = list(names.map(esc));
+    // supuestos
+    const gm = S.mean(r.subjMeans), resid = Y.flatMap((row, i) => row.map((v, a) => v - r.cellMeans[g[i]][a] - r.subjMeans[i] + S.mean(r.cellMeans[g[i]])));
+    void gm; const sw = S.shapiro(resid);
+    sec.checks.push(sw && sw.p >= .05 ? chk('ok', `Normalidad de los residuos (Shapiro-Wilk): <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}. Se cumple.`)
+      : chk(n >= 30 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): ${sw ? `<i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}` : 'no calculable'}.${n >= 30 ? ' Con muestras de este tamaño el ANOVA es robusto a desviaciones moderadas.' : ' No se cumple y la muestra es pequeña: interpreta con cautela.'}`));
+    names.forEach((nm, a) => { const lev = S.levene(lv.map((_, j) => Y.filter((_, i) => g[i] === j).map(row => row[a])));
+      sec.checks.push(chk(lev.p >= .05 ? 'ok' : 'no', `Homogeneidad de varianzas entre grupos en ${esc(nm)} (Levene): <i>F</i>(${lev.df1}, ${lev.df2}) = ${f(lev.F)}, ${pt(lev.p)}.${lev.p >= .05 ? ' Se cumple.' : ' No se cumple: interpreta con cautela, sobre todo si los grupos tienen tamaños distintos.'}`)); });
+    const sph = r.mauchly, sphOK = !sph || sph.p >= .05, eps = sphOK ? 1 : r.gg;
+    if (sph) sec.checks.push(chk(sphOK ? 'ok' : 'no', `Esfericidad (Mauchly): <i>W</i> = ${nz(sph.W.toFixed(3))}, χ²(${sph.df}) = ${f(sph.chi)}, ${pt(sph.p)}. ${sphOK ? 'Se cumple.' : `No se cumple: se aplica la corrección de Greenhouse-Geisser (ε = ${nz(r.gg.toFixed(3))}; Huynh-Feldt ε = ${nz(r.hf.toFixed(3))}) a los efectos intrasujeto.`}`));
+    sec.checks.push(chk(Math.max(...ng) === Math.min(...ng) ? 'ok' : 'info', `Tamaño de los grupos: ${lv.map((l, j) => `${esc(l)} = ${ng[j]}`).join(', ')}${Math.max(...ng) === Math.min(...ng) ? ' (equilibrado).' : ' (no equilibrado; se usan sumas de cuadrados de tipo III).'}`));
+    sec.why.push(`Factor intrasujeto (medidas repetidas): ${L} → ${k} medidas de las mismas personas.`);
+    sec.why.push(`Factor entre sujetos: ${esc(gName)} → ${G} grupos independientes (${list(lv.map(esc))}).`);
+    sec.why.push(`La ANOVA mixta contrasta tres cosas: si las puntuaciones cambian entre medidas, si los grupos difieren en general y, sobre todo, si el cambio es distinto según el grupo (interacción). En un diseño pre/post con grupo control, la interacción es la prueba de que la intervención funciona.`);
+    sec.decision = `Se ajustó una ANOVA mixta ${G}×${k} (${esc(gName)} × medida) con ${n} personas y sumas de cuadrados de tipo III${sphOK ? '' : '; como no se cumple la esfericidad, los efectos intrasujeto se corrigen con Greenhouse-Geisser'}.`;
+    sec.alt = 'Si no se cumplen los supuestos con muestras pequeñas, un modelo lineal mixto o pruebas no paramétricas por separado (Friedman en cada grupo y Kruskal-Wallis en cada medida).';
+    // descriptivos
+    const desc = []; lv.forEach((l, j) => names.forEach((nm, a) => { const d = S.describe(Y.filter((_, i) => g[i] === j).map(row => row[a])); desc.push([a === 0 ? esc(l) : '', esc(nm), d.n, f(d.mean), f(d.sd)]); }));
+    sec.tables.push(apaTable(`Estadísticos descriptivos por ${gName} y medida`, [esc(gName), 'Medida', '<i>n</i>', '<i>M</i>', '<i>DT</i>'], desc, ST.rows.length - n ? `Se excluyeron ${ST.rows.length - n} casos sin todas las medidas o sin grupo.` : ''));
+    // tabla del ANOVA
+    const P = e => (sphOK ? e.p : e.pGG), d1 = e => e.df1 * (sphOK ? 1 : r.gg), d2 = e => e.df2 * (sphOK ? 1 : r.gg);
+    const row = (nm, e, within) => [nm, f(e.ss), dfF(within ? d1(e) : e.df1), f(e.ss / (within ? d1(e) : e.df1)), f(e.F), pv(within ? P(e) : e.p), nz(e.peta2.toFixed(3)), nz(e.ges.toFixed(3))];
+    sec.tables.push(apaTable('Resultado de la ANOVA mixta', ['Fuente', '<i>SC</i>', '<i>gl</i>', '<i>MC</i>', '<i>F</i>', '<i>p</i>', 'η²<sub>p</sub>', 'η²<sub>G</sub>'], [
+      ['<i>Entre sujetos</i>', '', '', '', '', '', '', ''], row(esc(gName), r.B, false), ['Error', f(r.ssSe), r.dfSe, f(r.ssSe / r.dfSe), '', '', '', ''],
+      ['<i>Intrasujeto</i>', '', '', '', '', '', '', ''], row('Medida', r.T, true), row(`Medida × ${esc(gName)}`, r.TG, true), ['Error', f(r.ssE), dfF(r.dfE * eps), f(r.ssE / (r.dfE * eps)), '', '', '', '']],
+      `SC de tipo III. ${sphOK ? '' : 'Grados de libertad intrasujeto corregidos con Greenhouse-Geisser. '}η²<sub>p</sub> = eta cuadrado parcial; η²<sub>G</sub> = eta cuadrado generalizado.`));
+    // comparaciones por pares entre medidas (promediando los grupos), con d_av
+    const pooledVar = a => { let ss = 0; lv.forEach((_, j) => { const x = Y.filter((_, i) => g[i] === j).map(row => row[a]), m = S.mean(x); ss += S.sum(x.map(v => (v - m) ** 2)); }); return ss / r.dfSe; };
+    r.within.forEach(o => { o.d = o.est / Math.sqrt((pooledVar(o.a) + pooledVar(o.b)) / 2); });
+    if (P(r.T) < .05 && k > 2) sec.tables.push(apaTable('Comparaciones por pares entre medidas (promediando los grupos)', ['Comparación', 'Diferencia', '<i>EE</i>', `<i>t</i>(${r.dfSe})`, '<i>p</i> (Holm)', '<i>d</i>'],
+      r.within.map(o => [`${esc(names[o.a])} − ${esc(names[o.b])}`, f(o.est), f(o.se), f(o.t), pv(o.padj), f(o.d)]),
+      'Medias marginales sin ponderar por el tamaño de los grupos y error propio de cada diferencia (como emmeans y JASP). <i>d</i> = diferencia / raíz de la media de las dos varianzas intragrupo.'));
+    let phB = null;
+    if (r.B.p < .05 && G > 2) { const xs = lv.map((_, j) => r.subjMeans.filter((_, i) => g[i] === j)), msw = r.ssSe / k / r.dfSe;
+      phB = S.hasTukey ? S.tukeyHSD(xs, msw, r.dfSe) : S.pairwiseHolm(xs, true); phB.forEach(c => { c.d = c.diff / Math.sqrt(msw); });
+      sec.tables.push(apaTable(`Comparaciones entre grupos de ${gName} (${S.hasTukey ? 'Tukey' : 'Holm'}, media de las medidas)`, ['Comparación', 'Diferencia', '<i>p</i> ajustada', '<i>d</i>'], phB.map(c => [`${esc(lv[c.i])} − ${esc(lv[c.j])}`, f(c.diff), pv(c.padj), f(c.d)]))); }
+    // efectos simples si hay interacción
+    let simple = null;
+    if (P(r.TG) < .05) {
+      const atT = names.map((nm, a) => { const o = S.anova(lv.map((_, j) => Y.filter((_, i) => g[i] === j).map(row => row[a]))); return [`${esc(gName)} en ${esc(nm)}`, `<i>F</i>(${o.df1}, ${o.df2}) = ${f(o.F)}`, pv(o.p), nz(o.eta2.toFixed(3))]; });
+      const inG = lv.map((l, j) => { const Yj = Y.filter((_, i) => g[i] === j); if (Yj.length < 3) return [`Medida en ${esc(l)}`, 'pocos casos', '', ''];
+        const o = S.rmAnova(Yj), cor = o.mauchly && o.mauchly.p < .05, pp = cor ? o.pGG : o.p, e2 = cor ? o.gg : 1;
+        return [`Medida en ${esc(l)}`, `<i>F</i>(${dfF(o.df1 * e2)}, ${dfF(o.df2 * e2)}) = ${f(o.F)}${cor ? ' (G-G)' : ''}`, pv(pp), nz(o.peta2.toFixed(3))]; });
+      simple = atT.concat(inG);
+      sec.tables.push(apaTable('Efectos simples', ['Efecto', 'Estadístico', '<i>p</i>', 'η²<sub>p</sub>'], simple,
+        'Comparación de los grupos en cada medida (ANOVA de un factor) y cambio entre medidas dentro de cada grupo (ANOVA de medidas repetidas). Con varias pruebas, valora corregir el nivel de significación (por ejemplo, Bonferroni).'));
+      sec.checks.push(chk('info', 'La interacción es significativa: interpreta los efectos simples (tabla y gráfico) antes que los efectos principales.'));
+    }
+    sec.charts.push(fig(`Interacción medida × ${gName}: medias e IC 95 %`, CH.interaction(names, lv.map((l, j) => ({ name: l, means: names.map((_, a) => r.cellMeans[j][a]), ci: names.map((_, a) => S.meanCI(Y.filter((_, i) => g[i] === j).map(row => row[a]))) })), 'Puntuación'), CH.legend(lv)));
+    // redacción
+    const st = (e, w) => `<i>F</i>(${dfF(w ? d1(e) : e.df1)}, ${dfF(w ? d2(e) : e.df2)}) = ${f(e.F)}, ${pt(w ? P(e) : e.p)}, η²<sub>p</sub> = ${nz(e.peta2.toFixed(3))}`;
+    let t = `Se realizó una ANOVA mixta ${G}×${k} con ${esc(gName)} como factor entre sujetos y la medida (${L}) como factor intrasujeto${sphOK ? '' : ', con la corrección de Greenhouse-Geisser por no cumplirse la esfericidad'}. `;
+    t += `La interacción medida × ${esc(gName)} ${P(r.TG) < .05 ? 'fue' : 'no fue'} estadísticamente significativa, ${st(r.TG, true)}${P(r.TG) < .05 ? ', lo que indica que el cambio entre medidas fue distinto según el grupo (véanse los efectos simples y la figura)' : ''}. `;
+    t += `El efecto principal de la medida ${P(r.T) < .05 ? 'fue' : 'no fue'} estadísticamente significativo, ${st(r.T, true)}. `;
+    t += `El efecto principal de ${esc(gName)} ${r.B.p < .05 ? 'fue' : 'no fue'} estadísticamente significativo, ${st(r.B, false)}.`;
+    if (P(r.T) < .05 && k > 2) { const sig = r.within.filter(o => o.padj < .05);
+      t += sig.length ? ` Las comparaciones por pares (corrección de Holm) mostraron diferencias entre ${list(sig.map(o => `${esc(names[o.a])} y ${esc(names[o.b])} (${pt(o.padj)}, <i>d</i> = ${f(Math.abs(o.d))})`))}.` : ' Las comparaciones por pares (corrección de Holm) no detectaron diferencias entre medidas concretas.'; }
+    sec.text.push(t);
+    const Q = names.map(rq).join(', ');
+    sec.code = `# ANOVA mixta: ${names.join(', ')} × ${gName}\nmedidas <- c(${Q})\nd <- datos[complete.cases(datos[, c(medidas, ${rq(gName)})]), c(medidas, ${rq(gName)})]\nd$id <- factor(seq_len(nrow(d)))\n` +
+      `largo <- data.frame(id = rep(d$id, ${k}), grupo = factor(rep(d[[${rq(gName)}]], ${k})), medida = factor(rep(medidas, each = nrow(d)), levels = medidas), valor = unlist(d[, medidas], use.names = FALSE))\n` +
+      `modelo <- afex::aov_ez("id", "valor", largo, between = "grupo", within = "medida", type = 3, anova_table = list(correction = "${sphOK ? 'none' : 'GG'}", es = c("pes", "ges")))\nmodelo\nsummary(modelo)  # Mauchly, Greenhouse-Geisser y Huynh-Feldt\ncar::leveneTest(valor ~ grupo, data = subset(largo, medida == medidas[1]), center = mean)  # repetir para cada medida\n` +
+      `pairs(emmeans::emmeans(modelo, ~ medida), adjust = "holm")\n` + (G > 2 ? `pairs(emmeans::emmeans(modelo, ~ grupo), adjust = "tukey")\n` : '') + `# Efectos simples\nemmeans::joint_tests(modelo, by = "medida")\nemmeans::joint_tests(modelo, by = "grupo")`;
+    return sec;
+  }
   function runRepeated(names) {
     const k = names.length, cols = names.map(n => numOf(vByName(n)));
     const sec = { title: `${names.join(', ')} (medidas repetidas)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
@@ -1296,8 +1373,8 @@
       if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v)); }
       if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value));
       if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g))); }
-      if (isOn('paired')) { const m = checkedVals('pM');
-        add(m.length === 2 ? runPaired(m[0], m[1]) : m.length > 2 ? runRepeated(m) : { title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
+      if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
+        add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1]) : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));
       if (isOn('reg')) add(runRegression($('#rY').value, checkedVals('rX'), ($('#rM') || {}).value || 'enter'));
       if (isOn('logit')) add(runLogistic($('#lY').value, checkedVals('lX')));
