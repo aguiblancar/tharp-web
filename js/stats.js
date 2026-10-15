@@ -410,7 +410,63 @@
     const r = sxy / Math.sqrt(sxx * syy), t = r * Math.sqrt((n - 2) / (1 - r * r));
     return { r, n, df: n - 2, p: Math.abs(r) >= 1 ? 0 : pT(t, n - 2) };
   }
-  const spearman = (x, y) => pearson(ranks(x).r, ranks(y).r);
+  // Spearman: con empates o n ≥ 1290, aproximación t; sin empates, distribución exacta de S = Σd² (n ≤ 9) o serie de Edgeworth
+  // (Best y Roberts, 1975, algoritmo AS 89), como cor.test de R y JASP
+  function spearmanUpper(is, n) { // P(S ≥ is)
+    if (is <= 0) return 1; const n3 = n * (n * n - 1) / 3; if (is > n3) return 0;
+    if (n <= 9) { if (!spearmanUpper.cache) spearmanUpper.cache = {};
+      let dist = spearmanUpper.cache[n];
+      if (!dist) { dist = new Map(); const perm = Array.from({ length: n }, (_, i) => i), used = new Array(n).fill(false);
+        const rec = (pos, s) => { if (pos === n) { dist.set(s, (dist.get(s) || 0) + 1); return; } for (let v = 0; v < n; v++) if (!used[v]) { used[v] = true; rec(pos + 1, s + (v - pos) ** 2); used[v] = false; } };
+        rec(0, 0); spearmanUpper.cache[n] = dist; void perm; }
+      let tot = 0, up = 0; dist.forEach((c, s) => { tot += c; if (s >= is) up += c; }); return up / tot; }
+    const c = [.2274, .2531, .1745, .0758, .1033, .3932, .0879, .0151, .0072, .0831, .0131, 4.6e-4];
+    const b = 1 / n, x = (6 * (is - 1) * b / (n * n - 1) - 1) * Math.sqrt(1 / b - 1); let y = x * x;
+    const u = x * b * (c[0] + b * (c[1] + c[2] * b) + y * (-c[3] + b * (c[4] + c[5] * b) - y * b * (c[6] + c[7] * b - y * (c[8] - c[9] * b + y * b * (c[10] - c[11] * y)))));
+    y = u / Math.exp(y / 2); return Math.max(0, Math.min(1, y + (1 - J.normal.cdf(x, 0, 1))));
+  }
+  function spearman(x, y) {
+    const rx = ranks(x), ry = ranks(y), r0 = pearson(rx.r, ry.r), n = x.length;
+    if (rx.ties || ry.ties || n >= 1290 || n < 3 || Math.abs(r0.r) >= 1) return Object.assign(r0, { exact: false });
+    const q = (n ** 3 - n) * (1 - r0.r) / 6, half = (n ** 3 - n) / 6;
+    const p = q > half ? spearmanUpper(Math.round(q - 1), n) : 1 - spearmanUpper(Math.round(q) + 2, n);
+    return Object.assign(r0, { p: Math.min(1, 2 * p), exact: true, S: q });
+  }
+  // tau-b de Kendall: p exacta sin empates y n < 50 (distribución del número de pares concordantes), si no, aproximación normal
+  // con la varianza corregida por empates, como cor.test(method = "kendall") de R
+  function kendall(x, y) {
+    const n = x.length; let S = 0, tx = 0, ty = 0;
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) { const a = Math.sign(x[i] - x[j]), b = Math.sign(y[i] - y[j]); S += a * b; if (a === 0) tx++; if (b === 0) ty++; }
+    const n0 = n * (n - 1) / 2, tau = S / Math.sqrt((n0 - tx) * (n0 - ty));
+    if (!tx && !ty && n < 50) {
+      // número de permutaciones con k inversiones (números mahonianos); T = pares concordantes = n0 − inversiones
+      let c = [1]; for (let m = 2; m <= n; m++) { const nc = new Array(c.length + m - 1).fill(0); c.forEach((v, k) => { for (let j = 0; j < m; j++) nc[k + j] += v; }); c = nc; }
+      const tot = c.reduce((a, b) => a + b, 0), T = (S + n0) / 2, cdf = t => { let s = 0; for (let k = 0; k <= Math.min(t, c.length - 1); k++) s += c[k]; return s / tot; };
+      const p = T > n0 / 2 ? 1 - cdf(Math.round(T) - 1) : cdf(Math.round(T));
+      return { r: tau, tau, n, df: n - 2, p: Math.min(1, 2 * p), exact: true, z: null };
+    }
+    const tc = v => { const m = new Map(); v.forEach(q => m.set(q, (m.get(q) || 0) + 1)); return [...m.values()].filter(t => t > 1); };
+    const xt = tc(x), yt = tc(y), v0 = n * (n - 1) * (2 * n + 5), vt = sum(xt.map(t => t * (t - 1) * (2 * t + 5))), vu = sum(yt.map(t => t * (t - 1) * (2 * t + 5)));
+    const v1 = sum(xt.map(t => t * (t - 1))) * sum(yt.map(t => t * (t - 1))), v2 = sum(xt.map(t => t * (t - 1) * (t - 2))) * sum(yt.map(t => t * (t - 1) * (t - 2)));
+    const varS = (v0 - vt - vu) / 18 + v1 / (2 * n * (n - 1)) + v2 / (9 * n * (n - 1) * (n - 2)), z = S / Math.sqrt(varS);
+    return { r: tau, tau, n, df: n - 2, p: pZ(z), exact: false, z };
+  }
+  // IC 95 % de una correlación por la transformación z de Fisher; EE de Bonett y Wright (2000) para Spearman y de Fieller et al. (1957) para Kendall
+  function corrCI(r, n, method = 'pearson', level = .95) {
+    const se = method === 'kendall' ? Math.sqrt(.437 / (n - 4)) : method === 'spearman' ? Math.sqrt((1 + r * r / 2) / (n - 3)) : 1 / Math.sqrt(n - 3);
+    const z = Math.atanh(Math.max(-.9999999, Math.min(.9999999, r))), q = J.normal.inv(1 - (1 - level) / 2, 0, 1);
+    return [Math.tanh(z - q * se), Math.tanh(z + q * se)];
+  }
+  // correlación parcial: correlación entre los residuos de x e y tras regresarlas sobre las covariables (gl = n − 2 − q);
+  // con method = 'spearman', sobre los rangos (como ppcor)
+  function partialCorr(x, y, Z, method = 'pearson') {
+    const rk = v => ranks(v).r, X = method === 'spearman' ? rk(x) : x, Yv = method === 'spearman' ? rk(y) : y;
+    const Zm = method === 'spearman' ? Z.map(rk) : Z, n = x.length, q = Z.length;
+    const D = Array.from({ length: n }, (_, i) => [1].concat(Zm.map(z => z[i])));
+    const ex = olsCore(D, X), ey = olsCore(D, Yv); if (!ex || !ey) return null;
+    const r = pearson(ex.e, ey.e).r, df = n - 2 - q, t = r * Math.sqrt(df / (1 - r * r));
+    return { r, n, df, q, p: Math.abs(r) >= 1 ? 0 : pT(t, df), t };
+  }
   function lfact(n) { let s = 0; for (let i = 2; i <= n; i++) s += Math.log(i); return s; }
   function fisher2x2(a, b, c, d) {
     const r1 = a + b, r2 = c + d, c1 = a + c, n = r1 + r2, lf = []; let s = 0; lf[0] = 0;
@@ -429,8 +485,23 @@
         adj[i][j] = (tab[i][j] - e) / Math.sqrt(e * (1 - rs[i] / N) * (1 - cs[j] / N));
       } }
     const df = (R - 1) * (C - 1);
+    // razón de verosimilitudes (G²), corrección de Yates (solo 2×2, como chisq.test de R), φ y coeficiente de contingencia
+    let G2 = 0; for (let i = 0; i < R; i++) for (let j = 0; j < C; j++) if (tab[i][j] > 0) G2 += 2 * tab[i][j] * Math.log(tab[i][j] / E[i][j]);
+    let yates = null, phi = null;
+    if (R === 2 && C === 2) { let y = 0; for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const dd = Math.abs(tab[i][j] - E[i][j]), c = Math.min(.5, dd); y += (dd - c) ** 2 / E[i][j]; }
+      yates = { chi: y, p: pChi(y, 1) }; phi = (tab[0][0] * tab[1][1] - tab[0][1] * tab[1][0]) / Math.sqrt(rs[0] * rs[1] * cs[0] * cs[1]); }
     return { chi, df, p: pChi(chi, df), N, V: Math.sqrt(chi / (N * (Math.min(R, C) - 1))), E, adj, rs, cs,
-      pctSmall: small / (R * C), minE };
+      pctSmall: small / (R * C), minE, G2, pG2: pChi(G2, df), yates, phi, Ccont: Math.sqrt(chi / (chi + N)) };
+  }
+  // tabla 2×2 [[a, b], [c, d]]: odds ratio (Woolf) y riesgos relativos (Katz) con IC 95 % por el método logarítmico, como SPSS y JASP;
+  // con alguna casilla a 0 se suma 0.5 a todas (corrección de Haldane-Anscombe)
+  function risk2x2(t) {
+    let [[a, b], [c, d]] = t; const hal = [a, b, c, d].some(x => x === 0); if (hal) { a += .5; b += .5; c += .5; d += .5; }
+    const z = 1.959963984540054, ci = (est, se) => [Math.exp(Math.log(est) - z * se), Math.exp(Math.log(est) + z * se)];
+    const or = a * d / (b * c), seOR = Math.sqrt(1 / a + 1 / b + 1 / c + 1 / d);
+    const rr1 = (a / (a + b)) / (c / (c + d)), se1 = Math.sqrt(1 / a - 1 / (a + b) + 1 / c - 1 / (c + d));
+    const rr2 = (b / (a + b)) / (d / (c + d)), se2 = Math.sqrt(1 / b - 1 / (a + b) + 1 / d - 1 / (c + d));
+    return { or, orCI: ci(or, seOR), rr1, rr1CI: ci(rr1, se1), rr2, rr2CI: ci(rr2, se2), haldane: hal };
   }
 
   // ---------- regresión lineal (MCO) ----------
@@ -584,6 +655,24 @@
     const pr = k => Math.exp(lf[n] - lf[k] - lf[n - k] - n * Math.LN2), d = pr(x); let p = 0;
     for (let k = 0; k <= n; k++) { const v = pr(k); if (v <= d * (1 + 1e-7)) p += v; }
     return Math.min(1, p);
+  }
+  // prueba binomial exacta frente a p0 (como binom.test de R) con IC de Clopper-Pearson
+  function binomTest(x, n, p0 = .5, alt = 'two') {
+    const lf = [0]; for (let i = 1; i <= n; i++) lf[i] = lf[i - 1] + Math.log(i);
+    const pr = k => (p0 === 0 ? (k === 0 ? 1 : 0) : p0 === 1 ? (k === n ? 1 : 0) : Math.exp(lf[n] - lf[k] - lf[n - k] + k * Math.log(p0) + (n - k) * Math.log(1 - p0)));
+    let p = 0;
+    if (alt === 'greater') for (let k = x; k <= n; k++) p += pr(k);
+    else if (alt === 'less') for (let k = 0; k <= x; k++) p += pr(k);
+    else { const d = pr(x); for (let k = 0; k <= n; k++) { const v = pr(k); if (v <= d * (1 + 1e-7)) p += v; } }
+    const a = alt === 'two' ? .025 : .05;
+    const lo = alt === 'less' || x === 0 ? 0 : J.beta.inv(a, x, n - x + 1), hi = alt === 'greater' || x === n ? 1 : J.beta.inv(1 - a, x + 1, n - x);
+    return { x, n, prop: x / n, p0, p: Math.min(1, p), ci: [lo, hi], alt };
+  }
+  // χ² de bondad de ajuste a unas proporciones esperadas (por defecto iguales), como chisq.test(x, p =) de R
+  function chiGOF(counts, probs) {
+    const k = counts.length, N = sum(counts), pr = probs && probs.length === k ? probs.map(v => v / sum(probs)) : counts.map(() => 1 / k);
+    const E = pr.map(q => q * N), chi = sum(counts.map((o, i) => (o - E[i]) ** 2 / E[i])), df = k - 1;
+    return { chi, df, p: pChi(chi, df), E, N, probs: pr, resid: counts.map((o, i) => (o - E[i]) / Math.sqrt(E[i])), minE: Math.min(...E), w: Math.sqrt(chi / N) };
   }
   function mcnemar(b, c) { // b: 0→1, c: 1→0 (casos discordantes)
     const nd = b + c, chi = nd ? (Math.abs(b - c) - 1) ** 2 / nd : 0;
@@ -889,5 +978,5 @@
 
   root.TharpStats = { cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
-    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, fisher2x2, chiSquare, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
+    tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, friedman, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, efa, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

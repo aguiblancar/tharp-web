@@ -177,7 +177,8 @@
       `<div class="field"><span>Variables</span>${chips('desc', nums.concat(cats), () => true)}</div>`);
     h += card('corr', nums.length >= 2, 'Correlaciones', 'Matriz de correlaciones con significación. Tharp elige Pearson o Spearman según la distribución.',
       `<div class="field"><span>Variables cuantitativas</span>${chips('corr', nums, v => (D.corr ? D.corr.includes(v.name) : nums.indexOf(v) < 8))}</div>
-       <label class="field"><span>Método</span><select id="corrM"><option value="auto">Automático (recomendado)</option><option value="pearson">Pearson</option><option value="spearman">Spearman</option></select></label>`,
+       <label class="field"><span>Método</span><select id="corrM"><option value="auto">Automático (recomendado)</option><option value="pearson">Pearson</option><option value="spearman">Spearman</option><option value="kendall">Tau-b de Kendall</option></select></label>
+       <div class="field"><span>Controlar por (opcional: correlación parcial)</span>${chips('corrZ', nums, () => false)}</div>`,
       nums.length < 2 ? 'Necesitas al menos dos variables cuantitativas.' : '');
     const dComp = D.comp || {};
     h += card('comp', nums.length >= 1 && facs.length >= 1, 'Comparación entre grupos', 'Prueba t, ANOVA o sus alternativas no paramétricas, con comprobación automática de supuestos y post hoc.',
@@ -205,6 +206,12 @@
       `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Variable en filas</span>${sel('cA', facs, pick(dC.a, facs[0] && facs[0].name))}</label>
        <label class="field"><span>Variable en columnas</span>${sel('cB', facs, pick(dC.b, facs[1] && facs[1].name))}</label></div>`,
       facs.length < 2 ? 'Necesitas dos variables categóricas.' : '');
+    h += card('prop', false, 'Proporciones: binomial y bondad de ajuste', '¿La proporción de una categoría difiere de un valor esperado (binomial exacta)? ¿Las frecuencias se ajustan a unas proporciones teóricas (χ² de bondad de ajuste)?',
+      `<div class="field"><span>Variables categóricas (una prueba para cada una)</span>${chips('prV', cats, v => v === cats[0])}</div>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Proporción esperada (2 categorías; de la segunda categoría)</span><input id="prP0" type="number" step="any" min="0" max="1" value="0.5" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:120px"></label>
+       <label class="field"><span>Hipótesis (2 categorías)</span><select id="prAlt"><option value="two">Bilateral (recomendada)</option><option value="greater">Unilateral: mayor que la esperada</option><option value="less">Unilateral: menor que la esperada</option></select></label>
+       <label class="field"><span>Proporciones esperadas (3 o más categorías, en su orden; vacío = iguales)</span><input id="prProbs" placeholder="p. ej., 0.5, 0.3, 0.2" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:240px"></label></div>`,
+      !cats.length ? 'Necesitas una variable categórica.' : '');
     const dR = D.reg || {}, regY = pick(dR.y, nums[0] && nums[0].name);
     h += card('reg', !!D.reg && nums.length >= 1, 'Regresión lineal', 'Coeficientes, β estandarizados, R², y diagnóstico completo: normalidad, homocedasticidad, multicolinealidad e influencia.',
       `<label class="field"><span>Variable dependiente</span>${sel('rY', nums, regY)}</label>
@@ -336,48 +343,63 @@
     return sec;
   }
 
-  function runCorrelations(names, method) {
-    const vars = names.map(vByName).filter(v => v && v.type === 'num');
-    const sec = { title: 'Correlaciones', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
-    if (vars.length < 2) { sec.error = 'Selecciona al menos dos variables cuantitativas.'; return sec; }
+  function runCorrelations(names, method, zNames = []) {
+    zNames = zNames.filter(z => !names.includes(z));
+    const vars = names.map(vByName).filter(v => v && v.type === 'num'), Zv = zNames.map(vByName), partial = Zv.length > 0;
+    const sec = { title: partial ? 'Correlaciones parciales' : 'Correlaciones', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (vars.length < 2) { sec.error = 'Selecciona al menos dos variables cuantitativas (distintas de las que controlas).'; return sec; }
+    if (partial && method === 'kendall') { sec.error = 'La correlación parcial está disponible con Pearson o Spearman. Elige uno de esos métodos o quita las variables de control.'; return sec; }
     const skewed = vars.filter(v => Math.abs(S.skewness(numOf(v).filter(a => a !== null))) > 1);
     let m = method;
     if (m === 'auto') m = skewed.length ? 'spearman' : 'pearson';
-    const P = m === 'pearson', sym = P ? '<i>r</i>' : '<i>r</i><sub>s</sub>', name = P ? 'Pearson' : 'Spearman';
-    sec.test = `Correlación de ${name}`;
+    const P = m === 'pearson', K = m === 'kendall', sym = P ? '<i>r</i>' : K ? 'τ<sub>b</sub>' : '<i>r</i><sub>s</sub>', name = P ? 'Pearson' : K ? 'Kendall (tau-b)' : 'Spearman';
+    sec.test = `Correlación ${partial ? 'parcial ' : ''}de ${name}`;
+    if (partial) sec.why.push(`Correlación parcial: se elimina de cada par la parte que comparten con ${list(zNames.map(esc))} (regresión de ambas variables sobre ${zNames.length > 1 ? 'ellas' : 'ella'} y correlación de los residuos${P ? '' : ', sobre los rangos'}). Se usan los casos completos en todas las variables.`);
+    if (K) sec.why.push('Tau-b de Kendall: medida de asociación por rangos basada en pares concordantes y discordantes, corregida por empates; adecuada con muestras pequeñas o muchas puntuaciones repetidas.');
     sec.decision = method === 'auto' ? (P ? 'Se usa Pearson porque ninguna variable presenta una asimetría marcada.' : `Se usa Spearman porque ${list(skewed.map(v => esc(v.name)))} ${skewed.length > 1 ? 'presentan' : 'presenta'} una asimetría marcada (|asimetría| > 1).`) : `Método elegido por ti: ${name}.`;
     sec.why.push('Todas las variables son cuantitativas y se quiere medir la fuerza y dirección de su relación.');
     sec.why.push(P ? 'Pearson mide relación lineal y es adecuada cuando las variables tienen distribuciones aproximadamente simétricas.' : 'Spearman trabaja con rangos: es robusta ante asimetría y valores atípicos y mide relaciones monótonas.');
     sec.why.push('Los valores perdidos se eliminan por parejas: cada correlación usa todos los casos disponibles para ese par.');
     const k = vars.length, R = [], pairs = []; let nmin = Infinity, nmax = 0;
     for (let i = 0; i < k; i++) { R[i] = []; for (let j = 0; j < i; j++) {
-      const xi = numOf(vars[i]), xj = numOf(vars[j]), a = [], b = [];
-      xi.forEach((v, t) => { if (v !== null && xj[t] !== null) { a.push(v); b.push(xj[t]); } });
-      const c = a.length > 3 ? (P ? S.pearson(a, b) : S.spearman(a, b)) : null; R[i][j] = c;
+      const xi = numOf(vars[i]), xj = numOf(vars[j]), zs = Zv.map(numOf), a = [], b = [], zc = Zv.map(() => []);
+      xi.forEach((v, t) => { if (v !== null && xj[t] !== null && zs.every(z => z[t] !== null)) { a.push(v); b.push(xj[t]); zs.forEach((z, q) => zc[q].push(z[t])); } });
+      const c = a.length > 3 + Zv.length ? (partial ? S.partialCorr(a, b, zc, m) : P ? S.pearson(a, b) : K ? S.kendall(a, b) : S.spearman(a, b)) : null; R[i][j] = c;
       if (c) { nmin = Math.min(nmin, c.n); nmax = Math.max(nmax, c.n); pairs.push({ i, j, c, a, b }); }
     } }
     const cell = c => { if (!c || !isFinite(c.r)) return '—'; const al = Math.min(.55, Math.abs(c.r) * .6), bg = c.r >= 0 ? `rgba(42,120,214,${al})` : `rgba(227,73,72,${al})`;
       return `<span style="display:inline-block;min-width:52px;padding:2px 6px;border-radius:4px;background:${bg}" title="${P ? 'r' : 'rs'} = ${c.r.toFixed(3)}, p = ${c.p.toFixed(4)}, n = ${c.n}">${r2s(c.r)}${stars(c.p)}</span>`; };
     const rows = vars.map((v, i) => { const x = numOf(v).filter(a => a !== null), d = S.describe(x);
       return [`${i + 1}. ${esc(v.name)}`, f(d.mean), f(d.sd)].concat(vars.map((_, j) => (j < i ? cell(R[i][j]) : j === i ? '—' : ''))); });
-    sec.tables.push(apaTable(`Medias, desviaciones típicas y correlaciones de ${name}`, ['Variable', '<i>M</i>', '<i>DT</i>'].concat(vars.map((_, j) => String(j + 1))), rows,
-      `${sym} de ${name}. <i>n</i> = ${nmin === nmax ? nmin : nmin + '–' + nmax} (eliminación por parejas). * <i>p</i> < .05. ** <i>p</i> < .01. *** <i>p</i> < .001.`, 'corr'));
+    // detalle por pares: coeficiente, IC 95 %, n, p y p con corrección de Holm
+    const holmP = S.holm(pairs.map(q => q.c.p));
+    const pairRows = pairs.map((q, z) => { const ci = partial ? null : S.corrCI(q.c.r, q.c.n, m);
+      return [`${esc(vars[q.i].name)} – ${esc(vars[q.j].name)}`, r2s(q.c.r)].concat(partial ? [q.c.n, q.c.df] : [`[${r2s(ci[0])}, ${r2s(ci[1])}]`, q.c.n]).concat([pv(q.c.p), pv(holmP[z])]); });
+    sec.tables.push(apaTable(`Detalle de las correlaciones${partial ? ' parciales' : ''} de ${name}`, ['Par', sym].concat(partial ? ['<i>n</i>', '<i>gl</i>'] : ['IC 95 %', '<i>n</i>']).concat(['<i>p</i>', '<i>p</i> (Holm)']), pairRows,
+      `${partial ? `Controlando por ${list(zNames.map(esc))}. ` : `IC por la transformación <i>z</i> de Fisher${P ? '' : K ? ' con el error típico de Fieller et al. (1957)' : ' con el error típico de Bonett y Wright (2000)'}. `}${!P && !partial ? `<i>p</i> exacta cuando no hay empates (como R y JASP)${K ? ' y <i>n</i> < 50' : ''}. ` : ''}<i>p</i> (Holm) corrige por el número de correlaciones calculadas.`));
+    sec.tables.push(apaTable(`Medias, desviaciones típicas y correlaciones${partial ? ' parciales' : ''} de ${name}`, ['Variable', '<i>M</i>', '<i>DT</i>'].concat(vars.map((_, j) => String(j + 1))), rows,
+      `${sym} de ${name}${partial ? `, controlando por ${list(zNames.map(esc))}` : ''}. <i>n</i> = ${nmin === nmax ? nmin : nmin + '–' + nmax} (eliminación por parejas). * <i>p</i> < .05. ** <i>p</i> < .01. *** <i>p</i> < .001.`, 'corr'));
     sec.checks.push(skewed.length ? chk(P ? 'no' : 'ok', `Asimetría marcada en ${list(skewed.map(v => esc(v.name)))}${P ? ': considera usar Spearman.' : ': por eso se usa Spearman.'}`) : chk('ok', 'Ninguna variable presenta asimetría marcada.'));
     sec.checks.push(chk('info', 'Linealidad: revisa el diagrama de dispersión. Una correlación cercana a 0 no descarta relaciones no lineales (por ejemplo, en forma de U).'));
     if (pairs.length > 10) sec.checks.push(chk('no', `Se han calculado ${pairs.length} correlaciones: con tantas pruebas aumenta la probabilidad de falsos positivos. Considera una corrección (por ejemplo, Holm) o interpreta solo las hipótesis planteadas a priori.`));
     const sig = pairs.filter(p => p.c.p < .05).sort((a, b) => Math.abs(b.c.r) - Math.abs(a.c.r));
-    let t = `Se calcularon las correlaciones de ${name} entre ${k} variables (${pairs.length} ${pairs.length === 1 ? 'par' : 'pares'}). `;
+    let t = `Se calcularon las correlaciones ${partial ? 'parciales ' : ''}de ${name} entre ${k} variables (${pairs.length} ${pairs.length === 1 ? 'par' : 'pares'})${partial ? `, controlando por ${list(zNames.map(esc))}` : ''}. `;
     if (!sig.length) t += 'Ninguna de las correlaciones fue estadísticamente significativa.';
     else {
       t += `${sig.length === 1 ? 'Una correlación fue' : sig.length + ' correlaciones fueron'} estadísticamente ${sig.length === 1 ? 'significativa' : 'significativas'}. `;
-      t += sig.slice(0, 5).map(p => `${esc(vars[p.i].name)} y ${esc(vars[p.j].name)} mostraron una correlación ${p.c.r > 0 ? 'positiva' : 'negativa'} ${lbl.corr(p.c.r)}, ${sym}(${p.c.df}) = ${r2s(p.c.r)}, ${pt(p.c.p)}`).join('; ') + '.';
+      t += sig.slice(0, 5).map(p => `${esc(vars[p.i].name)} y ${esc(vars[p.j].name)} mostraron una correlación ${p.c.r > 0 ? 'positiva' : 'negativa'} ${lbl.corr(p.c.r)}, ${K ? sym : `${sym}(${p.c.df})`} = ${r2s(p.c.r)}, ${pt(p.c.p)}`).join('; ') + '.';
       if (sig.length > 5) t += ` Las demás correlaciones significativas se muestran en la Tabla ${tabNo}.`;
     }
     sec.text.push(t);
     if (pairs.length) { const top = pairs.slice().sort((a, b) => Math.abs(b.c.r) - Math.abs(a.c.r))[0];
       const reg = (() => { const mx = S.mean(top.b), my = S.mean(top.a); let sxy = 0, sxx = 0; top.b.forEach((v, i) => { sxy += (v - mx) * (top.a[i] - my); sxx += (v - mx) ** 2; }); const b = sxy / sxx; return [my - b * mx, b]; })();
       sec.charts.push(fig(`Relación más fuerte: ${vars[top.i].name} y ${vars[top.j].name}`, CH.scatter(top.b, top.a, vars[top.j].name, vars[top.i].name, { line: reg }))); }
-    sec.code = `# Correlaciones de ${name}\npsych::corr.test(datos[, c(${vars.map(v => rq(v.name)).join(', ')})], method = "${m}", use = "pairwise", adjust = "none")`;
+    const VV = `c(${vars.map(v => rq(v.name)).join(', ')})`;
+    sec.code = partial
+      ? `# Correlaciones parciales de ${name}, controlando por ${zNames.join(', ')}\nd <- na.omit(datos[, c(${vars.concat(Zv).map(v => rq(v.name)).join(', ')})])\npsych::partial.r(d${P ? '' : ', method = "spearman"'}, x = ${VV}, y = c(${zNames.map(rq).join(', ')}))\n` +
+        `# p de cada correlación parcial (gl = n − 2 − número de variables controladas)\npsych::corr.p(psych::partial.r(d${P ? '' : ', method = "spearman"'}, x = ${VV}, y = c(${zNames.map(rq).join(', ')})), n = nrow(d) - ${zNames.length}, adjust = "none")`
+      : `# Correlaciones de ${name}\npsych::corr.test(datos[, ${VV}], method = "${m}", use = "pairwise", adjust = "none")\n` +
+        pairs.map(q => `cor.test(datos[[${rq(vars[q.i].name)}]], datos[[${rq(vars[q.j].name)}]], method = "${m}")`).slice(0, 6).join('\n') + (pairs.length > 6 ? '\n# … (igual para el resto de pares)' : '');
     return sec;
   }
 
@@ -797,16 +819,65 @@
     rows.push(['Total'].concat(lb.map((_, j) => `${r.cs[j]} (${f(r.cs[j] / r.N * 100, 1)} %)`)).concat([String(r.N)]));
     sec.tables.push(apaTable(`Tabla de contingencia de ${aName} y ${bName}`, [esc(aName)].concat(lb.map(esc)).concat(['Total']), rows,
       'Recuentos y porcentaje dentro de cada fila. ▲/▼: residuo tipificado corregido > 1.96 / < −1.96 (más / menos casos de los esperados).'));
-    sec.tables.push(apaTable('Resultado de la prueba de independencia', ['', 'χ²', '<i>gl</i>', '<i>p</i>', '<i>V</i> de Cramér', '<i>N</i>'].concat(is2x2 ? ['<i>p</i> exacta de Fisher'] : []),
-      [[`${esc(aName)} × ${esc(bName)}`, f(r.chi), r.df, pv(r.p), nz(r.V.toFixed(3)), r.N].concat(is2x2 ? [pv(fisher.p)] : [])], 'χ² de Pearson sin corrección de continuidad.'));
+    sec.tables.push(apaTable(`Frecuencias esperadas y residuos tipificados corregidos`, [esc(aName)].concat(lb.map(esc)), la.map((l, i) => [esc(l)].concat(lb.map((_, j) => `${f(r.E[i][j], 1)} · ${f(r.adj[i][j])}`))),
+      'En cada casilla: frecuencia esperada si no hubiera asociación · residuo tipificado corregido (|valor| > 1.96 indica una diferencia significativa en esa casilla).'));
+    const tr = [['χ² de Pearson', f(r.chi), r.df, pv(r.p)], ['Razón de verosimilitudes (<i>G</i>²)', f(r.G2), r.df, pv(r.pG2)]];
+    if (is2x2) { tr.push(['χ² con corrección de Yates', f(r.yates.chi), 1, pv(r.yates.p)]); tr.push(['Prueba exacta de Fisher', '', '', pv(fisher.p)]); }
+    sec.tables.push(apaTable('Resultado de las pruebas de independencia', ['Prueba', 'Valor', '<i>gl</i>', '<i>p</i>'], tr,
+      `<i>N</i> = ${r.N}. Tamaño de la asociación: <i>V</i> de Cramér = ${nz(r.V.toFixed(3))}${is2x2 ? `, φ = ${nz(r.phi.toFixed(3))}` : ''}, coeficiente de contingencia = ${nz(r.Ccont.toFixed(3))}. ${useFisher ? 'Se interpreta la prueba exacta de Fisher (frecuencias esperadas bajas).' : 'Se interpreta el χ² de Pearson.'}`));
+    let rk = null;
+    if (is2x2) { rk = S.risk2x2(tab); const ci = c => `[${f(c[0])}, ${f(c[1])}]`;
+      sec.tables.push(apaTable('Estimación del riesgo (tabla 2×2)', ['Medida', 'Valor', 'IC 95 %'], [
+        [`Odds ratio (${esc(la[0])} / ${esc(la[1])})`, f(rk.or), ci(rk.orCI)],
+        [`Riesgo relativo de «${esc(lb[0])}» (${esc(la[0])} frente a ${esc(la[1])})`, f(rk.rr1), ci(rk.rr1CI)],
+        [`Riesgo relativo de «${esc(lb[1])}» (${esc(la[0])} frente a ${esc(la[1])})`, f(rk.rr2), ci(rk.rr2CI)]],
+        `Odds ratio = (a·d)/(b·c), con la primera fila y la primera columna como referencia de la tabla; IC por el método logarítmico (Woolf y Katz), como SPSS y JASP.${rk.haldane ? ' Como alguna casilla vale 0, se sumó 0.5 a todas (corrección de Haldane-Anscombe).' : ''} Un IC que no incluye el 1 indica asociación significativa.`));
+      sec.why.push('En una tabla 2×2 se calculan además la odds ratio y el riesgo relativo, que expresan la magnitud de la asociación de forma interpretable (cuántas veces más probable).'); }
     const P = useFisher ? fisher.p : r.p;
     const st = useFisher ? `prueba exacta de Fisher, ${pt(fisher.p)}, <i>V</i> = ${nz(r.V.toFixed(2))}` : `χ²(${r.df}, <i>N</i> = ${r.N}) = ${f(r.chi)}, ${pt(r.p)}, <i>V</i> = ${nz(r.V.toFixed(2))}`;
     let t = P < .05 ? `Se encontró una asociación estadísticamente significativa entre ${esc(aName)} y ${esc(bName)}, ${st}.` : `No se encontró una asociación estadísticamente significativa entre ${esc(aName)} y ${esc(bName)}, ${st}.`;
     if (P < .05) { const hi = []; la.forEach((l, i) => lb.forEach((m, j) => { if (r.adj[i][j] > 1.96) hi.push(`${esc(m)} en el grupo ${esc(l)} (${f(tab[i][j] / r.rs[i] * 100, 1)} %)`); }));
       if (hi.length) t += ` En concreto, hubo más casos de los esperados de ${list(hi.slice(0, 4))}.`; }
+    if (rk) t += ` La odds ratio fue ${f(rk.or)}, IC 95 % [${f(rk.orCI[0])}, ${f(rk.orCI[1])}]: la odds de «${esc(lb[0])}» en ${esc(la[0])} fue ${f(rk.or)} veces la de ${esc(la[1])}.`;
     sec.text.push(t);
     if (lb.length <= 8) sec.charts.push(fig(`${bName} dentro de cada grupo de ${aName}`, CH.groupedBars(la, lb, tab.map((row, i) => row.map(c => c / r.rs[i] * 100))), CH.legend(lb)));
-    sec.code = `# Asociación entre ${aName} y ${bName}\ntabla <- table(datos$${A}, datos$${B})\nprop.table(tabla, 1) * 100\nchisq.test(tabla, correct = FALSE)\nchisq.test(tabla, correct = FALSE)$expected\nchisq.test(tabla, correct = FALSE)$stdres\nrcompanion::cramerV(tabla)` + (is2x2 ? '\nfisher.test(tabla)' : '');
+    sec.code = `# Asociación entre ${aName} y ${bName}\ntabla <- table(datos$${A}, datos$${B})\nprop.table(tabla, 1) * 100\nchisq.test(tabla, correct = FALSE)\nchisq.test(tabla, correct = FALSE)$expected\nchisq.test(tabla, correct = FALSE)$stdres\nDescTools::GTest(tabla)  # razón de verosimilitudes\nDescTools::CramerV(tabla); DescTools::ContCoef(tabla)` + (is2x2 ? '\nchisq.test(tabla, correct = TRUE)  # Yates\nfisher.test(tabla)\nDescTools::Phi(tabla)\nDescTools::OddsRatio(tabla, method = "wald")\nDescTools::RelRisk(tabla, method = "wald"); DescTools::RelRisk(tabla[, 2:1], method = "wald")' : '');
+    return sec;
+  }
+
+  // Proporciones: binomial exacta (2 categorías) o χ² de bondad de ajuste (3 o más)
+  function runProp(name, p0, alt, probsTxt) {
+    const v = vByName(name), x = catOf(v).filter(q => q !== null), lv = levelsOf(v), counts = lv.map(l => x.filter(q => q === l).length), N = x.length;
+    const sec = { title: `Proporciones de ${name}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' }, X = rn(name);
+    if (lv.length < 2 || N < 1) { sec.error = 'La variable necesita al menos 2 categorías con datos.'; return sec; }
+    if (lv.length === 2) {
+      if (!(p0 > 0 && p0 < 1)) { sec.error = 'La proporción esperada debe estar entre 0 y 1 (por ejemplo, 0.5).'; return sec; }
+      const r = S.binomTest(counts[1], N, p0, alt), one = alt !== 'two', rAlt = { two: 'two.sided', greater: 'greater', less: 'less' }[alt];
+      sec.test = 'Prueba binomial exacta' + (one ? ' (unilateral)' : '');
+      sec.why.push(`${esc(name)} tiene 2 categorías: se contrasta si la proporción de «${esc(lv[1])}» difiere de la esperada (${fmtNum(p0)}) con la prueba binomial exacta, válida con cualquier tamaño de muestra.`);
+      sec.decision = `Se eligió la prueba binomial exacta para comparar la proporción observada de «${esc(lv[1])}» con ${fmtNum(p0)}.`;
+      sec.alt = 'Con muestras grandes, la aproximación normal da prácticamente el mismo resultado.';
+      sec.tables.push(apaTable(`Prueba binomial de ${name}`, ['Categoría', '<i>n</i>', 'Total', 'Proporción', 'Esperada', '<i>p</i>' + (one ? ' (unilateral)' : ''), 'IC 95 % (proporción)'],
+        [[esc(lv[1]), counts[1], N, nz(r.prop.toFixed(3)), fmtNum(p0), pv(r.p), `[${nz(r.ci[0].toFixed(3))}, ${nz(r.ci[1].toFixed(3))}]`]], 'IC exacto de Clopper-Pearson.'));
+      sec.text.push(`Se aplicó una prueba binomial exacta${one ? ' unilateral' : ''} para comparar la proporción de «${esc(lv[1])}» en ${esc(name)} (${counts[1]} de ${N}, ${f(r.prop * 100, 1)} %, IC 95 % [${f(r.ci[0] * 100, 1)}, ${f(r.ci[1] * 100, 1)}] %) con el valor esperado de ${f(p0 * 100, 1)} %. ` +
+        (r.p < .05 ? `La proporción observada fue significativamente ${r.prop > p0 ? 'mayor' : 'menor'} que la esperada, ${pt(r.p)}.` : `No difirió significativamente de la esperada, ${pt(r.p)}.`));
+      sec.code = `# Proporción de «${lv[1]}» en ${name}\nbinom.test(sum(datos$${X} == ${rq(lv[1])}, na.rm = TRUE), sum(!is.na(datos$${X})), p = ${p0}${one ? `, alternative = "${rAlt}"` : ''})`;
+      return sec;
+    }
+    let probs = null;
+    if (probsTxt) { probs = (/[;\s]/.test(probsTxt) ? probsTxt.split(/[;\s]+/) : probsTxt.split(',')).map(q => parseFloat(q.replace(',', '.'))).filter(q => isFinite(q));
+      if (probs.length !== lv.length || probs.some(q => q <= 0)) { sec.error = `Escribe ${lv.length} proporciones positivas separadas por comas o espacios, en el orden de las categorías (${list(lv.map(esc))}).`; return sec; } }
+    const r = S.chiGOF(counts, probs); sec.test = 'χ² de bondad de ajuste';
+    sec.why.push(`${esc(name)} tiene ${lv.length} categorías: se contrasta si las frecuencias observadas se ajustan a ${probs ? 'las proporciones indicadas' : 'una distribución uniforme (todas las categorías igual de frecuentes)'}.`);
+    sec.decision = `Se eligió la χ² de bondad de ajuste para comparar las frecuencias de ${esc(name)} con ${probs ? 'las proporciones esperadas indicadas' : 'proporciones iguales'}.`;
+    sec.checks.push(chk(r.minE >= 5 ? 'ok' : 'no', `Frecuencias esperadas: mínimo ${f(r.minE, 1)}. ${r.minE >= 5 ? 'Todas ≥ 5: se cumple el criterio.' : 'Alguna < 5: la aproximación χ² puede no ser fiable; valora agrupar categorías.'}`));
+    sec.tables.push(apaTable(`Frecuencias observadas y esperadas de ${name}`, ['Categoría', 'Observadas', '%', 'Proporción esperada', 'Esperadas', 'Residuo tipificado'],
+      lv.map((l, i) => [esc(l), counts[i], f(counts[i] / N * 100, 1), nz(r.probs[i].toFixed(3)), f(r.E[i], 1), f(r.resid[i])]).concat([['Total', N, '100.0', '', '', '']])));
+    sec.tables.push(apaTable('Resultado de la χ² de bondad de ajuste', ['χ²', '<i>gl</i>', '<i>p</i>', '<i>w</i> de Cohen', '<i>N</i>'], [[f(r.chi), r.df, pv(r.p), nz(r.w.toFixed(3)), N]], '<i>w</i> = √(χ²/<i>N</i>): 0.10 pequeño, 0.30 mediano, 0.50 grande.'));
+    sec.text.push(`Se aplicó una prueba χ² de bondad de ajuste para comparar las frecuencias de ${esc(name)} con ${probs ? 'las proporciones esperadas' : 'una distribución uniforme'}. ` + (r.p < .05
+      ? `Las frecuencias observadas difirieron significativamente de las esperadas, χ²(${r.df}, <i>N</i> = ${N}) = ${f(r.chi)}, ${pt(r.p)}, <i>w</i> = ${nz(r.w.toFixed(2))}.`
+      : `Las frecuencias observadas no difirieron significativamente de las esperadas, χ²(${r.df}, <i>N</i> = ${N}) = ${f(r.chi)}, ${pt(r.p)}.`));
+    sec.code = `# Bondad de ajuste de ${name}\nobs <- table(factor(datos$${X}, levels = c(${lv.map(rq).join(', ')})))\nchisq.test(obs${probs ? `, p = c(${r.probs.map(q => +q.toFixed(6)).join(', ')})` : ''})`;
     return sec;
   }
 
@@ -1496,11 +1567,14 @@
     const add = s => { secs.push(s); if (s.decision) log.push(`<b>${esc(s.title)}:</b> ${s.decision}`); else if (s.error) log.push(`<b>${esc(s.title)}:</b> no se pudo realizar. ${esc(s.error)}`); };
     try {
       if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v)); }
-      if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value));
+      if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value, checkedVals('corrZ')));
       if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(runCompare(y, g, ($('#compAlt') || {}).value || 'two', { ph: ($('#compPH') || {}).value || 'auto', ctrl: ($('#compCtrl') || {}).value || '', con: ($('#compCon') || {}).value || '' }))); }
       if (isOn('one')) { const ys = checkedVals('oY'), mu = parseFloat(String(($('#oMu') || {}).value || '').replace(',', '.'));
         if (ys.length) ys.forEach(y => add(runOneSample(y, mu, ($('#oAlt') || {}).value || 'two')));
         else add({ title: 'Una muestra', error: 'Selecciona al menos una variable.', why: [], checks: [], tables: [], charts: [], text: [] }); }
+      if (isOn('prop')) { const vs = checkedVals('prV'), p0 = parseFloat(String(($('#prP0') || {}).value || '0.5').replace(',', '.')), pr = String(($('#prProbs') || {}).value || '').trim();
+        if (vs.length) vs.forEach(v => add(runProp(v, p0, ($('#prAlt') || {}).value || 'two', pr)));
+        else add({ title: 'Proporciones', error: 'Selecciona al menos una variable categórica.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('paired')) { const m = checkedVals('pM'), gB = ($('#pB') || {}).value;
         add(m.length >= 2 && gB ? runMixed(m, gB) : m.length === 2 ? runPaired(m[0], m[1], ($('#pAlt') || {}).value || 'two') : m.length > 2 ? runRepeated(m) :{ title: 'Medidas relacionadas', error: 'Selecciona al menos dos momentos o condiciones.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('chi')) add(runChi($('#cA').value, $('#cB').value));
