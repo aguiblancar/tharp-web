@@ -2,6 +2,9 @@
    Todo se procesa en el navegador. Las librerías se cargan solo al abrir un .jasp. */
 (function (root) {
   'use strict';
+  // mínimo y máximo sin «Math.min(...a)», que desborda la pila con decenas de miles de valores; mismo resultado (NaN si hay NaN; ±Infinity si está vacío)
+  const minOf = a => { let m = Infinity; for (const v of a) { if (v !== v) return NaN; if (v < m) m = v; } return m; };
+  const maxOf = a => { let m = -Infinity; for (const v of a) { if (v !== v) return NaN; if (v > m) m = v; } return m; };
   const JSZIP = 'vendor/jszip.min.js';
   const SQLBASE = 'vendor/';
   let SQL = null;
@@ -91,7 +94,7 @@
     else if (zip.file('metadata.json') && zip.file('data.bin')) { cols = await readOld(zip); version = 'JASP 0.8–0.17'; }
     else throw new Error('No se reconoce el formato de este archivo .jasp. Expórtalo desde JASP como CSV (Archivo → Exportar datos) y súbelo.');
     if (!cols.length) throw new Error('El archivo JASP no contiene variables.');
-    const n = Math.max(...cols.map(c => c.vals.length)), aoa = [cols.map(c => c.name)];
+    const n = maxOf(cols.map(c => c.vals.length)), aoa = [cols.map(c => c.name)];
     for (let i = 0; i < n; i++) aoa.push(cols.map(c => (c.vals[i] === undefined ? null : c.vals[i])));
     const hints = {}; cols.forEach(c => { hints[c.name] = hintOf(c.measure, c.vals); if (c.order && c.order.length) hints[c.name].order = [...new Set(c.order)]; });
     return { aoa, hints, version };

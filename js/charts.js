@@ -1,6 +1,9 @@
 /* Tharp — gráficos SVG (sin dependencias) */
 (function (root) {
   'use strict';
+  // mínimo y máximo sin «Math.min(...a)», que desborda la pila con decenas de miles de valores; mismo resultado (NaN si hay NaN; ±Infinity si está vacío)
+  const minOf = a => { let m = Infinity; for (const v of a) { if (v !== v) return NaN; if (v < m) m = v; } return m; };
+  const maxOf = a => { let m = -Infinity; for (const v of a) { if (v !== v) return NaN; if (v > m) m = v; } return m; };
   const COL = { s: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'],
     axis: '#52514e', grid: '#e8e6e0', text: '#14202b', point: '#9aa6b1', surface: '#ffffff' };
   const FONT = "Inter, system-ui, -apple-system, Segoe UI, sans-serif";
@@ -45,7 +48,7 @@
       for (let lo = start; lo <= max; lo += step) bins.push({ lo: +lo.toFixed(10), hi: +(lo + step).toFixed(10), c: 0 });
       values.forEach(v => { const k = Math.min(bins.length - 1, Math.floor((v - start) / step)); bins[k].c++; });
     }
-    const maxC = Math.max(...bins.map(b => b.c)), yt = ticks(0, maxC, 4), yMax = yt[yt.length - 1];
+    const maxC = maxOf(bins.map(b => b.c)), yt = ticks(0, maxC, 4), yMax = yt[yt.length - 1];
     const pw = W - m.l - m.r, ph = H - m.t - m.b, sy = v => m.t + ph - v / yMax * ph, bw = pw / bins.length;
     let s = svgOpen(W, H, 'Histograma de ' + label) + yAxis(yt, sy, m.l, W - m.r);
     bins.forEach((b, i) => {
@@ -64,7 +67,7 @@
 
   function barsCat(levels, counts, label) {
     const rowH = 26, m = { l: 120, r: 60, t: 8, b: 8 }, W = 360, H = m.t + m.b + rowH * levels.length;
-    const max = Math.max(...counts), total = counts.reduce((a, b) => a + b, 0), pw = W - m.l - m.r;
+    const max = maxOf(counts), total = counts.reduce((a, b) => a + b, 0), pw = W - m.l - m.r;
     let s = svgOpen(W, H, 'Frecuencias de ' + label);
     levels.forEach((lv, i) => {
       const y = m.t + i * rowH + 4, w = Math.max(1, counts[i] / max * pw), pct = (counts[i] / total * 100).toFixed(1);
@@ -105,7 +108,7 @@
   // barras agrupadas: % de cada columna dentro de cada fila
   function groupedBars(rowLv, colLv, pct) {
     const W = 640, H = 320, m = { l: 48, r: 12, t: 16, b: 44 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
-    const yt = ticks(0, Math.max(...pct.flat()), 5), yMax = yt[yt.length - 1], sy = v => m.t + ph - v / yMax * ph;
+    const yt = ticks(0, maxOf(pct.flat()), 5), yMax = yt[yt.length - 1], sy = v => m.t + ph - v / yMax * ph;
     const band = pw / rowLv.length, inner = band * 0.8, bw = inner / colLv.length;
     let s = svgOpen(W, H, 'Porcentajes por grupo') + yAxis(yt, sy, m.l, W - m.r);
     rowLv.forEach((r, i) => {
@@ -123,7 +126,7 @@
 
   function scatter(x, y, xlabel, ylabel, opts = {}) {
     const W = 640, H = 340, m = { l: 56, r: 16, t: 16, b: 44 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
-    const xt = ticks(Math.min(...x), Math.max(...x), 6), yt = ticks(Math.min(...y), Math.max(...y), 5);
+    const xt = ticks(minOf(x), maxOf(x), 6), yt = ticks(minOf(y), maxOf(y), 5);
     const sx = v => m.l + (v - xt[0]) / (xt[xt.length - 1] - xt[0]) * pw, sy = v => m.t + ph - (v - yt[0]) / (yt[yt.length - 1] - yt[0]) * ph;
     let s = svgOpen(W, H, `${ylabel} frente a ${xlabel}`) + yAxis(yt, sy, m.l, W - m.r);
     xt.forEach(v => s += `<text x="${sx(v)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${fmt(v)}</text>`);
@@ -140,7 +143,7 @@
   // gráfico de interacción: una línea por nivel de B a lo largo de los niveles de A
   function interaction(levelsA, series, ylabel) {
     const W = 640, H = 340, m = { l: 56, r: 16, t: 16, b: 48 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
-    const all = series.flatMap(s => s.ci.flat()), yt = ticks(Math.min(...all), Math.max(...all), 5), y0 = yt[0], y1 = yt[yt.length - 1];
+    const all = series.flatMap(s => s.ci.flat()), yt = ticks(minOf(all), maxOf(all), 5), y0 = yt[0], y1 = yt[yt.length - 1];
     const sy = v => m.t + ph - (v - y0) / (y1 - y0) * ph, band = pw / levelsA.length, off = j => (j - (series.length - 1) / 2) * 10;
     const cx = (i, j) => m.l + band * i + band / 2 + off(j);
     let s = svgOpen(W, H, 'Gráfico de interacción de ' + ylabel) + yAxis(yt, sy, m.l, W - m.r);
@@ -158,7 +161,7 @@
   // forest plot de odds ratios (escala logarítmica)
   function forest(labels, ors, cis) {
     const rowH = 30, m = { l: 210, r: 24, t: 14, b: 40 }, W = 640, H = m.t + m.b + rowH * labels.length, pw = W - m.l - m.r;
-    const lo = Math.min(.5, ...cis.map(c => c[0])), hi = Math.max(2, ...cis.map(c => c[1]));
+    const lo = Math.min(.5, minOf(cis.map(c => c[0]))), hi = Math.max(2, maxOf(cis.map(c => c[1])));
     const L0 = Math.log(lo), L1 = Math.log(hi), sx = v => m.l + (Math.log(v) - L0) / (L1 - L0) * pw;
     const cand = [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100].filter(v => v >= lo && v <= hi);
     let s = svgOpen(W, H, 'Odds ratios e intervalos de confianza');
@@ -199,7 +202,7 @@
     const q = (s, p) => { const h = (s.length - 1) * p, lo = Math.floor(h), hi = Math.min(lo + 1, s.length - 1); return s[lo] + (h - lo) * (s[hi] - s[lo]); };
     const st = groups.map(g => { const s = g.x.slice().sort((a, b) => a - b), q1 = q(s, .25), q3 = q(s, .75), md = q(s, .5), iqr = q3 - q1, lo = q1 - 1.5 * iqr, hi = q3 + 1.5 * iqr;
       const inn = s.filter(v => v >= lo && v <= hi); return { name: g.name, q1, q3, md, wlo: inn[0], whi: inn[inn.length - 1], out: s.filter(v => v < lo || v > hi), n: s.length }; });
-    const all = groups.flatMap(g => g.x), yt = ticks(Math.min(...all), Math.max(...all), 5), y0 = yt[0], y1 = yt[yt.length - 1];
+    const all = groups.flatMap(g => g.x), yt = ticks(minOf(all), maxOf(all), 5), y0 = yt[0], y1 = yt[yt.length - 1];
     const W = Math.max(260, 70 + groups.length * 70), H = 240, m = { l: 46, r: 12, t: 12, b: 40 }, pw = W - m.l - m.r, ph = H - m.t - m.b, sy = v => m.t + ph - (v - y0) / (y1 - y0) * ph, bw = pw / groups.length;
     let s = svgOpen(W, H, 'Diagrama de caja de ' + label) + yAxis(yt, sy, m.l, W - m.r);
     st.forEach((g, i) => { const cx = m.l + bw * (i + .5), w = Math.min(46, bw * .5), col = COL.s[i % COL.s.length];
@@ -217,7 +220,7 @@
     const s = values.slice().sort((a, b) => a - b), n = s.length, a = n <= 10 ? 3 / 8 : .5, th = s.map((_, i) => ninv((i + 1 - a) / (n + 1 - 2 * a)));
     const mean = s.reduce((x, y) => x + y, 0) / n, sd = Math.sqrt(s.reduce((x, y) => x + (y - mean) ** 2, 0) / (n - 1));
     const W = 300, H = 240, m = { l: 46, r: 12, t: 12, b: 40 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
-    const xt = ticks(Math.min(...th), Math.max(...th), 5), yt = ticks(s[0], s[n - 1], 5), sx = v => m.l + (v - xt[0]) / (xt[xt.length - 1] - xt[0]) * pw, sy = v => m.t + ph - (v - yt[0]) / (yt[yt.length - 1] - yt[0]) * ph;
+    const xt = ticks(minOf(th), maxOf(th), 5), yt = ticks(s[0], s[n - 1], 5), sx = v => m.l + (v - xt[0]) / (xt[xt.length - 1] - xt[0]) * pw, sy = v => m.t + ph - (v - yt[0]) / (yt[yt.length - 1] - yt[0]) * ph;
     let o = svgOpen(W, H, 'Gráfico Q-Q de ' + label) + yAxis(yt, sy, m.l, W - m.r);
     const x0 = xt[0], x1 = xt[xt.length - 1];
     o += `<line x1="${sx(x0)}" x2="${sx(x1)}" y1="${sy(mean + sd * x0)}" y2="${sy(mean + sd * x1)}" stroke="${COL.s[1]}" stroke-width="1.5"/>`;
@@ -241,7 +244,7 @@
   // gráfico de Bland-Altman: media de las dos medidas frente a su diferencia, con el sesgo y los límites de acuerdo
   function blandAltmanPlot(mean, diff, bias, lo, hi, labX) {
     const W = 400, H = 250, m = { l: 46, r: 108, t: 12, b: 40 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
-    const xt = ticks(Math.min(...mean), Math.max(...mean), 5), yt = ticks(Math.min(lo, ...diff), Math.max(hi, ...diff), 5);
+    const xt = ticks(minOf(mean), maxOf(mean), 5), yt = ticks(Math.min(lo, minOf(diff)), Math.max(hi, maxOf(diff)), 5);
     const sx = v => m.l + (v - xt[0]) / (xt[xt.length - 1] - xt[0]) * pw, sy = v => m.t + ph - (v - yt[0]) / (yt[yt.length - 1] - yt[0]) * ph;
     let s = svgOpen(W, H, 'Gráfico de Bland-Altman') + yAxis(yt, sy, m.l, m.l + pw);
     xt.forEach(v => { s += `<text x="${sx(v)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${fmt(v)}</text>`; });

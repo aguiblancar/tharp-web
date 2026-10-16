@@ -1,6 +1,9 @@
 /* Tharp — motor estadístico (se ejecuta en el navegador; requiere jStat) */
 (function (root) {
   'use strict';
+  // mínimo y máximo sin «Math.min(...a)», que desborda la pila con decenas de miles de valores; mismo resultado (NaN si hay NaN; ±Infinity si está vacío)
+  const minOf = a => { let m = Infinity; for (const v of a) { if (v !== v) return NaN; if (v < m) m = v; } return m; };
+  const maxOf = a => { let m = -Infinity; for (const v of a) { if (v !== v) return NaN; if (v > m) m = v; } return m; };
   const J = root.jStat;
 
   // ---------- básicos ----------
@@ -264,7 +267,7 @@
         basis.forEach(bv => { const pr = sum(v.map((q, i) => q * bv[i])) / sum(bv.map(q => q * q)); v = v.map((q, i) => q - pr * bv[i]); });
         basis.push(v);
         // pesos enteros clásicos (−1, 0, 1; 1, −2, 1; −3, −1, 1, 3…), como emmeans y los manuales: no cambian t ni p
-        const mn = Math.min(...v.map(Math.abs).filter(q => q > 1e-9)), wi = v.map(q => Math.round(q / mn * 1e6) / 1e6);
+        const mn = minOf(v.map(Math.abs).filter(q => q > 1e-9)), wi = v.map(q => Math.round(q / mn * 1e6) / 1e6);
         W.push({ name: ['Lineal', 'Cuadrático', 'Cúbico'][d - 1], w: wi }); }
     } else for (let i = 0; i < k - 1; i++) {
       const w = new Array(k).fill(0);
@@ -486,7 +489,7 @@
     const all = xs.flat(), med = quantile(sorted(all), .5), tab = [xs.map(x => x.filter(v => v > med).length), xs.map(x => x.filter(v => v <= med).length)];
     if (tab.some(r => r.every(v => v === 0))) return { med, tab, chi: NaN, df: xs.length - 1, p: NaN, pFisher: NaN };
     const c = chiSquare(tab), fx = fisherRxC(tab);
-    return { med, tab, chi: c.chi, df: c.df, p: c.p, pFisher: fx ? fx.p : null, minE: Math.min(...c.E.flat()) };
+    return { med, tab, chi: c.chi, df: c.df, p: c.p, pFisher: fx ? fx.p : null, minE: minOf(c.E.flat()) };
   }
   // Kolmogorov-Smirnov para dos muestras (como ks.test de R ≥ 4.3): p exacta si m·n < 10000 (también con empates), si no, asintótica
   function ks2(x, y) {
@@ -720,6 +723,15 @@
     const my = mean(y), sse = sum(e.map(v => v * v)), sst = sum(y.map(v => (v - my) ** 2));
     return { b, Ai, fit, e, sse, sst, r2: 1 - sse / sst, n, p };
   }
+  // solo los coeficientes de MCO sobre las filas idx de X (con repetición): para el bootstrap, sin crear copias de los datos.
+  // Mismas operaciones y en el mismo orden que olsCore, así que da exactamente los mismos coeficientes
+  function olsBetaIdx(X, y, idx) {
+    const p = X[0].length, F = new Float64Array(p * p), Fy = new Float64Array(p);
+    for (let t = 0; t < idx.length; t++) { const i = idx[t], xi = X[i], yi = y[i]; for (let a = 0; a < p; a++) { const xa = xi[a]; Fy[a] += xa * yi; for (let b = a; b < p; b++) F[a * p + b] += xa * xi[b]; } }
+    const XtX = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => (b >= a ? F[a * p + b] : F[b * p + a]))), Xty = Array.from(Fy);
+    const Ai = inv(XtX); if (!Ai) return null;
+    return Ai.map(r => sum(r.map((v, k) => v * Xty[k])));
+  }
   function ols(X, y) {
     const m = olsCore(X, y); if (!m) return null;
     const { n, p, Ai, e } = m, dfr = n - p, s2 = m.sse / dfr;
@@ -778,7 +790,7 @@
       Ai = inv(XtWX); if (!Ai) return null;
       const step = Ai.map(r => sum(r.map((v, k) => v * XtR[k])));
       b = b.map((v, k) => v + step[k]);
-      if (Math.max(...step.map(Math.abs)) < 1e-10) { conv = true; break; }
+      if (maxOf(step.map(Math.abs)) < 1e-10) { conv = true; break; }
     }
     const pr = X.map(r => 1 / (1 + Math.exp(-sum(r.map((v, k) => v * b[k])))));
     // matriz de información final
@@ -859,7 +871,7 @@
       const keep = X[0].map((_, j) => j).filter(j => !t.cols.includes(j)), Er = resid(X.map(r => keep.map(j => r[j])));
       const H = Er.map((r, a) => r.map((v, b) => v - E[a][b])), M = matMul(matMul(Li, H), tr(Li)), Ms = M.map((r, a) => r.map((v, b) => (v + M[b][a]) / 2));
       const eig = eigSym(Ms).values.map(v => Math.max(0, v)), q = t.df, s = Math.min(p, q), m = .5 * (Math.abs(p - q) - 1), nn = .5 * (dfE - p - 1);
-      const V = sum(eig.map(l => l / (1 + l))), W = eig.reduce((a, l) => a / (1 + l), 1), HL = sum(eig), Roy = Math.max(...eig);
+      const V = sum(eig.map(l => l / (1 + l))), W = eig.reduce((a, l) => a / (1 + l), 1), HL = sum(eig), Roy = maxOf(eig);
       const pil = { stat: V, F: ((2 * nn + s + 1) / (2 * m + s + 1) * V) / (s - V), df1: s * (2 * m + s + 1), df2: s * (2 * nn + s + 1) };
       const t1 = dfE - .5 * (p - q + 1), t2 = (p * q - 2) / 4, t3r = p * p + q * q - 5, t3 = t3r > 0 ? Math.sqrt(((p * q) ** 2 - 4) / t3r) : 1;
       const wil = { stat: W, F: ((Math.pow(W, -1 / t3) - 1) * (t1 * t3 - 2 * t2)) / p / q, df1: p * q, df2: t1 * t3 - 2 * t2 };
@@ -949,7 +961,7 @@
   function chiGOF(counts, probs) {
     const k = counts.length, N = sum(counts), pr = probs && probs.length === k ? probs.map(v => v / sum(probs)) : counts.map(() => 1 / k);
     const E = pr.map(q => q * N), chi = sum(counts.map((o, i) => (o - E[i]) ** 2 / E[i])), df = k - 1;
-    return { chi, df, p: pChi(chi, df), E, N, probs: pr, resid: counts.map((o, i) => (o - E[i]) / Math.sqrt(E[i])), minE: Math.min(...E), w: Math.sqrt(chi / N) };
+    return { chi, df, p: pChi(chi, df), E, N, probs: pr, resid: counts.map((o, i) => (o - E[i]) / Math.sqrt(E[i])), minE: minOf(E), w: Math.sqrt(chi / N) };
   }
   // ---------- acuerdo entre jueces ----------
   // CCI de Shrout y Fleiss / McGraw y Wong: Y n sujetos × k jueces (casos completos); las 6 formas con F, p e IC 95 %
@@ -1061,7 +1073,7 @@
     X.forEach((x, i) => { for (let k = 1; k < K; k++) for (let l = 1; l < K; l++) { const w = Pf[i][k] * ((k === l ? 1 : 0) - Pf[i][l]); for (let a = 0; a < p; a++) for (let c = 0; c < p; c++) H[(k - 1) * p + a][(l - 1) * p + c] += w * x[a] * x[c]; } });
     const V = inv(H), se = V ? V.map((r, j) => Math.sqrt(r[j])) : b.map(() => NaN);
     const cnt = Array.from({ length: K }, (_, k) => y.filter(v => v === k).length), ll0 = sum(cnt.map(c => (c ? c * Math.log(c / n) : 0)));
-    const pred = Pf.map(pr => pr.indexOf(Math.max(...pr)));
+    const pred = Pf.map(pr => pr.indexOf(maxOf(pr)));
     return { B: Array.from({ length: K - 1 }, (_, k) => b.slice(k * p, (k + 1) * p)), SE: Array.from({ length: K - 1 }, (_, k) => se.slice(k * p, (k + 1) * p)), ll, ll0, n, p, K, iter: it, pred, probs: Pf };
   }
   // ---------- regresión logística ordinal de odds proporcionales (como MASS::polr) ----------
@@ -1090,7 +1102,7 @@
     }
     const Vc = inv(hess(par).map(r => r.map(v => -v))), se = Vc ? Vc.map((r, j) => Math.sqrt(r[j])) : par.map(() => NaN);
     const ll0 = sum(cnt.map(c => (c ? c * Math.log(c / n) : 0)));
-    const pred = X.map(x => { const e = eta(par, x), pr = Array.from({ length: K }, (_, k) => (k === K - 1 ? 1 : F(par[k] - e)) - (k === 0 ? 0 : F(par[k - 1] - e))); return pr.indexOf(Math.max(...pr)); });
+    const pred = X.map(x => { const e = eta(par, x), pr = Array.from({ length: K }, (_, k) => (k === K - 1 ? 1 : F(par[k] - e)) - (k === 0 ? 0 : F(par[k - 1] - e))); return pr.indexOf(maxOf(pr)); });
     return { theta: par.slice(0, K - 1), beta: par.slice(K - 1), seTheta: se.slice(0, K - 1), seBeta: se.slice(K - 1), ll: L, ll0, n, p, K, iter: it, pred };
   }
   // prueba de Brant (1990) de odds proporcionales: una logística binaria por corte (Y > j) y covarianza conjunta de sus coeficientes
@@ -1408,9 +1420,9 @@
     let s = seed >>> 0; const rnd = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
     const boot = [];
     for (let r = 0; r < B; r++) {
-      const idx = Array.from({ length: n }, () => Math.floor(rnd() * n));
-      const ra = olsCore(idx.map(i => c1[i]), idx.map(i => m[i])), rb = olsCore(idx.map(i => c2[i]), idx.map(i => y[i]));
-      if (ra && rb) boot.push(ra.b[1] * rb.b[2]);
+      const idx = new Int32Array(n); for (let t = 0; t < n; t++) idx[t] = Math.floor(rnd() * n);
+      const ra = olsBetaIdx(c1, m, idx), rb = olsBetaIdx(c2, y, idx);
+      if (ra && rb) boot.push(ra[1] * rb[2]);
     }
     const bs = sorted(boot), ci = [quantile(bs, .025), quantile(bs, .975)], sdy = sd(y), sdx = sd(x);
     return { a, b, c, cp, ab, se: { a: fa.se[1], b: fb.se[2], c: fc.se[1], cp: fb.se[1] }, p: { a: fa.pv[1], b: fb.pv[2], c: fc.pv[1], cp: fb.pv[1] },
@@ -1436,7 +1448,9 @@
     if (model === 14) { eqs.push({ dv: 'M0', parts: [X_, Cv], names: ['X'].concat(C.map((_, q) => 'C' + q)) });
       eqs.push({ dv: 'Y', parts: [X_, Mj(0), Wv, MW(0), Cv], names: ['X', 'M0', 'W', 'M0×W'].concat(C.map((_, q) => 'C' + q)) }); }
     const dvOf = (dv, i) => (dv === 'Y' ? y[i] : Ms[+dv.slice(1)][i]);
-    const fitAll = idx => eqs.map(e => olsCore(idx.map(i => row(i, e.parts)), idx.map(i => dvOf(e.dv, i))));
+    // matrices de diseño de cada ecuación una sola vez; el bootstrap solo recalcula los coeficientes sobre los índices remuestreados
+    const design = eqs.map(e => ({ X: Array.from({ length: n }, (_, i) => row(i, e.parts)), y: Array.from({ length: n }, (_, i) => dvOf(e.dv, i)) }));
+    const fitAll = idx => design.map(d => { const b = olsBetaIdx(d.X, d.y, idx); return b ? { b } : null; });
     const coef = (fits, dv, nm) => { const q = eqs.findIndex(e => e.dv === dv), j = eqs[q].names.indexOf(nm); return fits[q].b[j + 1]; };
     // valores del moderador: percentiles 16, 50 y 84 (PROCESS v4) o los dos valores si es dicotómico
     const wv = W ? (wVals || (() => { const u = [...new Set(W)].sort((a, b) => a - b); if (u.length === 2) return u; const s = sorted(W); return [quantile(s, .16), quantile(s, .5), quantile(s, .84)]; })()) : [];
@@ -1453,13 +1467,13 @@
     const est = effects(fits);
     let s = seed >>> 0; const rnd = () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
     const boot = Object.fromEntries(Object.keys(est).map(key => [key, []]));
-    for (let r = 0; r < B; r++) { const idx = Array.from({ length: n }, () => Math.floor(rnd() * n)), bf = fitAll(idx); if (bf.some(f_ => !f_)) continue; const e = effects(bf); Object.keys(e).forEach(key => boot[key].push(e[key])); }
+    for (let r = 0; r < B; r++) { const idx = new Int32Array(n); for (let t = 0; t < n; t++) idx[t] = Math.floor(rnd() * n); const bf = fitAll(idx); if (bf.some(f_ => !f_)) continue; const e = effects(bf); Object.keys(e).forEach(key => boot[key].push(e[key])); }
     const ci = Object.fromEntries(Object.keys(est).map(key => { const bs = sorted(boot[key]); return [key, { est: est[key], se: sd(boot[key]), ci: [quantile(bs, .025), quantile(bs, .975)] }]; }));
     // ecuaciones con inferencia completa
     const eqOut = eqs.map(e => { const Xd = all.map(i => row(i, e.parts)), m = ols(Xd, all.map(i => dvOf(e.dv, i))); return { dv: e.dv, names: ['(Constante)'].concat(e.names), b: m.b, se: m.se, t: m.t, p: m.pv, ci: m.ci, r2: m.r2, F: m.F, df1: m.df1, dfr: m.dfr, pF: m.pF }; });
     // efectos total y directo de X sobre Y
     const tot = ols(all.map(i => [1, x[i]].concat(C.map(c => c[i]))), y), dirEq = eqOut.find(e => e.dv === 'Y'), jx = dirEq.names.indexOf('X');
-    return { model, n, eqs: eqOut, effects: ci, B: Math.min(...Object.values(boot).map(v => v.length)), wv,
+    return { model, n, eqs: eqOut, effects: ci, B: minOf(Object.values(boot).map(v => v.length)), wv,
       total: { b: tot.b[1], se: tot.se[1], t: tot.t[1], p: tot.pv[1], ci: tot.ci[1] }, direct: { b: dirEq.b[jx], se: dirEq.se[jx], t: dirEq.t[jx], p: dirEq.p[jx], ci: dirEq.ci[jx] } };
   }
 
@@ -1589,13 +1603,13 @@
       let ok = false;
       for (let k = 0; k < 60; k++) { th1 = th.map((v, i) => v + a * d[i]); f1 = F(th1); if (f1 <= f0 + 1e-4 * a * slope) { ok = true; break; } a /= 2; }
       // sin mejora: nunca se acepta un paso que empeore el ajuste; se reinicia la dirección (gradiente) o se termina si ya lo era
-      if (!ok) { if (fresh) { conv = Math.max(...g.map(Math.abs)) < 1e-6; break; } Hn = ident(P.length); fresh = true; continue; }
+      if (!ok) { if (fresh) { conv = maxOf(g.map(Math.abs)) < 1e-6; break; } Hn = ident(P.length); fresh = true; continue; }
       fresh = false;
       const g1 = grad(th1), s = th1.map((v, i) => v - th[i]), yv = g1.map((v, i) => v - g[i]), sy = sum(s.map((v, i) => v * yv[i]));
       if (sy > 1e-12) { const Hy = Hn.map(r => sum(r.map((v, k) => v * yv[k]))), yHy = sum(yv.map((v, i) => v * Hy[i]));
         Hn = Hn.map((r, i) => r.map((v, j) => v + (sy + yHy) * s[i] * s[j] / (sy * sy) - (Hy[i] * s[j] + s[i] * Hy[j]) / sy)); }
       const df_ = Math.abs(f0 - f1); th = th1; f0 = f1; g = g1;
-      if (Math.max(...g.map(Math.abs)) < 1e-9 || (df_ < 1e-14 && Math.max(...g.map(Math.abs)) < 1e-6)) { conv = true; break; }
+      if (maxOf(g.map(Math.abs)) < 1e-9 || (df_ < 1e-14 && maxOf(g.map(Math.abs)) < 1e-6)) { conv = true; break; }
     }
     const B = build(th), Si = inv(B.Sig);
     // errores típicos con la información esperada: I_ab = ½ tr(Σ⁻¹ ∂Σ/∂a Σ⁻¹ ∂Σ/∂b)

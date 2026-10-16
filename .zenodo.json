@@ -1,7 +1,7 @@
 {
   "title": "Tharp",
   "upload_type": "software",
-  "description": "<p>Aplicación web de análisis estadístico para investigación. Comprueba los supuestos, elige la prueba, genera tablas y redacción en formato APA y un script de R que reproduce cada análisis. Todos los cálculos se hacen en el navegador con un motor propio validado frente a R (22 grupos de análisis, 7403 valores comparados).</p>",
+  "description": "<p>Aplicación web de análisis estadístico para investigación. Comprueba los supuestos, elige la prueba, genera tablas y redacción en formato APA y un script de R que reproduce cada análisis. Todos los cálculos se hacen en el navegador con un motor propio validado frente a R (22 grupos de análisis, 9671 valores comparados).</p>",
   "creators": [{ "name": "Agüí Ruiz, Blanca", "orcid": "0009-0002-3982-2565" }],
   "license": "other-closed",
   "access_right": "open",

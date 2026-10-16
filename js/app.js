@@ -1,15 +1,18 @@
 /* Tharp — aplicación (todo se ejecuta en el navegador) */
 (function () {
   'use strict';
+  // mínimo y máximo sin «Math.min(...a)», que desborda la pila con decenas de miles de valores; mismo resultado (NaN si hay NaN; ±Infinity si está vacío)
+  const minOf = a => { let m = Infinity; for (const v of a) { if (v !== v) return NaN; if (v < m) m = v; } return m; };
+  const maxOf = a => { let m = -Infinity; for (const v of a) { if (v !== v) return NaN; if (v > m) m = v; } return m; };
   const S = window.TharpStats, CH = window.TharpCharts, esc = CH.esc;
   const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
   const ST = { fileName: '', wb: null, sheet: '', headers: [], rows: [], vars: [], sections: [], log: [], defaults: null };
 
   // ---------- formato ----------
-  const f = (x, d = 2) => (x === null || x === undefined || !isFinite(x) ? '—' : x.toFixed(d));
+  const f = (x, d = 2) => (x === null || x === undefined || !isFinite(x) ? '—' : Math.abs(x) >= 1e9 ? x.toExponential(2) : x.toFixed(d));
   const nz = s => s.replace(/^(-?)0\./, '$1.');                    // sin cero inicial (p, r, β)
-  const pv = p => (p < .001 ? '< .001' : nz(p.toFixed(3)));        // p en tablas
-  const pt = p => '<i>p</i> ' + (p < .001 ? '< .001' : '= ' + nz(p.toFixed(3))); // p en texto
+  const pv = p => (!isFinite(p) ? '—' : p < .001 ? '< .001' : nz(p.toFixed(3)));        // p en tablas
+  const pt = p => '<i>p</i> ' + (!isFinite(p) ? 'no calculable' : p < .001 ? '< .001' : '= ' + nz(p.toFixed(3))); // p en texto
   const r2s = r => nz(r.toFixed(2));
   const dfF = d => (Math.abs(d - Math.round(d)) < 1e-9 ? String(Math.round(d)) : d.toFixed(2));
   const stars = p => (p < .001 ? '***' : p < .01 ? '**' : p < .05 ? '*' : '');
@@ -99,7 +102,7 @@
   function setData(fileName, aoa, defaults, hints) {
     if (!hints) ST.source = '';
     if (!aoa || aoa.length < 2) throw new Error('El archivo no contiene datos: necesita una fila de nombres y al menos una fila de datos.');
-    const width = Math.max(...aoa.map(r => r.length)), seen = {};
+    const width = maxOf(aoa.map(r => r.length)), seen = {};
     const headers = Array.from({ length: width }, (_, i) => {
       let h = aoa[0][i] === null || aoa[0][i] === undefined || String(aoa[0][i]).trim() === '' ? 'var_' + (i + 1) : String(aoa[0][i]).trim();
       if (seen[h]) h = h + '_' + (++seen[h]); else seen[h] = 1; return h;
@@ -301,7 +304,7 @@
       $('#tfV').onchange = fill; fill(); }
     // mínimo y máximo sugeridos a partir de los datos
     const sugg = () => { const ns = type === 'scale' ? checkedVals('tfI') : [$('#tfV') && $('#tfV').value]; const xs = ns.filter(Boolean).flatMap(n => numOf(vByName(n)).filter(x => x !== null));
-      if (xs.length && $('#tfMin') && $('#tfMax')) { $('#tfMin').value = Math.min(...xs); $('#tfMax').value = Math.max(...xs); } };
+      if (xs.length && $('#tfMin') && $('#tfMax')) { $('#tfMin').value = minOf(xs); $('#tfMax').value = maxOf(xs); } };
     if (type === 'reverse') { $('#tfV').onchange = sugg; sugg(); }
     if (type === 'scale') $$('input[name="tfI"]').forEach(b => b.addEventListener('change', sugg));
     $('#tfAdd').onclick = addTf;
@@ -615,6 +618,7 @@
       const c = a.length > 3 + Zv.length ? (partial ? S.partialCorr(a, b, zc, m) : P ? S.pearson(a, b) : K ? S.kendall(a, b) : S.spearman(a, b)) : null; R[i][j] = c;
       if (c) { nmin = Math.min(nmin, c.n); nmax = Math.max(nmax, c.n); pairs.push({ i, j, c, a, b }); }
     } }
+    if (!pairs.length) { sec.error = `Hay muy pocos casos completos para calcular las correlaciones: cada par de variables necesita al menos ${4 + Zv.length} casos con ambos valores${Zv.length ? ' (y los de las variables de control)' : ''}.`; return sec; }
     const cell = c => { if (!c || !isFinite(c.r)) return '—'; const al = Math.min(.55, Math.abs(c.r) * .6), bg = c.r >= 0 ? `rgba(42,120,214,${al})` : `rgba(227,73,72,${al})`;
       return `<span style="display:inline-block;min-width:52px;padding:2px 6px;border-radius:4px;background:${bg}" title="${P ? 'r' : 'rs'} = ${c.r.toFixed(3)}, p = ${c.p.toFixed(4)}, n = ${c.n}">${r2s(c.r)}${stars(c.p)}</span>`; };
     const rows = vars.map((v, i) => { const x = numOf(v).filter(a => a !== null), d = S.describe(x);
@@ -961,7 +965,7 @@
       sec.checks.push(chk(lev.p >= .05 ? 'ok' : 'no', `Homogeneidad de varianzas entre grupos en ${esc(nm)} (Levene): <i>F</i>(${lev.df1}, ${lev.df2}) = ${f(lev.F)}, ${pt(lev.p)}.${lev.p >= .05 ? ' Se cumple.' : ' No se cumple: interpreta con cautela, sobre todo si los grupos tienen tamaños distintos.'}`)); });
     const sph = r.mauchly, sphOK = !sph || sph.p >= .05, eps = sphOK ? 1 : r.gg;
     if (sph) sec.checks.push(chk(sphOK ? 'ok' : 'no', `Esfericidad (Mauchly): <i>W</i> = ${nz(sph.W.toFixed(3))}, χ²(${sph.df}) = ${f(sph.chi)}, ${pt(sph.p)}. ${sphOK ? 'Se cumple.' : `No se cumple: se aplica la corrección de Greenhouse-Geisser (ε = ${nz(r.gg.toFixed(3))}; Huynh-Feldt ε = ${nz(r.hf.toFixed(3))}) a los efectos intrasujeto.`}`));
-    sec.checks.push(chk(Math.max(...ng) === Math.min(...ng) ? 'ok' : 'info', `Tamaño de los grupos: ${lv.map((l, j) => `${esc(l)} = ${ng[j]}`).join(', ')}${Math.max(...ng) === Math.min(...ng) ? ' (equilibrado).' : ' (no equilibrado; se usan sumas de cuadrados de tipo III).'}`));
+    sec.checks.push(chk(maxOf(ng) === minOf(ng) ? 'ok' : 'info', `Tamaño de los grupos: ${lv.map((l, j) => `${esc(l)} = ${ng[j]}`).join(', ')}${maxOf(ng) === minOf(ng) ? ' (equilibrado).' : ' (no equilibrado; se usan sumas de cuadrados de tipo III).'}`));
     sec.why.push(`Factor intrasujeto (medidas repetidas): ${L} → ${k} medidas de las mismas personas.`);
     sec.why.push(`Factor entre sujetos: ${esc(gName)} → ${G} grupos independientes (${list(lv.map(esc))}).`);
     sec.why.push(`La ANOVA mixta contrasta tres cosas: si las puntuaciones cambian entre medidas, si los grupos difieren en general y, sobre todo, si el cambio es distinto según el grupo (interacción). En un diseño pre/post con grupo control, la interacción es la prueba de que la intervención funciona.`);
@@ -1446,9 +1450,9 @@
     if (m > 1) sec.tables.push(apaTable('Correlaciones entre factores', [''].concat(spec.map(fc => esc(fc.name))), spec.map((fc, a) => [esc(fc.name)].concat(spec.map((_, b) => (a === b ? '—' : b < a ? r2s(r.facCor[a][b]) : ''))))));
     let t = `Se realizó un análisis factorial confirmatorio por máxima verosimilitud para contrastar un modelo de ${m} factor${m > 1 ? 'es correlacionados' : ''} (${spec.map(fc => `${esc(fc.name)}: ${fc.items.length} ítems`).join('; ')}) con ${n} participantes. `;
     t += sat ? 'Al tratarse de un modelo saturado (0 grados de libertad), su ajuste no puede contrastarse. ' : `El ajuste del modelo fue ${verdict}, χ²(${r.df}) = ${f(r.chi)}, ${pt(r.pval)}, CFI = ${nz(r.cfi.toFixed(2))}, TLI = ${nz(r.tli.toFixed(2))}, RMSEA = ${nz(r.rmsea.toFixed(3))}, IC 90 % [${nz(r.rmseaCI[0].toFixed(3))}, ${nz(r.rmseaCI[1].toFixed(3))}], SRMR = ${nz(r.srmr.toFixed(3))}. `;
-    const absS = r.std.map(Math.abs); t += `Las cargas estandarizadas oscilaron entre ${nz(Math.min(...absS).toFixed(2))} y ${nz(Math.max(...absS).toFixed(2))}${neg.length ? ' en valor absoluto' : ''}`;
+    const absS = r.std.map(Math.abs); t += `Las cargas estandarizadas oscilaron entre ${nz(minOf(absS).toFixed(2))} y ${nz(maxOf(absS).toFixed(2))}${neg.length ? ' en valor absoluto' : ''}`;
     t += `, y la fiabilidad compuesta fue ${list(spec.map((fc, k) => `${m > 1 ? `${esc(fc.name)} ` : ''}ω = ${nz(r.rel[k].omega.toFixed(2))}`))}.`;
-    if (m > 1) { const cs = []; for (let a = 0; a < m; a++) for (let b = 0; b < a; b++) cs.push(r.facCor[a][b]); t += ` Las correlaciones entre factores oscilaron entre ${r2s(Math.min(...cs))} y ${r2s(Math.max(...cs))}.`; }
+    if (m > 1) { const cs = []; for (let a = 0; a < m; a++) for (let b = 0; b < a; b++) cs.push(r.facCor[a][b]); t += ` Las correlaciones entre factores oscilaron entre ${r2s(minOf(cs))} y ${r2s(maxOf(cs))}.`; }
     sec.text.push(t);
     const syn = n0 => /^[A-Za-z.][A-Za-z0-9._]*$/.test(n0), allSyn = all.every(syn) && spec.every(fc => syn(fc.name.replace(/\s+/g, '_')));
     const iname = (it, j) => (allSyn ? it : `i${j + 1}`), fname = (fc, k) => (allSyn ? fc.name.replace(/\s+/g, '_') : `F${k + 1}`);
@@ -1475,7 +1479,7 @@
     }
     if (n < 10) { sec.error = 'Hay muy pocas observaciones completas.'; return sec; }
     const g = idx.map(i => gv[i]), y = idx.map(i => yv[i]), sizes = Object.values(g.reduce((a, k) => (a[k] = (a[k] || 0) + 1, a), {})), ng = sizes.length;
-    if (Math.max(...sizes) < 2) { sec.error = `Cada valor de «${gN}» aparece en una sola fila. Un modelo mixto necesita varias filas por persona o grupo: organiza los datos en formato largo (una fila por medición) o elige otra variable de agrupación.`; return sec; }
+    if (maxOf(sizes) < 2) { sec.error = `Cada valor de «${gN}» aparece en una sola fila. Un modelo mixto necesita varias filas por persona o grupo: organiza los datos en formato largo (una fila por medición) o elige otra variable de agrupación.`; return sec; }
     if (ng < 3) { sec.error = `Solo hay ${ng} grupos: se necesitan bastantes más para estimar la variabilidad entre grupos.`; return sec; }
     const zcol = slopeN ? cols.findIndex(c => c.name === slopeN) : -1;
     if (slopeN && (zcol < 0 || cols[zcol].level !== undefined)) { sec.error = 'La pendiente aleatoria debe ser un predictor cuantitativo.'; return sec; }
@@ -1488,7 +1492,7 @@
     sec.why.push(`El intercepto aleatorio permite que cada ${esc(gN)} tenga su propio nivel medio${slopeN ? `, y la pendiente aleatoria, que el efecto de ${esc(slopeN)} varíe entre ellos` : ''}.`);
     sec.why.push('Los grados de libertad de los efectos fijos se calculan con la aproximación de Satterthwaite (como lmerTest en R), y los datos perdidos no obligan a eliminar a la persona entera: se usan todas las mediciones disponibles.');
     sec.checks.push(chk(r0.icc >= .05 ? 'ok' : 'info', `Correlación intraclase (modelo nulo): CCI = ${nz(r0.icc.toFixed(3))}. El ${f(r0.icc * 100, 1)} % de la varianza de ${esc(yN)} se debe a diferencias entre unidades de ${esc(gN)}.${r0.icc < .05 ? ' Es baja: el modelo mixto puede no aportar mucho frente a una regresión.' : ''}`));
-    sec.checks.push(chk(ng >= 20 ? 'ok' : 'info', `Número de grupos: ${ng} (entre ${Math.min(...sizes)} y ${Math.max(...sizes)} observaciones por grupo).${ng >= 20 ? '' : ' Con menos de 20 grupos la varianza aleatoria se estima con poca precisión.'}`));
+    sec.checks.push(chk(ng >= 20 ? 'ok' : 'info', `Número de grupos: ${ng} (entre ${minOf(sizes)} y ${maxOf(sizes)} observaciones por grupo).${ng >= 20 ? '' : ' Con menos de 20 grupos la varianza aleatoria se estima con poca precisión.'}`));
     if (r.singular) sec.warn = 'Ajuste singular: la varianza de algún efecto aleatorio es prácticamente 0 (o la correlación entre efectos aleatorios es ±1). El modelo es demasiado complejo para los datos: simplifica la parte aleatoria (por ejemplo, quita la pendiente aleatoria).';
     if (sw) sec.checks.push(chk(sw.p >= .05 ? 'ok' : n >= 100 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}.${sw.p >= .05 ? '' : n >= 100 ? ' Con muchas observaciones el modelo es robusto a desviaciones moderadas.' : ' No se cumple y la muestra es pequeña.'}`));
     sec.alt = 'Modelo lineal generalizado mixto (GLMM) si la variable dependiente es dicotómica o un recuento.';
@@ -1527,6 +1531,7 @@
     const y = idx.map(i => yv[i]), x = idx.map(i => xi.vals[i]), w = idx.map(i => wi.vals[i]);
     if (S.sd(x) === 0 || S.sd(w) === 0) { sec.error = 'El predictor o el moderador no varía.'; return sec; }
     const r = S.moderation(y, x, w, null, !xi.bin, !wi.bin);
+    if (r && r.r2 > 1 - 1e-10) { sec.error = 'La variable dependiente es una combinación exacta de las predictoras (R² = 1): no hay error que estimar, así que el modelo no tiene sentido. Revisa si una variable se calculó a partir de otra.'; return sec; }
     if (!r) { sec.error = 'No se pudo estimar el modelo (colinealidad perfecta).'; return sec; }
     const sdW = S.sd(w), mW = S.mean(w), sdX = S.sd(x), mX = S.mean(x);
     const wPts = wi.bin ? [{ v: 0, lab: `${wN} = ${wi.lv[0]}` }, { v: 1, lab: `${wN} = ${wi.lv[1]}` }] : [{ v: mW - sdW, lab: `${wN} bajo (−1 DT = ${f(mW - sdW)})` }, { v: mW, lab: `${wN} medio (${f(mW)})` }, { v: mW + sdW, lab: `${wN} alto (+1 DT = ${f(mW + sdW)})` }];
@@ -1549,7 +1554,7 @@
     // región de Johnson-Neyman dentro del rango observado
     let jnTxt = '';
     if (!wi.bin) {
-      const lo = Math.min(...w), hi = Math.max(...w), cuts = [lo].concat(r.jn.filter(v => v > lo && v < hi)).concat([hi]), segs = [];
+      const lo = minOf(w), hi = maxOf(w), cuts = [lo].concat(r.jn.filter(v => v > lo && v < hi)).concat([hi]), segs = [];
       for (let k = 0; k < cuts.length - 1; k++) { const mid = (cuts[k] + cuts[k + 1]) / 2; if (r.slope(mid).p < .05) segs.push([cuts[k], cuts[k + 1]]); }
       const inner = r.jn.filter(v => v > lo && v < hi);
       jnTxt = !segs.length ? `En el rango observado de ${esc(wN)} (${f(lo)} a ${f(hi)}), el efecto de ${esc(xN)} no fue significativo para ningún valor del moderador.`
@@ -1708,7 +1713,7 @@
     const B = r.adec.bartlett;
     sec.checks.push(chk(B.p < .05 ? 'ok' : 'no', `Esfericidad de Bartlett: χ²(${B.df}) = ${f(B.chi)}, ${pt(B.p)}. ${B.p < .05 ? 'Los ítems están suficientemente correlacionados.' : 'Los ítems no están correlacionados: el análisis factorial no tiene sentido.'}`));
     sec.checks.push(chk(n >= 200 ? 'ok' : n >= 100 ? 'info' : 'no', `Tamaño muestral: ${n} casos (${f(n / p, 1)} por ítem).${n >= 200 ? '' : n >= 100 ? ' Aceptable; con comunalidades altas los resultados son estables.' : ' Pequeño: los resultados pueden ser inestables.'}`));
-    const prim = r.L.map(row => { const a = row.map(Math.abs), mx = Math.max(...a); return { j: a.indexOf(mx), mx, cross: a.filter(v => v >= .32).length > 1 }; });
+    const prim = r.L.map(row => { const a = row.map(Math.abs), mx = maxOf(a); return { j: a.indexOf(mx), mx, cross: a.filter(v => v >= .32).length > 1 }; });
     const weak = vars.filter((_, i) => prim[i].mx < .4), cross = vars.filter((_, i) => prim[i].cross && prim[i].mx >= .4), hey = vars.filter((_, i) => r.h2[i] > 1);
     sec.checks.push(weak.length ? chk('no', `Ítems sin ninguna carga ≥ .40: ${list(weak.map(v => esc(v.name)))}. No se asocian claramente a ningún factor.`) : chk('ok', 'Todos los ítems tienen al menos una carga ≥ .40.'));
     if (cross.length) sec.checks.push(chk('info', `Ítems con cargas cruzadas (≥ .32 en más de un factor): ${list(cross.map(v => esc(v.name)))}.`));
@@ -1740,8 +1745,8 @@
     t += total !== null ? `, que ${m > 1 ? 'explicaron' : 'explicó'} el ${f(total * 100, 1)} % de la varianza. ` : '. ';
     t += F.map((fn, j) => { const its = vars.filter((_, i) => prim[i].j === j && prim[i].mx >= .4); if (!its.length) return `Ningún ítem cargó de forma destacada en el ${U} ${j + 1}.`;
       const ld = its.map(v => Math.abs(r.L[names2.indexOf(v.name)][j])), ng = its.filter(v => r.L[names2.indexOf(v.name)][j] < 0);
-      return `${m > 1 ? `El ${U} ${j + 1} agrupó` : `El ${U} agrupó`} ${its.length === 1 ? 'el ítem' : 'los ítems'} ${list(its.map(v => esc(v.name)))} (cargas ${its.length === 1 ? 'de' : 'entre'} ${nz(Math.min(...ld).toFixed(2))}${its.length > 1 ? ` y ${nz(Math.max(...ld).toFixed(2))}` : ''}${ng.length ? ` en valor absoluto; ${list(ng.map(v => esc(v.name)))} con carga negativa, propia de un ítem inverso` : ''}).`; }).join(' ');
-    if (m > 1 && OBL) { const cs = []; for (let a = 0; a < m; a++) for (let b = a + 1; b < m; b++) cs.push(r.Phi[a][b]); t += cs.length === 1 ? ` La correlación entre los dos ${Us} fue ${r2s(cs[0])}.` : ` Las correlaciones entre ${Us} oscilaron entre ${r2s(Math.min(...cs))} y ${r2s(Math.max(...cs))}.`; }
+      return `${m > 1 ? `El ${U} ${j + 1} agrupó` : `El ${U} agrupó`} ${its.length === 1 ? 'el ítem' : 'los ítems'} ${list(its.map(v => esc(v.name)))} (cargas ${its.length === 1 ? 'de' : 'entre'} ${nz(minOf(ld).toFixed(2))}${its.length > 1 ? ` y ${nz(maxOf(ld).toFixed(2))}` : ''}${ng.length ? ` en valor absoluto; ${list(ng.map(v => esc(v.name)))} con carga negativa, propia de un ítem inverso` : ''}).`; }).join(' ');
+    if (m > 1 && OBL) { const cs = []; for (let a = 0; a < m; a++) for (let b = a + 1; b < m; b++) cs.push(r.Phi[a][b]); t += cs.length === 1 ? ` La correlación entre los dos ${Us} fue ${r2s(cs[0])}.` : ` Las correlaciones entre ${Us} oscilaron entre ${r2s(minOf(cs))} y ${r2s(maxOf(cs))}.`; }
     if (weak.length) t += ` ${list(weak.map(v => esc(v.name)))} no ${weak.length > 1 ? 'mostraron' : 'mostró'} cargas ≥ .40 en ningún factor.`;
     sec.text.push(t);
     sec.alt = 'Análisis factorial confirmatorio (por ejemplo, con lavaan en R) para contrastar una estructura teórica definida a priori. Con ítems ordinales de pocas categorías, puede usarse la matriz de correlaciones policóricas.';
@@ -1759,7 +1764,7 @@
     const cols = vars.map(numOf), idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null));
     if (idx.length < 3) { sec.error = 'Hay muy pocos casos con todos los ítems respondidos.'; return sec; }
     let items = cols.map(c => idx.map(i => c[i]));
-    const lo = Math.min(...items.flat()), hi = Math.max(...items.flat()), rev = vars.map(v => reversed.includes(v.name));
+    const lo = minOf(items.flat()), hi = maxOf(items.flat()), rev = vars.map(v => reversed.includes(v.name));
     items = items.map((it, j) => (rev[j] ? it.map(x => lo + hi - x) : it));
     if (items.some(it => S.sd(it) === 0)) { sec.error = 'Algún ítem tiene varianza 0 (todas las respuestas iguales). Exclúyelo.'; return sec; }
     const r = S.cronbach(items), n = r.n, a = r.alpha, om = S.omegaTotal(items[0].map((_, i) => items.map(it => it[i]))).omega;
@@ -1784,7 +1789,7 @@
     sec.tables.push(apaTable('Estadísticos de los ítems', ['Ítem', '<i>M</i>', '<i>DT</i>', 'Correlación ítem-total corregida', 'α si se elimina el ítem'],
       vars.map((v, j) => [esc(v.name) + (rev[j] ? ' (invertido)' : ''), f(r.stats[j].mean), f(r.stats[j].sd), r2s(r.stats[j].rit), isFinite(r.stats[j].alphaDel) ? nz(r.stats[j].alphaDel.toFixed(3)) : '—'])));
     let t = `La consistencia interna de la escala formada por ${vars.length} ítems fue ${qual}, α = ${nz(a.toFixed(2))}, IC 95 % [${nz(r.ci[0].toFixed(2))}, ${nz(r.ci[1].toFixed(2))}], ω = ${nz(om.toFixed(2))} (<i>n</i> = ${n}).`;
-    t += ` Las correlaciones ítem-total corregidas oscilaron entre ${r2s(Math.min(...r.stats.map(s => s.rit)))} y ${r2s(Math.max(...r.stats.map(s => s.rit)))}.`;
+    t += ` Las correlaciones ítem-total corregidas oscilaron entre ${r2s(minOf(r.stats.map(s => s.rit)))} y ${r2s(maxOf(r.stats.map(s => s.rit)))}.`;
     if (rev.some(Boolean)) t += ` ${list(vars.filter((_, j) => rev[j]).map(v => esc(v.name)))} se ${rev.filter(Boolean).length > 1 ? 'recodificaron' : 'recodificó'} de forma inversa antes del análisis.`;
     sec.text.push(t);
     const keys = vars.filter((_, j) => rev[j]).map(v => rq(v.name));
@@ -1871,7 +1876,7 @@
     sec.checks.push(chk(epv >= 10 ? 'ok' : 'no', `Sucesos por predictor: ${f(epv, 1)} (${ev} casos en la categoría menos frecuente para ${p - 1} coeficientes).${epv >= 10 ? ' Se cumple el criterio orientativo de ≥ 10.' : ' Por debajo de 10: el modelo puede ser inestable; reduce predictores.'}`));
     if (m.separation) sec.warn = 'Posible separación completa o casi completa: algún predictor clasifica los casos casi perfectamente y los coeficientes no son fiables. Consulta a un estadístico antes de continuar (puede necesitarse regresión de Firth).';
     sec.checks.push(chk(m.hl.p >= .05 ? 'ok' : 'no', `Bondad de ajuste (Hosmer-Lemeshow): χ²(${m.hl.df}) = ${f(m.hl.chi)}, ${pt(m.hl.p)}. ${m.hl.p >= .05 ? 'El modelo ajusta adecuadamente.' : 'Indica falta de ajuste.'}`));
-    if (multi) { const vif = S.ols(X, X.map((_, i) => i)).vif, maxV = Math.max(...vif.slice(1)); sec.checks.push(chk(maxV < 5 ? 'ok' : 'no', `Multicolinealidad: VIF máximo = ${f(maxV)}.${maxV < 5 ? ' Sin problemas.' : ' Revisa los predictores correlacionados.'}`)); }
+    if (multi) { const vif = S.ols(X, X.map((_, i) => i)).vif, maxV = maxOf(vif.slice(1)); sec.checks.push(chk(maxV < 5 ? 'ok' : 'no', `Multicolinealidad: VIF máximo = ${f(maxV)}.${maxV < 5 ? ' Sin problemas.' : ' Revisa los predictores correlacionados.'}`)); }
     const sens = m.tab[1][1] / (m.tab[1][0] + m.tab[1][1]), spec = m.tab[0][0] / (m.tab[0][0] + m.tab[0][1]);
     if (Math.min(sens, spec) < .2) sec.checks.push(chk('no', `Clasificación desequilibrada: el modelo solo identifica correctamente al ${f(Math.min(sens, spec) * 100, 1)} % de los casos «${sens < spec ? ev1 : ev0}». El % correcto global (${f(m.acc * 100, 1)} %) refleja sobre todo la categoría mayoritaria: no lo presentes como capacidad predictiva.`));
     sec.checks.push(chk('info', 'Linealidad del logit: se asume una relación lineal entre cada predictor continuo y el logaritmo de las odds (puede comprobarse con la prueba de Box-Tidwell).'));
@@ -2000,7 +2005,7 @@
     if (cells.flat().some(c => c.length < 2)) { sec.error = 'Alguna combinación de niveles tiene menos de 2 casos: el ANOVA factorial no puede estimarse. Agrupa niveles o usa un único factor.'; return sec; }
     const y = idx.map(i => yv[i]), r = S.anova2(y, idx.map(i => la.indexOf(ca[i])), idx.map(i => lb.indexOf(cb[i])), la.length, lb.length);
     if (!r) { sec.error = 'No se pudo estimar el modelo.'; return sec; }
-    const lev = S.levene(cells.flat()), sw = S.shapiro(r.resid), n = y.length, sizes = cells.flat().map(c => c.length), balanced = Math.max(...sizes) === Math.min(...sizes);
+    const lev = S.levene(cells.flat()), sw = S.shapiro(r.resid), n = y.length, sizes = cells.flat().map(c => c.length), balanced = maxOf(sizes) === minOf(sizes);
     sec.decision = `Se ajustó un ANOVA factorial ${la.length}×${lb.length} con sumas de cuadrados de tipo III (como SPSS) y ${n} casos.`;
     sec.why.push(`Variable dependiente: ${esc(yName)} → cuantitativa.`);
     sec.why.push(`Dos factores entre sujetos: ${esc(aName)} (${la.length} niveles) y ${esc(bName)} (${lb.length} niveles).`);
@@ -2008,7 +2013,7 @@
     sec.why.push(`Se usan sumas de cuadrados de tipo III, adecuadas ${balanced ? 'también' : 'especialmente'} cuando los grupos ${balanced ? 'están equilibrados' : 'tienen tamaños distintos'}.`);
     sec.checks.push(chk(lev.p >= .05 ? 'ok' : 'no', `Homogeneidad de varianzas entre las ${la.length * lb.length} casillas (Levene): <i>F</i>(${lev.df1}, ${lev.df2}) = ${f(lev.F)}, ${pt(lev.p)}.${lev.p >= .05 ? ' Se cumple.' : ' No se cumple: interpreta con cautela, sobre todo si los tamaños de las casillas difieren.'}`));
     if (sw) sec.checks.push(chk(sw.p >= .05 ? 'ok' : n >= 100 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}.${sw.p >= .05 ? '' : n >= 100 ? ' Con muestras grandes el ANOVA es robusto a desviaciones moderadas.' : ' No se cumple y la muestra es pequeña.'}`));
-    sec.checks.push(chk(balanced ? 'ok' : 'info', `Tamaño de las casillas: entre ${Math.min(...sizes)} y ${Math.max(...sizes)} casos${balanced ? ' (diseño equilibrado).' : ' (diseño no equilibrado).'}`));
+    sec.checks.push(chk(balanced ? 'ok' : 'info', `Tamaño de las casillas: entre ${minOf(sizes)} y ${maxOf(sizes)} casos${balanced ? ' (diseño equilibrado).' : ' (diseño no equilibrado).'}`));
     sec.alt = 'Si no se cumple la homogeneidad con casillas desiguales, errores robustos o un modelo lineal generalizado.';
     const rows = []; la.forEach((a, i) => lb.forEach((b, j) => { const d = S.describe(cells[i][j]); rows.push([j === 0 ? esc(a) : '', esc(b), d.n, f(d.mean), f(d.sd)]); }));
     sec.tables.push(apaTable(`Estadísticos descriptivos de ${yName} por ${aName} y ${bName}`, [esc(aName), esc(bName), '<i>n</i>', '<i>M</i>', '<i>DT</i>'], rows));
@@ -2064,7 +2069,7 @@
     if (L.some(k => k < 2)) { sec.error = 'Cada factor necesita al menos 2 niveles con datos.'; return sec; }
     const Fm = idx.map(i => fc.map((c, f) => lv[f].indexOf(c[i]))), Ys = Yv.map(y => idx.map(i => y[i])), C = cc.map(c => idx.map(i => c[i]));
     const cellOf = r => r.join('|'), cells = new Map(); Fm.forEach((r, q) => { const k_ = cellOf(r); if (!cells.has(k_)) cells.set(k_, []); cells.get(k_).push(q); });
-    const nCells = L.reduce((a, b) => a * b, 1), minCell = Math.min(...[...cells.values()].map(c => c.length));
+    const nCells = L.reduce((a, b) => a * b, 1), minCell = minOf([...cells.values()].map(c => c.length));
     if (cells.size < nCells || minCell < 2) { sec.error = 'Hay combinaciones de niveles sin datos o con un solo caso. Agrupa niveles o usa un único factor.'; return sec; }
     const r = S.manova(Ys, Fm, L, C); if (!r) { sec.error = 'No se pudo estimar el modelo (alguna variable dependiente es combinación exacta de otras).'; return sec; }
     const tName = t => (t.cov !== undefined ? esc(cNames[t.cov]) : t.factors.map(f => esc(fNames[f])).join(' × '));
@@ -2076,7 +2081,7 @@
     if (minCell > p) { const bm = S.boxM(groups); sec.checks.push(chk(bm.p >= .001 ? 'ok' : 'no', `Igualdad de matrices de covarianzas (M de Box): χ²(${bm.df}) = ${f(bm.chi)}, ${pt(bm.p)}.${bm.p >= .001 ? ' Se cumple (criterio habitual: p > .001).' : ' No se cumple: por eso se interpreta la traza de Pillai, más robusta.'}`)); }
     yNames.forEach((nm, d) => { const lev = S.levene(groups.map(G => G.map(row => row[d]))); sec.checks.push(chk(lev.p >= .05 ? 'ok' : 'no', `Homogeneidad de varianzas en ${esc(nm)} (Levene): <i>F</i>(${lev.df1}, ${lev.df2}) = ${f(lev.F)}, ${pt(lev.p)}.`)); });
     const R_ = S.corMatrix(Ys[0].map((_, i) => Ys.map(y => y[i]))), rs = []; for (let a = 0; a < p; a++) for (let b = a + 1; b < p; b++) rs.push(R_[a][b]);
-    sec.checks.push(chk(Math.max(...rs.map(Math.abs)) < .9 ? 'info' : 'no', `Correlaciones entre las variables dependientes: de ${r2s(Math.min(...rs))} a ${r2s(Math.max(...rs))}.${Math.max(...rs.map(Math.abs)) >= .9 ? ' Hay correlaciones muy altas (≥ .90): posible multicolinealidad; valora quitar alguna variable.' : ' La MANOVA tiene más sentido con correlaciones moderadas.'}`));
+    sec.checks.push(chk(maxOf(rs.map(Math.abs)) < .9 ? 'info' : 'no', `Correlaciones entre las variables dependientes: de ${r2s(minOf(rs))} a ${r2s(maxOf(rs))}.${maxOf(rs.map(Math.abs)) >= .9 ? ' Hay correlaciones muy altas (≥ .90): posible multicolinealidad; valora quitar alguna variable.' : ' La MANOVA tiene más sentido con correlaciones moderadas.'}`));
     // descriptivos por casilla
     const dRows = [...cells.entries()].map(([k_, qs]) => [k_.split('|').map((l, f) => esc(lv[f][+l])).join(' · '), qs.length].concat(Ys.map(y => { const x = qs.map(q => y[q]); return `${f(S.mean(x))} (${f(S.sd(x))})`; })));
     sec.tables.push(apaTable('Medias (desviaciones típicas) por grupo', [fNames.map(esc).join(' · '), '<i>n</i>'].concat(yNames.map(esc)), dRows));
@@ -2127,7 +2132,7 @@
     const lev = S.levene([...cells.values()]), sw = S.shapiro(g.resid), sizes = [...cells.values()].map(c => c.length);
     sec.checks.push(chk(lev.p >= .05 ? 'ok' : 'no', `Homogeneidad de varianzas entre las ${nCells} casillas (Levene): <i>F</i>(${lev.df1}, ${lev.df2}) = ${f(lev.F)}, ${pt(lev.p)}.${lev.p >= .05 ? ' Se cumple.' : ' No se cumple: interpreta con cautela, sobre todo con casillas desiguales.'}`));
     if (sw) sec.checks.push(chk(sw.p >= .05 ? 'ok' : n >= 100 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): <i>W</i> = ${nz(sw.W.toFixed(3))}, ${pt(sw.p)}.${sw.p >= .05 ? '' : n >= 100 ? ' Con muestras grandes el ANOVA es robusto a desviaciones moderadas.' : ' No se cumple y la muestra es pequeña.'}`));
-    sec.checks.push(chk(Math.max(...sizes) === Math.min(...sizes) ? 'ok' : 'info', `Tamaño de las casillas: entre ${Math.min(...sizes)} y ${Math.max(...sizes)} casos.`));
+    sec.checks.push(chk(maxOf(sizes) === minOf(sizes) ? 'ok' : 'info', `Tamaño de las casillas: entre ${minOf(sizes)} y ${maxOf(sizes)} casos.`));
     if (cNames.length) { // homogeneidad de pendientes: ganancia al añadir las interacciones factor × covariable al modelo
       const codes = (f, l) => Array.from({ length: L[f] - 1 }, (_, j) => (l === j ? 1 : l === L[f] - 1 ? -1 : 0));
       const subs = []; for (let mask = 1; mask < (1 << L.length); mask++) subs.push([...Array(L.length).keys()].filter(f => mask & (1 << f)));
@@ -2235,7 +2240,7 @@
     else sec.checks.push(chk(n >= 100 ? 'info' : 'no', `Normalidad de los residuos (Shapiro-Wilk): ${swr ? `<i>W</i> = ${nz(swr.W.toFixed(3))}, ${pt(swr.p)}` : 'no calculable'}.${n >= 100 ? ' Con muestras grandes la regresión es robusta a desviaciones moderadas.' : ' No se cumple: interpreta los p-valores con cautela.'}`));
     sec.checks.push(chk(het ? 'no' : 'ok', `Homocedasticidad (Breusch-Pagan): χ²(${m.bp.df}) = ${f(m.bp.LM)}, ${pt(m.bp.p)}. ${het ? 'No se cumple: se usan errores robustos HC3.' : 'Se cumple.'}`));
     sec.checks.push(chk(m.dw >= 1.5 && m.dw <= 2.5 ? 'ok' : 'no', `Independencia de los residuos (Durbin-Watson) = ${f(m.dw)} (aceptable entre 1.5 y 2.5). Solo es relevante si el orden de las filas tiene sentido, por ejemplo temporal.`));
-    if (multi) { const maxV = Math.max(...m.vif.slice(1)); sec.checks.push(chk(maxV < 5 ? 'ok' : 'no', `Multicolinealidad: VIF máximo = ${f(maxV)}. ${maxV < 5 ? 'Sin problemas (VIF < 5).' : maxV < 10 ? 'Moderada (VIF entre 5 y 10): revisa los predictores correlacionados.' : 'Grave (VIF ≥ 10): elimina o combina predictores.'}`)); }
+    if (multi) { const maxV = maxOf(m.vif.slice(1)); sec.checks.push(chk(maxV < 5 ? 'ok' : 'no', `Multicolinealidad: VIF máximo = ${f(maxV)}. ${maxV < 5 ? 'Sin problemas (VIF < 5).' : maxV < 10 ? 'Moderada (VIF entre 5 y 10): revisa los predictores correlacionados.' : 'Grave (VIF ≥ 10): elimina o combina predictores.'}`)); }
     const infl = m.cook.filter(c => c > 4 / n).length, big = m.cook.filter(c => c > 1).length;
     sec.checks.push(chk(big ? 'no' : 'info', `Casos influyentes (distancia de Cook): ${infl} casos superan 4/<i>n</i>${big ? ` y ${big} superan 1, lo que indica una influencia excesiva: revísalos` : '; ninguno supera 1'}.`));
     if (n < 10 * (p - 1)) sec.checks.push(chk('no', `Tamaño muestral: ${n} casos para ${p - 1} coeficientes. Se recomiendan al menos 10–15 casos por predictor.`));
