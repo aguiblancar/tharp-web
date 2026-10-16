@@ -3,5 +3,5 @@
    Cuando exista DOI (Zenodo), escribirlo en «doi» (sin https://doi.org/). */
 (function (root) {
   'use strict';
-  root.TharpVersion = { version: '1.0', year: 2026, url: 'https://tharp.es', doi: '' };
+  root.TharpVersion = { version: '1.0.1', year: 2026, url: 'https://tharp.es', doi: '' };
 })(window);

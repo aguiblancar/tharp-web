@@ -1,0 +1,9 @@
+{
+  "title": "Tharp",
+  "upload_type": "software",
+  "description": "<p>Aplicación web de análisis estadístico para investigación. Comprueba los supuestos, elige la prueba, genera tablas y redacción en formato APA y un script de R que reproduce cada análisis. Todos los cálculos se hacen en el navegador con un motor propio validado frente a R (22 grupos de análisis, 7403 valores comparados).</p>",
+  "creators": [{ "name": "Equipo de Tharp" }],
+  "keywords": ["estadística", "análisis de datos", "APA", "investigación", "R"],
+  "language": "spa",
+  "related_identifiers": [{ "identifier": "https://tharp.es", "relation": "isDocumentedBy", "resource_type": "other" }]
+}

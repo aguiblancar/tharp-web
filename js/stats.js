@@ -1566,8 +1566,13 @@
       return { L, Phi, Psi, Sig };
     };
     const ldS = Math.log(det(S));
-    const F = th => { const { Sig } = build(th), d = det(Sig); if (!(d > 0)) return 1e10; const Si = inv(Sig); if (!Si) return 1e10;
-      return Math.log(d) + sum(S.map((r, a) => sum(r.map((v, b) => v * Si[b][a])))) - ldS - p; };
+    // log|Σ| por Cholesky: null si Σ no es definida positiva (det > 0 no basta: dos autovalores negativos también lo dan)
+    const logdetPD = A => { const n = A.length, Lc = Array.from({ length: n }, () => new Array(n).fill(0)); let ld = 0;
+      for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s = A[i][j]; for (let k = 0; k < j; k++) s -= Lc[i][k] * Lc[j][k];
+        if (i === j) { if (!(s > 1e-12)) return null; Lc[i][i] = Math.sqrt(s); ld += 2 * Math.log(Lc[i][i]); } else Lc[i][j] = s / Lc[j][j]; }
+      return ld; };
+    const F = th => { const { Sig } = build(th), ld = logdetPD(Sig); if (ld === null) return 1e10; const Si = inv(Sig); if (!Si) return 1e10;
+      return ld + sum(S.map((r, a) => sum(r.map((v, b) => v * Si[b][a])))) - ldS - p; };
     const grad = th => { const { L, Phi, Sig } = build(th), Si = inv(Sig), D = Sig.map((r, a) => r.map((v, b) => v - S[a][b]));
       const Om = matMul(matMul(Si, D), Si), OL = matMul(Om, L), LOL = matMul(tr(L), OL), OLP = matMul(OL, Phi);
       return P.map(q => (q.t === 'l' ? 2 * OLP[q.j][q.k] : q.t === 'f' ? (q.k === q.l ? LOL[q.k][q.k] : 2 * LOL[q.k][q.l]) : Om[q.j][q.j])); };
@@ -1577,11 +1582,15 @@
       if (q.t === 'l') return S[q.j][mk] / Math.max(S[mk][mk] / 2, 1e-6);
       if (q.k === q.l) return S[mk][mk] / 2; return 0; });
     // BFGS con búsqueda lineal por retroceso
-    let th = th0.slice(), f0 = F(th), g = grad(th), Hn = ident(P.length), conv = false, it = 0;
+    let th = th0.slice(), f0 = F(th), g = grad(th), Hn = ident(P.length), conv = false, it = 0, fresh = true;
     for (; it < 2000; it++) {
       const d = Hn.map(r => -sum(r.map((v, k) => v * g[k]))); let a = 1, th1, f1;
       const slope = sum(d.map((v, k) => v * g[k])); if (slope >= 0) { Hn = ident(P.length); continue; }
-      for (let k = 0; k < 60; k++) { th1 = th.map((v, i) => v + a * d[i]); f1 = F(th1); if (f1 <= f0 + 1e-4 * a * slope) break; a /= 2; }
+      let ok = false;
+      for (let k = 0; k < 60; k++) { th1 = th.map((v, i) => v + a * d[i]); f1 = F(th1); if (f1 <= f0 + 1e-4 * a * slope) { ok = true; break; } a /= 2; }
+      // sin mejora: nunca se acepta un paso que empeore el ajuste; se reinicia la dirección (gradiente) o se termina si ya lo era
+      if (!ok) { if (fresh) { conv = Math.max(...g.map(Math.abs)) < 1e-6; break; } Hn = ident(P.length); fresh = true; continue; }
+      fresh = false;
       const g1 = grad(th1), s = th1.map((v, i) => v - th[i]), yv = g1.map((v, i) => v - g[i]), sy = sum(s.map((v, i) => v * yv[i]));
       if (sy > 1e-12) { const Hy = Hn.map(r => sum(r.map((v, k) => v * yv[k]))), yHy = sum(yv.map((v, i) => v * Hy[i]));
         Hn = Hn.map((r, i) => r.map((v, j) => v + (sy + yHy) * s[i] * s[j] / (sy * sy) - (Hy[i] * s[j] + s[i] * Hy[j]) / sy)); }

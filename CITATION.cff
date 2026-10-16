@@ -1,0 +1,24 @@
+# Cómo citar Tharp (formato Citation File Format). GitHub y Zenodo lo leen automáticamente.
+# La versión debe coincidir con web/js/version.js (scripts/publicar.sh lo comprueba).
+cff-version: 1.2.0
+message: "Si usas Tharp en un trabajo, cítalo así. Cita también R y los paquetes cuyos procedimientos se reproducen."
+type: software
+title: Tharp
+abstract: >-
+  Aplicación web de análisis estadístico para investigación. Comprueba los supuestos, elige la prueba,
+  genera tablas y redacción en formato APA y un script de R que reproduce cada análisis.
+  Todos los cálculos se hacen en el navegador con un motor propio validado frente a R.
+authors:
+  - name: Equipo de Tharp
+    email: info@tharp.es
+    website: "https://tharp.es"
+version: 1.0.1
+date-released: "2026-10-16"
+url: "https://tharp.es"
+repository-code: "https://github.com/aguiblancar/tharp-web"
+keywords:
+  - estadística
+  - análisis de datos
+  - APA
+  - investigación
+  - R

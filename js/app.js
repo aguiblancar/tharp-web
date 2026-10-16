@@ -1413,13 +1413,16 @@
     const facIdx = []; let o = 0; spec.forEach(fc => { facIdx.push(fc.items.map(() => o++)); });
     const r = S.cfa(X, facIdx), m = spec.length;
     if (!isFinite(r.chi)) { sec.error = 'El modelo no pudo estimarse (matriz de covarianzas singular o modelo no identificado).'; return sec; }
+    const sat = r.df === 0;   // modelo saturado (p. ej., un factor con 3 ítems): reproduce exactamente las covarianzas y su ajuste no se puede contrastar
     const good = r.cfi >= .95 && r.tli >= .95 && r.rmsea <= .06 && r.srmr <= .08, ok = r.cfi >= .90 && r.tli >= .90 && r.rmsea <= .08 && r.srmr <= .10;
-    const verdict = good ? 'bueno' : ok ? 'aceptable' : 'insuficiente';
+    const verdict = sat ? 'no evaluable (modelo saturado)' : good ? 'bueno' : ok ? 'aceptable' : 'insuficiente';
+    const ix = v => (isFinite(v) ? nz(v.toFixed(3)) : '—');
     sec.decision = `Se contrastó un modelo de ${m} factor${m > 1 ? 'es correlacionados' : ''} con ${p} ítems y ${n} casos completos, estimado por máxima verosimilitud.`;
     sec.why.push('El análisis factorial confirmatorio comprueba si los datos se ajustan a una estructura de factores definida de antemano (por la teoría o por estudios previos), a diferencia del exploratorio, que la descubre.');
     sec.why.push('Cada factor se identifica fijando a 1 la carga de su primer ítem (ítem marcador); por eso se interpretan sobre todo las cargas estandarizadas.');
     sec.why.push('El ajuste se valora con varios índices a la vez (Hu y Bentler, 1999): CFI y TLI ≥ .95, RMSEA ≤ .06 y SRMR ≤ .08 indican buen ajuste; CFI y TLI ≥ .90 y RMSEA ≤ .08, ajuste aceptable.');
-    sec.checks.push(chk(good ? 'ok' : ok ? 'info' : 'no', `Ajuste global ${verdict}: CFI = ${nz(r.cfi.toFixed(3))}, TLI = ${nz(r.tli.toFixed(3))}, RMSEA = ${nz(r.rmsea.toFixed(3))}, SRMR = ${nz(r.srmr.toFixed(3))}.`));
+    sec.checks.push(sat ? chk('info', 'Modelo saturado (0 grados de libertad): tiene tantos parámetros como varianzas y covarianzas, así que las reproduce exactamente y su ajuste no puede contrastarse. Las cargas y la fiabilidad sí son interpretables; para evaluar el ajuste hacen falta al menos 4 ítems por factor (o varios factores).')
+      : chk(good ? 'ok' : ok ? 'info' : 'no', `Ajuste global ${verdict}: CFI = ${nz(r.cfi.toFixed(3))}, TLI = ${nz(r.tli.toFixed(3))}, RMSEA = ${nz(r.rmsea.toFixed(3))}, SRMR = ${nz(r.srmr.toFixed(3))}.`));
     if (!r.conv) sec.warn = 'La estimación no convergió del todo: los resultados pueden no ser fiables. Revisa el modelo (ítems con muy poca relación con su factor) o la muestra.';
     if (r.heywood.length) sec.warn = `Caso Heywood: ${list(r.heywood.map(j => esc(all[j])))} ${r.heywood.length > 1 ? 'tienen' : 'tiene'} una varianza residual negativa, lo que indica un modelo mal especificado o una muestra pequeña. Los resultados no son interpretables tal cual.`;
     const weak = all.filter((_, j) => Math.abs(r.std[j]) < .4);
@@ -1432,8 +1435,9 @@
     sec.alt = 'Si el ajuste es insuficiente, revisa ítems con cargas bajas o un análisis factorial exploratorio previo. Con ítems ordinales, el estimador WLSMV en lavaan.';
     const crit = (v, g0, a0, inv) => (inv ? (v <= g0 ? 'bueno' : v <= a0 ? 'aceptable' : 'insuficiente') : (v >= g0 ? 'bueno' : v >= a0 ? 'aceptable' : 'insuficiente'));
     sec.tables.push(apaTable('Índices de ajuste del modelo', ['χ²', '<i>gl</i>', '<i>p</i>', 'CFI', 'TLI', 'RMSEA', 'IC 90 % RMSEA', 'SRMR', '<i>n</i>'],
-      [[f(r.chi), r.df, pv(r.pval), nz(r.cfi.toFixed(3)), nz(r.tli.toFixed(3)), nz(r.rmsea.toFixed(3)), `[${nz(r.rmseaCI[0].toFixed(3))}, ${nz(r.rmseaCI[1].toFixed(3))}]`, nz(r.srmr.toFixed(3)), n]],
-      `Valoración: CFI ${crit(r.cfi, .95, .90)}, TLI ${crit(r.tli, .95, .90)}, RMSEA ${crit(r.rmsea, .06, .08, true)}, SRMR ${crit(r.srmr, .08, .10, true)}. Estimación por máxima verosimilitud.`));
+      [[f(sat ? 0 : r.chi), r.df, sat ? '—' : pv(r.pval), sat ? '—' : ix(r.cfi), ix(r.tli), sat ? '—' : ix(r.rmsea), sat ? '—' : `[${ix(r.rmseaCI[0])}, ${ix(r.rmseaCI[1])}]`, sat ? '—' : ix(r.srmr), n]],
+      sat ? 'Modelo saturado (gl = 0): reproduce exactamente los datos, por lo que los índices de ajuste no son informativos. Estimación por máxima verosimilitud.'
+        : `Valoración: CFI ${crit(r.cfi, .95, .90)}, TLI ${crit(r.tli, .95, .90)}, RMSEA ${crit(r.rmsea, .06, .08, true)}, SRMR ${crit(r.srmr, .08, .10, true)}. Estimación por máxima verosimilitud.`));
     const rows = []; spec.forEach((fc, k) => fc.items.forEach((it, i) => { const j = facIdx[k][i], e = r.est.find(q => q.t === 'l' && q.j === j);
       rows.push([i === 0 ? `<b>${esc(fc.name)}</b>` : '', esc(it), e ? f(e.est, 3) : '1 (fijo)', e ? f(e.se, 3) : '—', e ? f(e.z) : '—', e ? pv(e.p) : '—', r2s(r.std[j]), nz((1 - r.std[j] ** 2).toFixed(2))]); }));
     sec.tables.push(apaTable('Cargas factoriales', ['Factor', 'Ítem', '<i>B</i>', '<i>EE</i>', '<i>z</i>', '<i>p</i>', 'β', 'Varianza residual (est.)'], rows, 'β = carga estandarizada. El primer ítem de cada factor fija la escala (carga = 1).'));
@@ -1441,7 +1445,7 @@
       'ω = fiabilidad compuesta (omega) a partir del AFC; los ítems con carga negativa (inversos) se consideran recodificados. AVE = varianza media extraída (≥ .50 indica validez convergente).'));
     if (m > 1) sec.tables.push(apaTable('Correlaciones entre factores', [''].concat(spec.map(fc => esc(fc.name))), spec.map((fc, a) => [esc(fc.name)].concat(spec.map((_, b) => (a === b ? '—' : b < a ? r2s(r.facCor[a][b]) : ''))))));
     let t = `Se realizó un análisis factorial confirmatorio por máxima verosimilitud para contrastar un modelo de ${m} factor${m > 1 ? 'es correlacionados' : ''} (${spec.map(fc => `${esc(fc.name)}: ${fc.items.length} ítems`).join('; ')}) con ${n} participantes. `;
-    t += `El ajuste del modelo fue ${verdict}, χ²(${r.df}) = ${f(r.chi)}, ${pt(r.pval)}, CFI = ${nz(r.cfi.toFixed(2))}, TLI = ${nz(r.tli.toFixed(2))}, RMSEA = ${nz(r.rmsea.toFixed(3))}, IC 90 % [${nz(r.rmseaCI[0].toFixed(3))}, ${nz(r.rmseaCI[1].toFixed(3))}], SRMR = ${nz(r.srmr.toFixed(3))}. `;
+    t += sat ? 'Al tratarse de un modelo saturado (0 grados de libertad), su ajuste no puede contrastarse. ' : `El ajuste del modelo fue ${verdict}, χ²(${r.df}) = ${f(r.chi)}, ${pt(r.pval)}, CFI = ${nz(r.cfi.toFixed(2))}, TLI = ${nz(r.tli.toFixed(2))}, RMSEA = ${nz(r.rmsea.toFixed(3))}, IC 90 % [${nz(r.rmseaCI[0].toFixed(3))}, ${nz(r.rmseaCI[1].toFixed(3))}], SRMR = ${nz(r.srmr.toFixed(3))}. `;
     const absS = r.std.map(Math.abs); t += `Las cargas estandarizadas oscilaron entre ${nz(Math.min(...absS).toFixed(2))} y ${nz(Math.max(...absS).toFixed(2))}${neg.length ? ' en valor absoluto' : ''}`;
     t += `, y la fiabilidad compuesta fue ${list(spec.map((fc, k) => `${m > 1 ? `${esc(fc.name)} ` : ''}ω = ${nz(r.rel[k].omega.toFixed(2))}`))}.`;
     if (m > 1) { const cs = []; for (let a = 0; a < m; a++) for (let b = 0; b < a; b++) cs.push(r.facCor[a][b]); t += ` Las correlaciones entre factores oscilaron entre ${r2s(Math.min(...cs))} y ${r2s(Math.max(...cs))}.`; }
