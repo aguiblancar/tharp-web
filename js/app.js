@@ -38,7 +38,7 @@
     if (v === null || v === undefined) return null;
     if (typeof v === 'number') return isFinite(v) ? v : null;
     if (typeof v === 'boolean') return v ? 'Sí' : 'No';
-    if (v instanceof Date) return v.toISOString().slice(0, 10);
+    if (v instanceof Date) return isNaN(v) ? null : `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`;   // fecha local (toISOString daría el día anterior al este de UTC)
     const s = String(v).trim(); return MISSING.has(s.toLowerCase()) ? null : s;
   }
   function toNum(v) {
@@ -71,7 +71,8 @@
     catch (e) { return { text: new TextDecoder('windows-1252').decode(buf), enc: 'latin1' }; }
   }
   async function loadFile(file) {
-    $('#loadErr').innerHTML = '';
+    // aviso mientras se lee (los archivos grandes tardan) y una pausa breve para que el navegador lo muestre antes de bloquearse
+    $('#loadErr').innerHTML = `<p class="muted small" style="text-align:center">Leyendo ${esc(file.name)}…</p>`; await new Promise(r => setTimeout(r, 30));
     try {
       const ext = file.name.split('.').pop().toLowerCase();
       if (['csv', 'tsv', 'txt'].includes(ext)) {
@@ -80,7 +81,7 @@
       }
       else if (['xlsx', 'xls', 'ods', 'xlsm'].includes(ext)) {
         if (!window.XLSX) throw new Error('No se pudo cargar el lector de Excel. Recarga la página e inténtalo de nuevo.');
-        ST.wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        ST.wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
         const name = ST.wb.SheetNames.find(n => (XLSX.utils.sheet_to_json(ST.wb.Sheets[n], { header: 1, blankrows: false }).length > 1)) || ST.wb.SheetNames[0];
         loadSheet(file.name, name);
       } else if (ext === 'jasp') {
@@ -93,15 +94,25 @@
         const r = await window.TharpSav.read(await file.arrayBuffer());
         ST.source = r.version; ST.sourceApp = r.app; ST.sourceNotes = r.notes; setData(file.name, r.aoa, null, r.hints);
       } else throw new Error('Formato no admitido. Usa un archivo .xlsx, .xls, .csv, .sav (SPSS) o .jasp.');
+      if (/Leyendo /.test($('#loadErr').textContent)) $('#loadErr').innerHTML = '';
     } catch (e) { $('#loadErr').innerHTML = `<div class="err">${esc(e.message || e)}</div>`; }
   }
   function loadSheet(fileName, sheet) {
     ST.sheet = sheet;
-    setData(fileName, XLSX.utils.sheet_to_json(ST.wb.Sheets[sheet], { header: 1, raw: true, defval: null, blankrows: false }));
+    const ws = ST.wb.Sheets[sheet], aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: false });
+    // filas físicas (con las vacías) para que el script R se salte las mismas filas de título que Tharp
+    ST.xlsRows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: null, blankrows: true }).map(r => JSON.stringify(r.map(norm)));
+    setData(fileName, aoa);
   }
   function setData(fileName, aoa, defaults, hints) {
+    if (!/\.(xlsx|xls|ods|xlsm)$/i.test(fileName)) ST.xlsRows = null;
     if (!hints) ST.source = '';
     if (!aoa || aoa.length < 2) throw new Error('El archivo no contiene datos: necesita una fila de nombres y al menos una fila de datos.');
+    // Excel con un título (u otras filas con una sola celda) encima de la cabecera: la cabecera es la primera fila con al menos la mitad de las columnas
+    const isXls = /\.(xlsx|xls|ods|xlsm)$/i.test(fileName), filled = r => r.filter(v => v !== null && v !== undefined && String(v).trim() !== '').length;
+    ST.skip = 0; ST.skipPhys = 0;
+    if (isXls) { const w0 = maxOf(aoa.map(r => r.length)), k = aoa.slice(0, 10).findIndex(r => filled(r) >= Math.max(2, Math.ceil(w0 / 2)));
+      if (k > 0 && aoa.slice(0, k).every(r => filled(r) <= 1)) { const head = JSON.stringify(aoa[k].map(norm)); ST.skip = k; ST.skipPhys = Math.max(0, (ST.xlsRows || []).indexOf(head)); aoa = aoa.slice(k); } }
     const width = maxOf(aoa.map(r => r.length)), seen = {};
     const headers = Array.from({ length: width }, (_, i) => {
       let h = aoa[0][i] === null || aoa[0][i] === undefined || String(aoa[0][i]).trim() === '' ? 'var_' + (i + 1) : String(aoa[0][i]).trim();
@@ -109,7 +120,17 @@
     });
     const rows = aoa.slice(1).map(r => headers.map((_, i) => norm(r[i]))).filter(r => r.some(v => v !== null));
     if (!rows.length) throw new Error('No se han encontrado filas con datos.');
-    Object.assign(ST, { fileName, headers, rows, defaults: defaults || null, ordOpen: null });
+    // CSV con separador de miles (7.626,54 o 1.234.567; en inglés 7,626.54): si una columna lo usa de forma inequívoca, se lee entera así
+    ST.thousands = {};
+    if (/\.(csv|tsv|txt)$/i.test(fileName)) {
+      const TH = { es: [/^-?\d{1,3}(\.\d{3})+,\d+$/, /^-?\d{1,3}(\.\d{3}){2,}$/], en: [/^-?\d{1,3}(,\d{3})+\.\d+$/, /^-?\d{1,3}(,\d{3}){2,}$/] };
+      headers.forEach((h, c) => { const vals = rows.map(r => r[c]).filter(v => typeof v === 'string').map(v => v.replace(/\s/g, ''));
+        const kind = ['es', 'en'].find(k => vals.some(v => TH[k].some(re => re.test(v)))); if (!kind) return;
+        const conv = x => { const t = kind === 'es' ? x.replace(/\./g, '').replace(',', '.') : x.replace(/,/g, ''); return /^-?\d*\.?\d+$/.test(t) ? Number(t) : null; };
+        if (vals.filter(v => conv(v) !== null).length < .95 * vals.length) return;
+        rows.forEach(r => { if (typeof r[c] === 'string') { const n = conv(r[c].replace(/\s/g, '')); if (n !== null) r[c] = n; } }); ST.thousands[h] = kind; });
+    }
+    Object.assign(ST, { fileName, headers, rawHeaders: Array.from({ length: width }, (_, i) => (aoa[0][i] === null || aoa[0][i] === undefined ? '' : String(aoa[0][i]))), rows, defaults: defaults || null, ordOpen: null });
     ST.vars = headers.map((name, i) => detect(name, i, rows.map(r => r[i]), hints && hints[String(aoa[0][i])])).filter(v => !(v.valid === 0 && /^var_\d+$/.test(v.name)));
     ST.base = { headers: headers.slice(), rows: rows.map(r => r.slice()), vars: ST.vars.map(v => v.name) }; ST.tf = []; renderTf();
     renderVars(); show(2);
@@ -164,6 +185,9 @@
       if (hint.type === 'cat' && isId && uniqAll === valid.length) { v.type = 'ign'; v.note = ['Identificador']; }
       else { v.type = hint.type === 'num' && okN.length / valid.length < .95 ? 'cat' : hint.type; v.note = [hint.note].concat(v.nonNum && v.type === 'num' ? [v.nonNum + ' valores no numéricos se tratarán como perdidos'] : []); }
     }
+    // una variable con el mismo valor en todos los casos no aporta información: se ignora y se explica (la persona puede cambiarla)
+    if (valid.length && valid.every(x => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x))) { v.type = 'ign'; v.note = ['Fecha (no se analiza)']; }
+    if (valid.length && uniq === 1 && v.type !== 'ign') { v.type = 'ign'; v.note = [`Constante: vale ${String(valid[0]).slice(0, 20)} en todos los casos`]; }
     v.labelled = !!(hint && hint.labels); v.auto = v.type;
     // orden de las categorías: el de las etiquetas del archivo de origen o el de una escala ordinal reconocida
     const present = [...new Set(valid.map(String))];
@@ -587,10 +611,11 @@
     }
     sec.text.push(textParts.join(' '));
     const NN = nums.map(v => rq(v.name)).join(', ');
-    sec.code = `# Descriptivos\n${nums.length ? `psych::describe(datos[, c(${NN})], type = 2, quant = c(.25, .75))  # asimetría y curtosis como SPSS\n` +
-      `t(sapply(datos[, c(${NN})], function(x) { x <- x[!is.na(x)]; s <- shapiro.test(x); l <- nortest::lillie.test(x); c(W = unname(s$statistic), p_SW = s$p.value, D = unname(l$statistic), p_Lilliefors = l$p.value) }))  # normalidad\n` +
-      `t(sapply(datos[, c(${NN})], function(x) { n <- sum(!is.na(x)); es <- sqrt(6 * n * (n - 1) / ((n - 2) * (n + 1) * (n + 3))); c(EE_asimetria = es, EE_curtosis = 2 * es * sqrt((n^2 - 1) / ((n - 3) * (n + 5)))) }))  # EE como SPSS\n` +
-      `boxplot(datos[, c(${NN})])\n` + (G ? `psych::describeBy(datos[, c(${NN})], group = datos[[${rq(gName)}]], mat = TRUE)\n` : '') : ''}` +
+    sec.code = `# Descriptivos\n${nums.length ? `psych::describe(datos[, c(${NN}), drop = FALSE], type = 2, quant = c(.25, .75))  # asimetría y curtosis como SPSS\n` +
+      `t(sapply(datos[, c(${NN}), drop = FALSE], function(x) { x <- x[!is.na(x)]; s <- if (length(x) >= 3 && length(x) <= 5000 && diff(range(x)) > 0) shapiro.test(x) else list(statistic = NA, p.value = NA); l <- if (length(x) >= 5 && diff(range(x)) > 0) nortest::lillie.test(x) else list(statistic = NA, p.value = NA)
+  c(W = unname(s$statistic), p_SW = s$p.value, D = unname(l$statistic), p_Lilliefors = l$p.value) }))  # normalidad (cada prueba, si hay casos suficientes)\n` +
+      `t(sapply(datos[, c(${NN}), drop = FALSE], function(x) { n <- sum(!is.na(x)); es <- sqrt(6 * n * (n - 1) / ((n - 2) * (n + 1) * (n + 3))); c(EE_asimetria = es, EE_curtosis = 2 * es * sqrt((n^2 - 1) / ((n - 3) * (n + 5)))) }))  # EE como SPSS\n` +
+      `boxplot(datos[, c(${NN}), drop = FALSE])\n` + (G ? `psych::describeBy(datos[, c(${NN}), drop = FALSE], group = datos[[${rq(gName)}]], mat = TRUE)\n` : '') : ''}` +
       cats.map(v => `t <- table(datos$${rn(v.name)}); cbind(n = t, pct = round(prop.table(t) * 100, 1), acum = round(cumsum(prop.table(t)) * 100, 1))`).join('\n');
     return sec;
   }
@@ -634,6 +659,7 @@
       `${sym} de ${name}${partial ? `, controlando por ${list(zNames.map(esc))}` : ''}. <i>n</i> = ${nmin === nmax ? nmin : nmin + '–' + nmax} (eliminación por parejas). * <i>p</i> < .05. ** <i>p</i> < .01. *** <i>p</i> < .001.`, 'corr'));
     sec.checks.push(skewed.length ? chk(P ? 'no' : 'ok', `Asimetría marcada en ${list(skewed.map(v => esc(v.name)))}${P ? ': considera usar Spearman.' : ': por eso se usa Spearman.'}`) : chk('ok', 'Ninguna variable presenta asimetría marcada.'));
     sec.checks.push(chk('info', 'Linealidad: revisa el diagrama de dispersión. Una correlación cercana a 0 no descarta relaciones no lineales (por ejemplo, en forma de U).'));
+    const perf = pairs.filter(q => Math.abs(q.c.r) > .9999); if (perf.length) sec.checks.push(chk('no', `Correlación perfecta (±1) entre ${list(perf.map(q => `${esc(vars[q.i].name)} – ${esc(vars[q.j].name)}`))}: suele indicar que una variable está repetida o se calculó a partir de la otra. Revisa los datos.`));
     if (pairs.length > 10) sec.checks.push(chk('no', `Se han calculado ${pairs.length} correlaciones: con tantas pruebas aumenta la probabilidad de falsos positivos. Considera una corrección (por ejemplo, Holm) o interpreta solo las hipótesis planteadas a priori.`));
     const sig = pairs.filter(p => p.c.p < .05).sort((a, b) => Math.abs(b.c.r) - Math.abs(a.c.r));
     let t = `Se calcularon las correlaciones ${partial ? 'parciales ' : ''}de ${name} entre ${k} variables (${pairs.length} ${pairs.length === 1 ? 'par' : 'pares'})${partial ? `, controlando por ${list(zNames.map(esc))}` : ''}. `;
@@ -1391,7 +1417,7 @@
       cut.length > 25 ? `Se muestra uno de cada ${stepK} cortes posibles.` : ''));
     sec.charts.push(fig(`Curva ROC${res.length > 1 ? '' : ` de ${res[0].nm}`}`, CH.rocCurve(res.map(o => ({ name: o.nm, auc: o.r.auc, pts: o.r.pts })), res.length === 1 ? res[0].r.best : null), res.length > 1 ? CH.legend(res.map(o => o.nm)) : ''));
     sec.text.push(res.map(o => { const b = o.r.best;
-      return `El área bajo la curva ROC de ${esc(o.nm)} fue ${nz(o.r.auc.toFixed(2))}, IC 95 % [${nz(o.r.ci[0].toFixed(2))}, ${nz(o.r.ci[1].toFixed(2))}], ${pt(o.r.p)}, lo que indica una capacidad de discriminación ${lev(o.r.auc)} entre «${esc(pos)}» y «${esc(neg)}». El punto de corte óptimo según el índice de Youden (${o.flip ? '≤' : '≥'} ${ct(o.flip ? -b.t : b.t)}) ofreció una sensibilidad de ${f(b.se * 100, 1)} % y una especificidad de ${f(b.sp * 100, 1)} %.`; }).join(' '));
+      return `El área bajo la curva ROC de ${esc(o.nm)} fue ${nz(o.r.auc.toFixed(2))}, IC 95 % [${nz(o.r.ci[0].toFixed(2))}, ${nz(o.r.ci[1].toFixed(2))}], ${pt(o.r.p)}, lo que indica una capacidad de discriminación ${lev(o.r.auc)} entre «${esc(pos)}» y «${esc(neg)}». ${isFinite(b.t) ? `El punto de corte óptimo según el índice de Youden (${o.flip ? '≤' : '≥'} ${ct(o.flip ? -b.t : b.t)}) ofreció una sensibilidad de ${f(b.se * 100, 1)} % y una especificidad de ${f(b.sp * 100, 1)} %.` : 'Ningún punto de corte clasificó mejor que el azar (índice de Youden ≤ 0).'}`; }).join(' '));
     sec.code = `# Curva ROC\nlibrary(pROC)\n` + res.map(o => `r <- roc(datos[[${rq(yName)}]], datos[[${rq(o.nm)}]], levels = c(${rq(neg)}, ${rq(pos)}), direction = "${o.flip ? '>' : '<'}")\nauc(r); ci.auc(r, method = "delong")\nee <- sqrt(var(r)); z <- (as.numeric(auc(r)) - .5) / ee; c(AUC = as.numeric(auc(r)), EE = ee, z = z, p = 2 * pnorm(-abs(z)))  # EE de DeLong\n` +
       `b <- coords(r, "best", best.method = "youden", ret = c("threshold", "sensitivity", "specificity", "ppv", "npv"), transpose = FALSE)\nb$youden <- b$sensitivity + b$specificity - 1; b$RV_pos <- b$sensitivity / (1 - b$specificity); b$RV_neg <- (1 - b$sensitivity) / b$specificity; print(b, digits = 7)\n` +
       `cc <- coords(r, "all", ret = c("threshold", "sensitivity", "specificity"), transpose = FALSE); cc$youden <- cc$sensitivity + cc$specificity - 1; print(cc, digits = 7)  # coordenadas\nplot(r)`).join('\n');
@@ -1783,6 +1809,8 @@
     items = items.map((it, j) => (rev[j] ? it.map(x => lo + hi - x) : it));
     if (items.some(it => S.sd(it) === 0)) { sec.error = 'Algún ítem tiene varianza 0 (todas las respuestas iguales). Exclúyelo.'; return sec; }
     const r = S.cronbach(items), n = r.n, a = r.alpha, om = S.omegaTotal(items[0].map((_, i) => items.map(it => it[i]))).omega;
+    const dup = []; for (let p_ = 0; p_ < items.length; p_++) for (let q = p_ + 1; q < items.length; q++) if (Math.abs(S.pearson(items[p_], items[q]).r) > .9999) dup.push(`${esc(vars[p_].name)} – ${esc(vars[q].name)}`);
+    if (dup.length) sec.checks.push(chk('no', `Ítems idénticos (correlación ±1): ${list(dup)}. Probablemente es la misma columna repetida o una calculada a partir de otra; inflan el alfa. Revisa los datos y deja solo una.`));
     const qual = a >= .9 ? 'excelente' : a >= .8 ? 'buena' : a >= .7 ? 'aceptable' : a >= .6 ? 'cuestionable' : a >= .5 ? 'pobre' : 'inaceptable';
     sec.decision = `Se calcula el alfa de Cronbach de ${vars.length} ítems con ${n} casos completos${rev.some(Boolean) ? `, invirtiendo ${list(vars.filter((_, j) => rev[j]).map(v => esc(v.name)))}` : ''}.`;
     sec.why.push('El alfa de Cronbach estima la consistencia interna: si los ítems de una escala miden un mismo constructo.');
@@ -1880,7 +1908,7 @@
     const yv = vByName(yName), lv = levelsOf(yv);
     if (lv.length !== 2) { sec.error = `La variable dependiente debe tener exactamente 2 categorías (tiene ${lv.length}).`; return sec; }
     const ycat = catOf(yv), { idx, cols, X } = design(xNames, i => ycat[i] !== null), y = idx.map(i => (ycat[i] === lv[1] ? 1 : 0)), n = idx.length, p = cols.length;
-    if (n < p + 2) { sec.error = `Hay pocos casos completos (${n}) para ${p - 1} predictores.`; return sec; }
+    if (n < p + 2) { sec.error = `Hay pocos casos completos (${n}) para estimar ${p} coeficientes (las variables categóricas cuentan una vez por cada categoría distinta de la de referencia).`; return sec; }
     const m = S.logistic(X, y);
     if (!m) { sec.error = 'Hay colinealidad perfecta entre los predictores. Elimina alguno.'; return sec; }
     const ev = Math.min(m.events, n - m.events), epv = ev / (p - 1), multi = p > 2, ev1 = esc(lv[1]), ev0 = esc(lv[0]);
@@ -1966,7 +1994,7 @@
   }
 
   function runBinRel(names) {
-    const k = names.length, sec = { title: `${names.join(', ')} (cambio en una variable sí/no)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const k = names.length, sec = { title: `${names.length ? names.join(', ') + ': ' : ''}cambio en una variable sí/no (McNemar o Q de Cochran)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (k < 2) { sec.error = 'Selecciona al menos dos variables (momentos).'; return sec; }
     const cs = names.map(n => catOf(vByName(n))), lv = ordOf(names.map(vByName).find(v => v.order) || vByName(names[0]), cs.flat());
     if (lv.length !== 2) { sec.error = `Las variables deben tener las mismas dos categorías (se han encontrado ${lv.length}: ${list(lv.slice(0, 6).map(esc))}).`; return sec; }
@@ -2076,7 +2104,7 @@
   // MANOVA / MANCOVA con uno o dos factores entre sujetos
   function runManova(yNames, fNames, cNames) {
     fNames = [...new Set(fNames)].filter(f => !yNames.includes(f)); cNames = cNames.filter(c => !yNames.includes(c));
-    const sec = { title: `${yNames.join(', ')} según ${fNames.join(' × ')}${cNames.length ? `, controlando ${cNames.join(', ')}` : ''}`, test: `${cNames.length ? 'MANCOVA' : 'MANOVA'} (SC tipo III)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const sec = { title: `${cNames.length ? 'MANCOVA' : 'MANOVA'}: ${yNames.length ? yNames.join(', ') + ' según ' : 'según '}${fNames.join(' × ')}${cNames.length ? `, controlando ${cNames.join(', ')}` : ''}`, test: `${cNames.length ? 'MANCOVA' : 'MANOVA'} (SC tipo III)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (yNames.length < 2) { sec.error = 'Selecciona al menos dos variables dependientes.'; return sec; }
     if (!fNames.length) { sec.error = 'Elige un factor.'; return sec; }
     const Yv = yNames.map(v => numOf(vByName(v))), fc = fNames.map(nm => catOf(vByName(nm))), cc = cNames.map(nm => numOf(vByName(nm)));
@@ -2223,7 +2251,7 @@
     xNames = xNames.filter(n => n !== yName);
     if (!xNames.length) { sec.error = 'Selecciona al menos un predictor distinto de la variable dependiente.'; return sec; }
     const yv = numOf(vByName(yName)), candidates = xNames.slice(); let { idx, cols, X } = design(xNames, i => yv[i] !== null); const n = idx.length;
-    if (n < cols.length + 2) { sec.error = `Hay pocos casos completos (${n}) para ${cols.length - 1} predictores.`; return sec; }
+    if (n < cols.length + 2) { sec.error = `Hay pocos casos completos (${n}) para estimar ${cols.length} coeficientes (las variables categóricas cuentan una vez por cada categoría distinta de la de referencia).`; return sec; }
     const y = idx.map(i => yv[i]); if (S.sd(y) === 0) { sec.error = `${yName} tiene el mismo valor en todos los casos: no se puede ajustar una regresión.`; return sec; }
     let sel = null;
     if (stepwise) {
@@ -2239,6 +2267,7 @@
     const p = cols.length;
     const m = S.ols(X, y);
     if (!m) { sec.error = 'Hay colinealidad perfecta entre los predictores (por ejemplo, una variable es combinación exacta de otras). Elimina alguno.'; return sec; }
+    if (m.r2 > 1 - 1e-10) { sec.error = 'La variable dependiente es una combinación exacta de los predictores (R² = 1): no hay error que estimar, así que el modelo no tiene sentido. Revisa si una variable se calculó a partir de otra.'; return sec; }
     const multi = cols.length > 2, het = m.bp.p < .05, sdY = S.sd(y);
     sec.test = `Regresión lineal ${multi ? 'múltiple' : 'simple'} (MCO${stepwise ? `, ${mName}` : ''})${het ? ' con errores robustos HC3' : ''}`;
     sec.why.push(`Variable dependiente: ${esc(yName)} → cuantitativa.`);
@@ -2551,7 +2580,11 @@
     s += isJasp ? `# R no lee archivos .jasp: en JASP usa Archivo → Exportar → Exportar datos (CSV) y guárdalo junto a este script.\ndatos <- read.csv(${rq(ST.fileName.replace(/\.jasp$/i, '.csv'))}, na.strings = ${NA}, check.names = FALSE, strip.white = TRUE)\n`
       : isSav ? `datos <- haven::read_sav(${rq(ST.fileName)})  # los valores perdidos definidos en SPSS se leen como NA\n`
       : isCsv ? `datos <- read.csv(${rq(ST.fileName)}, sep = ${rq(csv.sep)}, dec = ${rq(csv.dec)}, fileEncoding = ${rq(csv.enc)}, na.strings = ${NA}, check.names = FALSE, strip.white = TRUE)\n`
-      : `datos <- readxl::read_excel(${rq(ST.fileName)}${ST.sheet ? ', sheet = ' + rq(ST.sheet) : ''}, na = ${NA})\ndatos <- as.data.frame(datos)\n`;
+      : `datos <- readxl::read_excel(${rq(ST.fileName)}${ST.sheet ? ', sheet = ' + rq(ST.sheet) : ''}${ST.skipPhys ? `, skip = ${ST.skipPhys}` : ''}, na = ${NA})${ST.skipPhys ? '  # se salta las filas de título encima de la cabecera' : ''}\ndatos <- as.data.frame(datos)\n`;
+    if (!isSav && ST.rawHeaders && ST.rawHeaders.some((h, i) => h !== ST.headers[i]))
+      s += `# Nombres de columna como en Tharp (repetidos, vacíos o con espacios sobrantes)\nif (ncol(datos) == ${ST.headers.length}) names(datos) <- c(${ST.headers.map(rq).join(', ')})\n`;
+    const th = Object.entries(ST.thousands || {});
+    if (th.length) s += `# Columnas con separador de miles (como las lee Tharp)\n${th.map(([h, k]) => `datos[[${rq(h)}]] <- as.numeric(${k === 'es' ? `sub(",", ".", gsub(".", "", datos[[${rq(h)}]], fixed = TRUE), fixed = TRUE)` : `gsub(",", "", datos[[${rq(h)}]], fixed = TRUE)`})`).join('\n')}\n`;
     if (ST.tf && ST.tf.length) s += `\n# Preparación de los datos (las mismas transformaciones que en Tharp, en el mismo orden)\n${ST.tf.map(t => tfCode(t, isSav)).join('\n')}\n`;
     // niveles en el mismo orden que Tharp: así coinciden las categorías de referencia y el suceso de la logística
     const fac = v => { const x = `datos$${rn(v.name)}`, src = isSav ? (v.labelled ? `as.character(haven::as_factor(${x}))` : `haven::zap_labels(${x})`) : x;
@@ -2691,7 +2724,11 @@
   $('#dlDemo').onclick = e => { e.preventDefault();
     const csv = demoData().map(r => r.map(v => (v === null ? '' : typeof v === 'number' ? String(v).replace('.', ',') : v)).join(';')).join('\r\n');
     download('tharp_datos_ejemplo.csv', new Blob(['﻿' + csv], { type: 'text/csv' })); };
-  $('#run').onclick = run;
+  // «Calculando…» mientras dura el cálculo (con archivos grandes puede tardar varios segundos y la página no responde):
+  // se cambia el botón y se espera un instante para que el navegador lo pinte antes de bloquearse; evita además el doble clic
+  $('#run').onclick = () => { const btn = $('#run'); if (btn.disabled) return; const label = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Calculando…'; btn.setAttribute('aria-busy', 'true'); document.body.style.cursor = 'progress';
+    setTimeout(() => { try { run(); } finally { btn.disabled = false; btn.textContent = label; btn.removeAttribute('aria-busy'); document.body.style.cursor = ''; } }, 40); };
   $('#dlWord').onclick = exportDocx;
   $('#dlR').onclick = exportR;
   window.TharpState = ST; // solo lectura: lo usan las pruebas automáticas

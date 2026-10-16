@@ -677,7 +677,8 @@
     tabs.forEach(([[a, b], [c, d]]) => { const n = a + b + c + d; if (n < 2) return; const r1 = a + b, c1 = a + c, r2 = c + d, c2 = b + d;
       num += a * d / n; den += b * c / n; sA += a; sE += r1 * c1 / n; sV += r1 * r2 * c1 * c2 / (n * n * (n - 1));
       const Pk = (a + d) / n, Qk = (b + c) / n, Rk = a * d / n, Sk = b * c / n; P_R += Pk * Rk; PS_QR += Pk * Sk + Qk * Rk; Q_S += Qk * Sk; R_ += Rk; S_ += Sk; });
-    const or = num / den, chi = (Math.max(0, Math.abs(sA - sE) - .5)) ** 2 / sV;
+    // corrección por continuidad solo si |ΣA − ΣE| ≥ 0.5 (como mantelhaen.test: con diferencias menores sobrecorregiría)
+    const dlt = Math.abs(sA - sE), or = num / den, chi = (dlt >= .5 ? dlt - .5 : dlt) ** 2 / sV;
     const varLog = P_R / (2 * R_ * R_) + PS_QR / (2 * R_ * S_) + Q_S / (2 * S_ * S_), z = 1.959963984540054; // Robins, Breslow y Greenland
     // Breslow-Day: para cada estrato, la a esperada bajo la OR común (raíz de la cuadrática), con la corrección de Tarone
     let bd = 0, sumA = 0, sumEa = 0, sumVa = 0;
@@ -1146,7 +1147,8 @@
     // umbrales: puntos medios entre valores distintos consecutivos (como pROC y SPSS); positivo si puntuación ≥ umbral
     const u = [...new Set(pos.concat(neg))].sort((a, b) => a - b), th = [-Infinity].concat(u.slice(1).map((v, i) => (v + u[i]) / 2)).concat([Infinity]);
     const pts = th.map(t => { const tp = pos.filter(x => x >= t).length, tn = neg.filter(y => y < t).length; return { t, se: tp / m, sp: tn / n, tp, fp: n - tn, fn: m - tp, tn }; });
-    const best = pts.slice(1, -1).reduce((b, q) => (q.se + q.sp > b.se + b.sp ? q : b), pts[1] || pts[0]);
+    let best = pts.slice(1, -1).reduce((b, q) => (q.se + q.sp > b.se + b.sp ? q : b), pts[1] || pts[0]);
+    if (best.se + best.sp - 1 < 0) best = pts[0];   // ningún corte finito mejora el azar: el óptimo es no clasificar (Youden = 0), como pROC
     const ppv = best.tp / (best.tp + best.fp), npv = best.tn / (best.tn + best.fn);
     return { auc, se, ci, z, p: pZ(z), m, n, pts, best: Object.assign({}, best, { youden: best.se + best.sp - 1, ppv, npv, lrp: best.se / (1 - best.sp), lrn: (1 - best.se) / best.sp }) };
   }
