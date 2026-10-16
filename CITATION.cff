@@ -9,9 +9,11 @@ abstract: >-
   genera tablas y redacción en formato APA y un script de R que reproduce cada análisis.
   Todos los cálculos se hacen en el navegador con un motor propio validado frente a R.
 authors:
-  - name: Equipo de Tharp
+  - family-names: Agüí Ruiz
+    given-names: Blanca
+    orcid: "https://orcid.org/0009-0002-3982-2565"
     email: info@tharp.es
-    website: "https://tharp.es"
+license-url: "https://tharp.es/LICENSE.txt"
 version: 1.0.1
 date-released: "2026-10-16"
 url: "https://tharp.es"

@@ -1,0 +1,22 @@
+Tharp — https://tharp.es
+Copyright © 2026 Blanca Agüí Ruiz. Todos los derechos reservados.
+
+El código, los textos, el diseño y los demás contenidos de Tharp están protegidos por la legislación
+de propiedad intelectual. Que el código sea visible (como en cualquier web, o en su repositorio público)
+no concede ninguna licencia: no está permitido copiarlo, modificarlo, distribuirlo, publicarlo ni
+reutilizarlo, total o parcialmente, sin autorización previa y por escrito de la titular.
+
+Sí está permitido usar la aplicación en https://tharp.es y consultar el código para comprobar
+cómo se hacen los cálculos.
+
+Contacto: info@tharp.es
+
+Componentes de terceros (no son de la titular y se rigen por sus propias licencias):
+- vendor/jstat.min.js — jStat 1.9.6, licencia MIT (© jStat contributors)
+- vendor/xlsx.full.min.js — SheetJS Community Edition 0.18.5, licencia Apache 2.0 (© SheetJS LLC)
+- vendor/docx.umd.js — docx 8.5.0, licencia MIT (© Dolan Miu)
+- vendor/jszip.min.js — JSZip 3.10.1, licencia MIT o GPLv3 a elección (© Stuart Knightley y colaboradores); se usa bajo MIT
+- vendor/sql-wasm.js y sql-wasm.wasm — sql.js 1.10.3, licencia MIT (© sql.js contributors); incluye SQLite, de dominio público
+- fonts/ — Fraunces, Inter y JetBrains Mono, licencia SIL Open Font License 1.1 (© sus autores)
+Los textos completos de estas licencias: https://opensource.org/license/mit, https://www.apache.org/licenses/LICENSE-2.0
+y https://openfontlicense.org.

@@ -2369,9 +2369,9 @@
   }
   // cita de Tharp (APA 7, software): frase para el método y referencia; sin datos ni nombres de variables
   function citeTharp() {
-    const V = window.TharpVersion || { version: '', year: new Date().getFullYear(), url: 'https://tharp.es', doi: '' }, link = V.doi ? `https://doi.org/${V.doi}` : V.url;
-    return { version: V.version, method: `Los análisis estadísticos se realizaron con Tharp (versión ${V.version}; Equipo de Tharp, ${V.year}).`,
-      refHtml: `Equipo de Tharp. (${V.year}). <i>Tharp</i> (Versión ${V.version}) [Software]. ${link}`, refText: `Equipo de Tharp. (${V.year}). Tharp (Versión ${V.version}) [Software]. ${link}` };
+    const V = window.TharpVersion || { version: '', year: new Date().getFullYear(), url: 'https://tharp.es', doi: '', autor: 'Agüí Ruiz, B.', autorCorto: 'Agüí Ruiz' }, link = V.doi ? `https://doi.org/${V.doi}` : V.url;
+    return { version: V.version, method: `Los análisis estadísticos se realizaron con Tharp (versión ${V.version}; ${V.autorCorto}, ${V.year}).`,
+      refHtml: `${V.autor} (${V.year}). <i>Tharp</i> (Versión ${V.version}) [Software]. ${link}`, refText: `${V.autor} (${V.year}). Tharp (Versión ${V.version}) [Software]. ${link}` };
   }
   function citeBox() {
     const c = citeTharp();
