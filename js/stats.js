@@ -801,15 +801,21 @@
     const ll0 = y.reduce((s, v) => s + (v ? Math.log(ybar) : Math.log(1 - ybar)), 0);
     dev = -2 * ll; const dev0 = -2 * ll0, se = Ai.map((r, k) => Math.sqrt(r[k])), z = b.map((v, k) => v / se[k]);
     const LR = dev0 - dev, df = p - 1, cs = 1 - Math.exp((dev - dev0) / n), nag = cs / (1 - Math.exp(-dev0 / n));
-    // Hosmer-Lemeshow (deciles de riesgo)
-    const ord = pr.map((v, i) => [v, y[i]]).sort((a, c) => a[0] - c[0]), g = Math.min(10, Math.floor(n / 5)); let hl = 0, gUsed = 0;
-    for (let q = 0; q < g; q++) { const part = ord.slice(Math.floor(q * n / g), Math.floor((q + 1) * n / g)); if (!part.length) continue;
-      const o1 = sum(part.map(r => r[1])), e1 = sum(part.map(r => r[0])), m = part.length; gUsed++;
+    // Hosmer-Lemeshow con grupos por los deciles de la probabilidad predicha, como ResourceSelection::hoslem.test, performance_hosmer y Stata:
+    // cortes en los cuantiles (tipo 7) y grupos (corte anterior, corte] (el primero incluye el mínimo); los empates quedan en el mismo grupo
+    // cortes con las mismas operaciones que quantile(prob, (0:G)/G) de R (tipo 7), para que los casos empatados en un corte caigan en el mismo grupo
+    const q7 = (s, pr_) => { const idx = 1 + (s.length - 1) * pr_, lo = Math.floor(idx), hi = Math.ceil(idx), qs = s[lo - 1];
+      if (idx > lo && s[hi - 1] !== qs) { const h = idx - lo; return (1 - h) * qs + h * s[hi - 1]; } return qs; };
+    const g = Math.min(10, Math.floor(n / 5)), ps = sorted(pr), cuts = [...new Set(Array.from({ length: g + 1 }, (_, k) => q7(ps, k / g)))];
+    const G = cuts.length - 1, O1 = new Array(G).fill(0), E1 = new Array(G).fill(0), M = new Array(G).fill(0);
+    pr.forEach((v, i) => { let j = 0; while (j < G - 1 && v > cuts[j + 1]) j++; O1[j] += y[i]; E1[j] += v; M[j]++; });
+    let hl = 0, gUsed = 0;
+    for (let j = 0; j < G; j++) { if (!M[j]) continue; gUsed++; const o1 = O1[j], e1 = E1[j], m = M[j];
       if (e1 > 0) hl += (o1 - e1) ** 2 / e1; if (m - e1 > 0) hl += ((m - o1) - (m - e1)) ** 2 / (m - e1); }
     const tab = [[0, 0], [0, 0]]; pr.forEach((v, i) => tab[y[i]][v >= .5 ? 1 : 0]++);
     const separation = !conv || b.some(v => Math.abs(v) > 15) || se.some(v => !isFinite(v) || v > 1e3);
     return { b, se, z, p: z.map(pZ), or: b.map(Math.exp), ci: b.map((v, k) => [Math.exp(v - 1.959964 * se[k]), Math.exp(v + 1.959964 * se[k])]),
-      dev, dev0, LR, df, pLR: pChi(LR, df), cs, nag, hl: { chi: hl, df: gUsed - 2, p: pChi(hl, Math.max(1, gUsed - 2)) }, tab,
+      dev, dev0, LR, df, pLR: pChi(LR, df), cs, nag, hl: { chi: hl, df: gUsed - 2, p: gUsed > 2 ? pChi(hl, gUsed - 2) : NaN, groups: gUsed }, tab,
       acc: (tab[0][0] + tab[1][1]) / n, n, events: sum(y), iter: it + 1, conv, separation, prob: pr };
   }
 

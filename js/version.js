@@ -4,5 +4,5 @@
    Autoría: «autor» para la referencia APA y «autorCorto» para la cita en el texto (también en web/CITATION.cff y web/.zenodo.json). */
 (function (root) {
   'use strict';
-  root.TharpVersion = { version: '1.0.2', year: 2026, url: 'https://tharp.es', doi: '', autor: 'Agüí Ruiz, B.', autorCorto: 'Agüí Ruiz', orcid: '0009-0002-3982-2565' };
+  root.TharpVersion = { version: '1.1.0', year: 2026, url: 'https://tharp.es', doi: '', autor: 'Agüí Ruiz, B.', autorCorto: 'Agüí Ruiz', orcid: '0009-0002-3982-2565' };
 })(window);

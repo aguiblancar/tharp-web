@@ -588,7 +588,8 @@
     sec.text.push(textParts.join(' '));
     const NN = nums.map(v => rq(v.name)).join(', ');
     sec.code = `# Descriptivos\n${nums.length ? `psych::describe(datos[, c(${NN})], type = 2, quant = c(.25, .75))  # asimetría y curtosis como SPSS\n` +
-      `sapply(datos[, c(${NN})], function(x) c(shapiro.test(x)$p.value, nortest::lillie.test(x)$p.value))  # normalidad\n` +
+      `t(sapply(datos[, c(${NN})], function(x) { x <- x[!is.na(x)]; s <- shapiro.test(x); l <- nortest::lillie.test(x); c(W = unname(s$statistic), p_SW = s$p.value, D = unname(l$statistic), p_Lilliefors = l$p.value) }))  # normalidad\n` +
+      `t(sapply(datos[, c(${NN})], function(x) { n <- sum(!is.na(x)); es <- sqrt(6 * n * (n - 1) / ((n - 2) * (n + 1) * (n + 3))); c(EE_asimetria = es, EE_curtosis = 2 * es * sqrt((n^2 - 1) / ((n - 3) * (n + 5)))) }))  # EE como SPSS\n` +
       `boxplot(datos[, c(${NN})])\n` + (G ? `psych::describeBy(datos[, c(${NN})], group = datos[[${rq(gName)}]], mat = TRUE)\n` : '') : ''}` +
       cats.map(v => `t <- table(datos$${rn(v.name)}); cbind(n = t, pct = round(prop.table(t) * 100, 1), acum = round(cumsum(prop.table(t)) * 100, 1))`).join('\n');
     return sec;
@@ -651,6 +652,8 @@
       ? `# Correlaciones parciales de ${name}, controlando por ${zNames.join(', ')}\nd <- na.omit(datos[, c(${vars.concat(Zv).map(v => rq(v.name)).join(', ')})])\npsych::partial.r(d${P ? '' : ', method = "spearman"'}, x = ${VV}, y = c(${zNames.map(rq).join(', ')}))\n` +
         `# p de cada correlación parcial (gl = n − 2 − número de variables controladas)\npsych::corr.p(psych::partial.r(d${P ? '' : ', method = "spearman"'}, x = ${VV}, y = c(${zNames.map(rq).join(', ')})), n = nrow(d) - ${zNames.length}, adjust = "none")`
       : `# Correlaciones de ${name}\npsych::corr.test(datos[, ${VV}], method = "${m}", use = "pairwise", adjust = "none")\n` +
+        `# IC 95 % de cada par por la z de Fisher (EE de Bonett y Wright con Spearman, de Fieller et al. con Kendall), como Tharp\nic_r <- function(x, y, metodo) { ok <- complete.cases(x, y); n <- sum(ok); r <- cor(x[ok], y[ok], method = metodo)\n  se <- switch(metodo, kendall = sqrt(.437 / (n - 4)), spearman = sqrt((1 + r^2 / 2) / (n - 3)), 1 / sqrt(n - 3)); c(r = r, n = n, IC_inf = tanh(atanh(r) - qnorm(.975) * se), IC_sup = tanh(atanh(r) + qnorm(.975) * se), p = suppressWarnings(cor.test(x[ok], y[ok], method = metodo)$p.value)) }\n` +
+        `tab_r <- rbind(${pairs.map(q => `${rq(vars[q.i].name + ' – ' + vars[q.j].name)} = ic_r(datos[[${rq(vars[q.i].name)}]], datos[[${rq(vars[q.j].name)}]], "${m}")`).join(',\n  ')})\nprint(cbind(tab_r, p_Holm = p.adjust(tab_r[, "p"], "holm")), digits = 7)\n` +
         pairs.map(q => `cor.test(datos[[${rq(vars[q.i].name)}]], datos[[${rq(vars[q.j].name)}]], method = "${m}")`).slice(0, 6).join('\n') + (pairs.length > 6 ? '\n# … (igual para el resto de pares)' : '');
     return sec;
   }
@@ -684,7 +687,7 @@
       groups.map(q => [esc(q.name), q.x.length, f(q.d.mean), f(q.d.sd), f(q.d.median), `[${f(q.d.ci[0])}, ${f(q.d.ci[1])}]`]), missN ? `Se excluyeron ${missN} casos con valores perdidos.` : ''));
     sec.charts.push(fig(`${yName} por ${gName}: medias e IC 95 %`, CH.meansCI(groups.map(q => ({ name: q.name, x: q.x, mean: q.d.mean, ci: q.d.ci })), yName)));
     const MD = q => `<i>M</i> = ${f(q.d.mean)}, <i>DT</i> = ${f(q.d.sd)}`, MdnD = q => `<i>Mdn</i> = ${f(q.d.median)}`;
-    let code = `# ${yName} según ${gName}\ntapply(datos$${Y}, datos$${G}, shapiro.test)   # normalidad por grupo\ncar::leveneTest(${Y} ~ ${G}, data = datos, center = mean)\n`;
+    let code = `# ${yName} según ${gName}\nt(sapply(split(datos[[${rq(yName)}]], datos[[${rq(gName)}]]), descr))  # descriptivos por grupo\ntapply(datos$${Y}, datos$${G}, shapiro.test)   # normalidad por grupo\ncar::leveneTest(${Y} ~ ${G}, data = datos, center = mean)\n`;
     const normWhy = normOK ? 'La normalidad se cumple en todos los grupos (o n ≥ 30), por lo que se usa una prueba paramétrica.' : 'La normalidad no se cumple en algún grupo con muestra pequeña, por lo que se usa una prueba no paramétrica, que no requiere normalidad.';
     sec.why.push(normWhy);
     if (k === 2) {
@@ -706,7 +709,7 @@
         sec.text.push(`Se aplicó una ${name}${hyp} para comparar ${esc(yName)} entre ${esc(A.name)} y ${esc(B.name)}. ` + (r.p < .05
           ? `${esc(A.name)} (${MD(A)}) obtuvo puntuaciones significativamente ${r.diff > 0 ? 'más altas' : 'más bajas'} que ${esc(B.name)} (${MD(B)}), ${st}. El tamaño del efecto fue ${lbl.d(r.d)}.`
           : `No se encontraron diferencias estadísticamente significativas entre ${esc(A.name)} (${MD(A)}) y ${esc(B.name)} (${MD(B)}), ${st}.`));
-        code += `t.test(${Y} ~ ${G}, data = datos, var.equal = ${eqVar ? 'TRUE' : 'FALSE'}${one ? `, alternative = "${rAlt}"` : ''})\n` +
+        code += `with(datos, mean(${Y}[${G} == ${rq(A.name)}], na.rm = TRUE) - mean(${Y}[${G} == ${rq(B.name)}], na.rm = TRUE))  # diferencia de medias (${A.name} − ${B.name})\nt.test(${Y} ~ ${G}, data = datos, var.equal = ${eqVar ? 'TRUE' : 'FALSE'}${one ? `, alternative = "${rAlt}"` : ''})\n` +
           (eqVar ? `effectsize::cohens_d(${Y} ~ ${G}, data = datos${one ? `, alternative = "${rAlt}"` : ''})  # d con IC (t no central)\neffectsize::hedges_g(${Y} ~ ${G}, data = datos)`
             : `# d de Welch como JASP: diferencia / sqrt((s1^2 + s2^2) / 2)\nwith(datos, diff(rev(tapply(${Y}, ${G}, mean))) / sqrt(mean(tapply(${Y}, ${G}, var))))`);
       } else {
@@ -731,7 +734,7 @@
       };
       if (normOK) {
         const cl = S.anova(xs);
-        code += `dd <- data.frame(y = datos[[${rq(yName)}]], g = factor(datos[[${rq(gName)}]]))  # nombres simples para aov y TukeyHSD\ndd <- dd[complete.cases(dd), ]\n`;
+        code += `dd <- data.frame(y = datos[[${rq(yName)}]], g = factor(datos[[${rq(gName)}]]))  # nombres simples para aov y TukeyHSD\ndd <- dd[complete.cases(dd), ]\nc(SC_total = sum((dd$y - mean(dd$y))^2), gl_total = nrow(dd) - 1)\n`;
         let om, ph, phName;
         if (eqVar) { om = cl; sec.test = 'ANOVA de un factor'; phName = 'Tukey HSD'; ph = S.hasTukey ? S.tukeyHSD(xs, cl.msw, cl.df2) : S.pairwiseHolm(xs, true); if (!S.hasTukey) phName = 't por pares con corrección de Holm'; }
         else { om = S.welchAnova(xs); sec.test = 'ANOVA de Welch'; phName = 'Games-Howell'; ph = S.hasTukey ? S.gamesHowell(xs) : S.pairwiseHolm(xs, false); if (!S.hasTukey) phName = 't de Welch por pares con corrección de Holm'; }
@@ -804,6 +807,9 @@
         code += `kruskal.test(${Y} ~ ${G}, data = datos)\nFSA::dunnTest(${Y} ~ ${G}, data = datos, method = "holm")`;
       }
     }
+    { const rA = { two: 'two.sided', greater: 'greater', less: 'less' }[alt], A_ = alt !== 'two' ? `, alternative = "${rA}"` : '';
+      code += k === 2 ? `\n# Análisis de sensibilidad (la prueba alternativa que cita Tharp)\nt.test(${Y} ~ ${G}, data = datos, var.equal = FALSE${A_})\nwilcox.test(${Y} ~ ${G}, data = datos${A_})`
+        : `\n# Análisis de sensibilidad (la prueba alternativa que cita Tharp)\nkruskal.test(${Y} ~ ${G}, data = datos)\noneway.test(${Y} ~ ${G}, data = datos, var.equal = FALSE)`; }
     if (dropped.length) code = `# Tharp excluyó los grupos con menos de 3 casos: ${dropped.map(q => q.name).join(', ')}\nd <- droplevels(subset(datos, !(${G} %in% c(${dropped.map(q => rq(q.name)).join(', ')}))))\n` +
       code.replace(/(?<![$\w`])datos(?![\w`])/g, 'd');
     sec.code = code; return sec;
@@ -839,7 +845,7 @@
       const st = `<i>t</i>(${r.df}) = ${f(r.t)}, ${pt(r.p)}${one ? ' (unilateral)' : ''}, <i>d</i><sub>z</sub> = ${f(r.dz)}, IC 95 % [${ciTxt(r.dzCI).slice(1, -1)}]`;
       sec.text.push(`Se aplicó una prueba t para muestras relacionadas${hyp} para comparar ${esc(aName)} (<i>M</i> = ${f(da.mean)}, <i>DT</i> = ${f(da.sd)}) y ${esc(bName)} (<i>M</i> = ${f(db.mean)}, <i>DT</i> = ${f(db.sd)}). ` +
         (r.p < .05 ? `Las puntuaciones ${r.diff > 0 ? 'aumentaron' : 'disminuyeron'} de forma estadísticamente significativa, ${st}, con un tamaño del efecto ${lbl.d(r.dz)}.` : `No se encontraron diferencias estadísticamente significativas, ${st}.`));
-      sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nt.test(datos$${B}, datos$${A}, paired = TRUE${ALT})\neffectsize::cohens_d(datos$${B}, datos$${A}, paired = TRUE${ALT})  # d_z con IC`;
+      sec.code = `# ${aName} frente a ${bName}\nt(sapply(na.omit(datos[, c(${rq(aName)}, ${rq(bName)})]), descr))  # descriptivos (casos con ambas medidas)\nshapiro.test(datos$${B} - datos$${A})\nt.test(datos$${B}, datos$${A}, paired = TRUE${ALT})\nwilcox.test(datos$${B}, datos$${A}, paired = TRUE${ALT})  # análisis de sensibilidad\neffectsize::cohens_d(datos$${B}, datos$${A}, paired = TRUE${ALT})  # d_z con IC`;
     } else {
       const r = S.wilcoxonSigned(a, b, alt); sec.test = 'Prueba de rangos con signo de Wilcoxon' + (one ? ' (unilateral)' : '');
       if (!forceNP) sec.why.push('Las diferencias no son normales y la muestra es pequeña: se usa la prueba de Wilcoxon, que no requiere normalidad.');
@@ -851,7 +857,7 @@
       const st = `<i>V</i> = ${f(r.V, 1)}, ${pt(r.p)}${one ? ' (unilateral)' : ''}, <i>r</i><sub>rb</sub> = ${f(r.rb)}, IC 95 % [${ciTxt(r.rbCI).slice(1, -1)}]`;
       sec.text.push(`${forceNP ? 'Se' : 'Dado que las diferencias no seguían una distribución normal, se'} aplicó la prueba de rangos con signo de Wilcoxon${hyp} para comparar ${esc(aName)} (<i>Mdn</i> = ${f(da.median)}) y ${esc(bName)} (<i>Mdn</i> = ${f(db.median)}). ` +
         (r.p < .05 ? `Se encontraron diferencias estadísticamente significativas, ${st}, con un tamaño del efecto ${lbl.r(Math.abs(r.rb))}.` : `No se encontraron diferencias estadísticamente significativas, ${st}.`));
-      sec.code = `# ${aName} frente a ${bName}\nshapiro.test(datos$${B} - datos$${A})\nwilcox.test(datos$${B}, datos$${A}, paired = TRUE${ALT})  # exacta si no hay empates ni ceros y n < 50\neffectsize::rank_biserial(datos$${B}, datos$${A}, paired = TRUE)`;
+      sec.code = `# ${aName} frente a ${bName}\nt(sapply(na.omit(datos[, c(${rq(aName)}, ${rq(bName)})]), descr))  # descriptivos (casos con ambas medidas)\nshapiro.test(datos$${B} - datos$${A})\nt.test(datos$${B}, datos$${A}, paired = TRUE${ALT})  # análisis de sensibilidad\nwilcox.test(datos$${B}, datos$${A}, paired = TRUE${ALT})  # exacta si no hay empates ni ceros y n < 50\neffectsize::rank_biserial(datos$${B}, datos$${A}, paired = TRUE)`;
     }
     return sec;
   }
@@ -881,7 +887,7 @@
       sec.text.push(`Se aplicó una prueba t para una muestra${hyp} para comparar la media de ${esc(name)} (<i>M</i> = ${f(ds.mean)}, <i>DT</i> = ${f(ds.sd)}) con el valor ${fmtNum(mu)}. ` + (r.p < .05
         ? `La media fue significativamente ${r.diff > 0 ? 'superior' : 'inferior'}, <i>t</i>(${r.df}) = ${f(r.t)}, ${pt(r.p)}, <i>d</i> = ${f(r.d)}, IC 95 % [${ciTxt(r.dCI).slice(1, -1)}], con un tamaño del efecto ${lbl.d(r.d)}.`
         : `No se encontraron diferencias estadísticamente significativas, <i>t</i>(${r.df}) = ${f(r.t)}, ${pt(r.p)}, <i>d</i> = ${f(r.d)}.`));
-      sec.code = `# ${name} frente a ${mu}\nshapiro.test(datos$${X})\nt.test(datos$${X}, mu = ${mu}${ALT})\neffectsize::cohens_d(datos$${X}, mu = ${mu}${ALT})  # d con IC`;
+      sec.code = `# ${name} frente a ${mu}\ndescr(datos$${X})\nshapiro.test(datos$${X})\nt.test(datos$${X}, mu = ${mu}${ALT})\nwilcox.test(datos$${X}, mu = ${mu}${ALT})  # análisis de sensibilidad\neffectsize::cohens_d(datos$${X}, mu = ${mu}${ALT})  # d con IC`;
     } else {
       const r = S.wilcoxonOne(x, mu, alt); sec.test = 'Prueba de rangos con signo de Wilcoxon para una muestra' + (one ? ' (unilateral)' : '');
       sec.decision = `Se eligió la prueba de Wilcoxon para una muestra${hyp} porque los datos no siguen una distribución normal y la muestra es pequeña.`;
@@ -892,7 +898,7 @@
       sec.text.push(`Dado que los datos no seguían una distribución normal, se aplicó la prueba de rangos con signo de Wilcoxon${hyp} para comparar ${esc(name)} (<i>Mdn</i> = ${f(ds.median)}) con el valor ${fmtNum(mu)}. ` + (r.p < .05
         ? `Se encontraron diferencias estadísticamente significativas, <i>V</i> = ${f(r.V, 1)}, ${pt(r.p)}, <i>r</i><sub>rb</sub> = ${f(r.rb)}, con un tamaño del efecto ${lbl.r(Math.abs(r.rb))}.`
         : `No se encontraron diferencias estadísticamente significativas, <i>V</i> = ${f(r.V, 1)}, ${pt(r.p)}, <i>r</i><sub>rb</sub> = ${f(r.rb)}.`));
-      sec.code = `# ${name} frente a ${mu}\nshapiro.test(datos$${X})\nwilcox.test(datos$${X}, mu = ${mu}${ALT})  # exacta si no hay empates ni ceros y n < 50\neffectsize::rank_biserial(datos$${X}, mu = ${mu})`;
+      sec.code = `# ${name} frente a ${mu}\ndescr(datos$${X})\nshapiro.test(datos$${X})\nt.test(datos$${X}, mu = ${mu}${ALT})  # análisis de sensibilidad\nwilcox.test(datos$${X}, mu = ${mu}${ALT})  # exacta si no hay empates ni ceros y n < 50\neffectsize::rank_biserial(datos$${X}, mu = ${mu})`;
     }
     return sec;
   }
@@ -940,7 +946,7 @@
     sec.text.push(txt);
     sec.code = `# ANOVA de medidas repetidas ${A} × ${B}${gName ? ` × ${gName}` : ''}\nmedidas <- c(${cols.map(rq).join(', ')})\nd <- datos[complete.cases(datos[, c(medidas${gName ? ', ' + rq(gName) : ''})]), ]\nd$id <- factor(seq_len(nrow(d)))\n` +
       `largo <- data.frame(id = rep(d$id, ${K}), ${gName ? `grupo = factor(rep(d[[${rq(gName)}]], ${K})), ` : ''}A = factor(rep((seq_len(${K}) - 1) %/% ${kw[1]} + 1, each = nrow(d))), B = factor(rep((seq_len(${K}) - 1) %% ${kw[1]} + 1, each = nrow(d))), valor = unlist(d[, medidas], use.names = FALSE))\n` +
-      `modelo <- afex::aov_ez("id", "valor", largo, within = c("A", "B")${gName ? ', between = "grupo"' : ''}, anova_table = list(correction = "${corr.length ? 'GG' : 'none'}", es = c("pes", "ges")))\nmodelo\nsummary(modelo)  # Mauchly y épsilon\npairs(emmeans::emmeans(modelo, ~ A), adjust = "holm")\npairs(emmeans::emmeans(modelo, ~ B), adjust = "holm")`;
+      `modelo <- afex::aov_ez("id", "valor", largo, within = c("A", "B")${gName ? ', between = "grupo"' : ''}, anova_table = list(correction = "${corr.length ? 'GG' : 'none'}", es = c("pes", "ges")))\nmodelo\nsummary(modelo)  # Mauchly y épsilon\nu <- summary(modelo)$univariate.tests; print(cbind(u, MC = u[, "Sum Sq"] / u[, "num Df"], MC_error = u[, "Error SS"] / u[, "den Df"]), digits = 7)  # SC y MC con todas las cifras\naggregate(valor ~ ${gName ? 'grupo + ' : ''}A + B, data = largo, FUN = function(x) c(n = length(x), M = mean(x), DT = sd(x)))  # descriptivos\n# Mauchly con su aproximación χ² para cada efecto intrasujeto (gl del error entre sujetos = n − grupos)\nsp <- summary(modelo)$sphericity.tests; nu <- nrow(d) - ${gName ? `length(unique(d[[${rq(gName)}]]))` : 1}\nfor (ef in rownames(sp)) { W <- sp[ef, "Test statistic"]; p <- prod(c(A = nlevels(largo$A) - 1, B = nlevels(largo$B) - 1)[intersect(strsplit(ef, ":")[[1]], c("A", "B"))])\n  rho <- 1 - (2 * p^2 + p + 2) / (6 * p * nu); chi2 <- -nu * rho * log(W); gl <- p * (p + 1) / 2 - 1; w2 <- (p + 2) * (p - 1) * (p - 2) * (2 * p^3 + 6 * p^2 + 3 * p + 2) / (288 * (nu * p * rho)^2)\n  print(c(efecto = ef, W = signif(W, 7), chi2 = signif(chi2, 7), gl = gl, p = signif(pchisq(chi2, gl, lower.tail = FALSE) + w2 * (pchisq(chi2, gl + 4, lower.tail = FALSE) - pchisq(chi2, gl, lower.tail = FALSE)), 7))) }\npairs(emmeans::emmeans(modelo, ~ A), adjust = "holm")\npairs(emmeans::emmeans(modelo, ~ B), adjust = "holm")`;
     return sec;
   }
 
@@ -1016,7 +1022,9 @@
     const Q = names.map(rq).join(', ');
     sec.code = `# ANOVA mixta: ${names.join(', ')} × ${gName}\nmedidas <- c(${Q})\nd <- datos[complete.cases(datos[, c(medidas, ${rq(gName)})]), c(medidas, ${rq(gName)})]\nd$id <- factor(seq_len(nrow(d)))\n` +
       `largo <- data.frame(id = rep(d$id, ${k}), grupo = factor(rep(d[[${rq(gName)}]], ${k})), medida = factor(rep(medidas, each = nrow(d)), levels = medidas), valor = unlist(d[, medidas], use.names = FALSE))\n` +
-      `modelo <- afex::aov_ez("id", "valor", largo, between = "grupo", within = "medida", type = 3, anova_table = list(correction = "${sphOK ? 'none' : 'GG'}", es = c("pes", "ges")))\nmodelo\nsummary(modelo)  # Mauchly, Greenhouse-Geisser y Huynh-Feldt\ncar::leveneTest(valor ~ grupo, data = subset(largo, medida == medidas[1]), center = mean)  # repetir para cada medida\n` +
+      `modelo <- afex::aov_ez("id", "valor", largo, between = "grupo", within = "medida", type = 3, anova_table = list(correction = "${sphOK ? 'none' : 'GG'}", es = c("pes", "ges")))\nmodelo\nsummary(modelo)  # Mauchly, Greenhouse-Geisser y Huynh-Feldt\nu <- summary(modelo)$univariate.tests; print(cbind(u, MC = u[, "Sum Sq"] / u[, "num Df"], MC_error = u[, "Error SS"] / u[, "den Df"]), digits = 7)  # SC y MC con todas las cifras\naggregate(valor ~ grupo + medida, data = largo, FUN = function(x) c(n = length(x), M = mean(x), DT = sd(x)))  # descriptivos\nfor (m in medidas) print(car::leveneTest(valor ~ grupo, data = subset(largo, medida == m), center = mean))  # Levene en cada medida\n` +
+      `# Normalidad de los residuos (valor − media de la casilla − media de la persona + media de su grupo), como Tharp\nYm <- as.matrix(d[, medidas]); gr <- as.character(d[[${rq(gName)}]]); cm <- apply(Ym, 2, function(x) tapply(x, gr, mean))\nres <- Ym - cm[gr, , drop = FALSE] - rowMeans(Ym) + rowMeans(cm)[gr]\nshapiro.test(as.vector(res))\n` +
+      (k > 2 ? `# Mauchly con su aproximación χ² (gl del error entre sujetos = n − grupos)\nW <- summary(modelo)$sphericity.tests[1, "Test statistic"]; p <- ${k - 1}; nu <- nrow(d) - length(unique(gr))\nrho <- 1 - (2 * p^2 + p + 2) / (6 * p * nu); chi2 <- -nu * rho * log(W); gl <- p * (p + 1) / 2 - 1; w2 <- (p + 2) * (p - 1) * (p - 2) * (2 * p^3 + 6 * p^2 + 3 * p + 2) / (288 * (nu * p * rho)^2)\nc(W = W, chi2 = chi2, gl = gl, p = pchisq(chi2, gl, lower.tail = FALSE) + w2 * (pchisq(chi2, gl + 4, lower.tail = FALSE) - pchisq(chi2, gl, lower.tail = FALSE)))\n` : '') +
       `pairs(emmeans::emmeans(modelo, ~ medida), adjust = "holm")\n` + (G > 2 ? `pairs(emmeans::emmeans(modelo, ~ grupo), adjust = "tukey")\n` : '') + `# Efectos simples\nemmeans::joint_tests(modelo, by = "medida")\nemmeans::joint_tests(modelo, by = "grupo")`;
     return sec;
   }
@@ -1048,7 +1056,8 @@
         return `${esc(names[o.a])} y ${esc(names[o.b])} (${pt(o.padj)}; puntuaciones más ${up ? 'altas' : 'bajas'} en ${esc(names[o.b])})`; })) + (sig.length < ph.length ? '. El resto de comparaciones no fueron significativas.' : '.'); };
     const Q = names.map(rq).join(', ');
     let code = `# ${names.join(', ')} (medidas repetidas)\nmedidas <- c(${Q})\ndatos_mr <- datos[complete.cases(datos[, medidas]), medidas]\ndatos_mr$id <- factor(seq_len(nrow(datos_mr)))\n` +
-      `largo <- data.frame(id = rep(datos_mr$id, ${k}), momento = factor(rep(medidas, each = nrow(datos_mr)), levels = medidas), valor = unlist(datos_mr[, medidas], use.names = FALSE))\n`;
+      `largo <- data.frame(id = rep(datos_mr$id, ${k}), momento = factor(rep(medidas, each = nrow(datos_mr)), levels = medidas), valor = unlist(datos_mr[, medidas], use.names = FALSE))\n` +
+      `# Normalidad de los residuos (valor − media de la persona − media de la medida + media global), como Tharp\nYm <- as.matrix(datos_mr[, medidas])\nres <- Ym - rowMeans(Ym) - matrix(colMeans(Ym), nrow(Ym), ncol(Ym), byrow = TRUE) + mean(Ym)\nshapiro.test(as.vector(res))\nt(sapply(datos_mr[, medidas], descr))  # descriptivos\n`;
     if (normOK) {
       const r = S.rmAnova(Y), sph = r.mauchly, sphOK = !sph || sph.p >= .05, eps = sphOK ? 1 : r.gg, P = sphOK ? r.p : r.pGG;
       const d1 = r.df1 * eps, d2 = r.df2 * eps;
@@ -1070,7 +1079,11 @@
           ph.map(o => [`${esc(names[o.b])} − ${esc(names[o.a])}`, f(o.r.diff), f(o.r.t), o.r.df, pv(o.padj)])));
       } else t += `No se encontraron diferencias estadísticamente significativas entre los momentos, ${st}.`;
       sec.text.push(t);
-      code += `rstatix::anova_test(largo, dv = valor, wid = id, within = momento, effect.size = "pes")  # incluye Mauchly y Greenhouse-Geisser\nrstatix::pairwise_t_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm")`;
+      if (k > 2) code += `# Mauchly con su aproximación χ² (y la p con el término de 2.º orden de Anderson; mauchly.test usa 3 * k en lugar de 3 * (k − 1))\nW <- unname(mauchly.test(lm(Ym ~ 1), X = ~1)$statistic); p <- ncol(Ym) - 1; nu <- nrow(Ym) - 1\nrho <- 1 - (2 * p^2 + p + 2) / (6 * p * nu); chi2 <- -nu * rho * log(W); gl <- p * (p + 1) / 2 - 1; w2 <- (p + 2) * (p - 1) * (p - 2) * (2 * p^3 + 6 * p^2 + 3 * p + 2) / (288 * (nu * p * rho)^2)\nc(W = W, chi2 = chi2, gl = gl, p = pchisq(chi2, gl, lower.tail = FALSE) + w2 * (pchisq(chi2, gl + 4, lower.tail = FALSE) - pchisq(chi2, gl, lower.tail = FALSE)))\n`;
+      code += `# Tabla del ANOVA (SC, gl ${sphOK ? 'sin corregir' : 'corregidos con Greenhouse-Geisser'} y MC), como en Tharp\nkk <- ncol(Ym); nn <- nrow(Ym); gm <- mean(Ym); SCm <- nn * sum((colMeans(Ym) - gm)^2); SCe <- sum((Ym - gm)^2) - SCm - kk * sum((rowMeans(Ym) - gm)^2)\n` +
+        (sphOK ? 'eps <- 1\n' : 'Ch <- contr.helmert(kk); Ch <- sweep(Ch, 2, sqrt(colSums(Ch^2)), "/"); M <- t(Ch) %*% cov(Ym) %*% Ch; eps <- min(1, sum(diag(M))^2 / ((kk - 1) * sum(M * t(M))))\n') +
+        `data.frame(fuente = c("Momento", "Error"), SC = c(SCm, SCe), gl = c(kk - 1, (kk - 1) * (nn - 1)) * eps, MC = c(SCm, SCe) / (c(kk - 1, (kk - 1) * (nn - 1)) * eps))\n`;
+      code += `friedman.test(as.matrix(datos_mr[, medidas]))  # análisis de sensibilidad\nrstatix::anova_test(largo, dv = valor, wid = id, within = momento, effect.size = "pes")  # incluye Mauchly y Greenhouse-Geisser\ncmb <- combn(medidas, 2); setNames(apply(cmb, 2, function(v) mean(datos_mr[[v[2]]] - datos_mr[[v[1]]])), apply(cmb, 2, function(v) paste(v[2], "-", v[1])))  # diferencias de medias\nrstatix::pairwise_t_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm")`;
     } else {
       const r = S.friedman(Y); sec.test = 'Prueba de Friedman';
       if (!opts.force) sec.why.push('La normalidad no se cumple y la muestra es pequeña: se usa la prueba de Friedman, que trabaja con rangos dentro de cada persona.');
@@ -1093,10 +1106,10 @@
           sec.tables.push(apaTable(`Comparaciones por pares (${FN})`, ['Comparación', fm === 'conover' ? '<i>t</i>' : fm === 'nemenyi' ? '<i>q</i>' : '<i>z</i>', '<i>p</i> ajustada'],
             ph.map(o => [`${esc(names[o.b])} − ${esc(names[o.a])}`, f(fm === 'nemenyi' ? o.q : o.stat), pv(o.padj)]),
             fm === 'conover' ? `Diferencias de sumas de rangos; <i>t</i> con ${ph[0].df} gl (Conover, 1999).` : fm === 'nemenyi' ? 'Rango studentizado con gl infinitos sobre los rangos medios.' : '<i>z</i> = diferencia de rangos medios / √(<i>k</i>(<i>k</i> + 1) / 6<i>n</i>), con corrección de Bonferroni.'));
-          code += `\nm <- as.matrix(datos_mr[, medidas])\n${{ conover: 'PMCMRplus::frdAllPairsConoverTest(m, p.adjust.method = "holm")', siegel: 'PMCMRplus::frdAllPairsSiegelTest(m, p.adjust.method = "bonferroni")', nemenyi: 'PMCMRplus::frdAllPairsNemenyiTest(m)' }[fm]}\n`; }
+          code += `\nm <- as.matrix(datos_mr[, medidas])\n${{ conover: 'PMCMRplus::frdAllPairsConoverTest(m, p.adjust.method = "holm")', siegel: 'PMCMRplus::frdAllPairsSiegelTest(m, p.adjust.method = "bonferroni")', nemenyi: 'PMCMRplus::frdAllPairsNemenyiTest(m)' }[fm].replace(/^/, 'ph <- ')}\nph; ph$statistic; ph$p.value  # estadístico y p ajustada de cada par\n`; }
       } else t += `No se encontraron diferencias estadísticamente significativas, ${st}.`;
       sec.text.push(t);
-      code += `friedman.test(as.matrix(datos_mr[, medidas]))\nrstatix::friedman_effsize(largo, valor ~ momento | id)\nrstatix::pairwise_wilcox_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm")  # p exacta sin empates ni ceros y n < 50, como Tharp`;
+      code += `rstatix::anova_test(largo, dv = valor, wid = id, within = momento)  # análisis de sensibilidad (p de Greenhouse-Geisser si no hay esfericidad)\nfriedman.test(as.matrix(datos_mr[, medidas]))\nrstatix::friedman_effsize(largo, valor ~ momento | id)\nrstatix::pairwise_wilcox_test(largo, valor ~ momento, paired = TRUE, p.adjust.method = "holm")  # p exacta sin empates ni ceros y n < 50, como Tharp`;
     }
     sec.code = code; return sec;
   }
@@ -1157,7 +1170,7 @@
       if (r) { sec.tables.push(apaTable(`Prueba de rachas: ${name}`, ['Rachas', 'Esperadas', '<i>n</i> (≤ / > mediana)', '<i>z</i>', '<i>p</i>'], [[r.runs, f(r.E), `${r.m} / ${r.n}`, r.exact ? '—' : f(r.z), pv(r.p)]],
           `Valores por encima de la mediana (${r.med === null ? '—' : f(r.med)}) frente al resto, en el orden de las filas del archivo. <i>p</i> ${r.exact ? 'exacta (n ≤ 30)' : 'normal con corrección por continuidad'}, como DescTools::RunsTest.`));
         sec.text.push(`La prueba de rachas ${r.p < .05 ? `indicó que la secuencia no es aleatoria (${r.runs < r.E ? 'menos' : 'más'} rachas de las esperadas)` : 'no indicó desviaciones de la aleatoriedad en el orden de los casos'}: ${r.runs} rachas frente a ${f(r.E)} esperadas, ${pt(r.p)}.`); }
-      code += 'DescTools::RunsTest(x)  # prueba de rachas respecto a la mediana\n'; }
+      code += 'DescTools::RunsTest(x)  # prueba de rachas respecto a la mediana\nn1 <- sum(x > median(x)); n2 <- sum(x <= median(x)); c(rachas_esperadas = 1 + 2 * n1 * n2 / (n1 + n2))\n'; }
     sec.code = (sec.code || '') + code; return sec;
   }
 
@@ -1231,9 +1244,9 @@
     if (mh) t += ` Controlando ${esc(sName)}, la odds ratio común de Mantel-Haenszel fue ${f(mh.or)}, IC 95 % [${f(mh.ci[0])}, ${f(mh.ci[1])}], χ²<sub>MH</sub>(1) = ${f(mh.chi)}, ${pt(mh.p)}.`;
     sec.text.push(t);
     if (lb.length <= 8) sec.charts.push(fig(`${bName} dentro de cada grupo de ${aName}`, CH.groupedBars(la, lb, tab.map((row, i) => row.map(c => c / r.rs[i] * 100))), CH.legend(lb)));
-    sec.code = `# Asociación entre ${aName} y ${bName}\ntabla <- table(datos$${A}, datos$${B})\nprop.table(tabla, 1) * 100\nchisq.test(tabla, correct = FALSE)\nchisq.test(tabla, correct = FALSE)$expected\nchisq.test(tabla, correct = FALSE)$stdres\nDescTools::GTest(tabla)  # razón de verosimilitudes\nDescTools::CramerV(tabla); DescTools::ContCoef(tabla)` + (is2x2 ? '\nchisq.test(tabla, correct = TRUE)  # Yates\nfisher.test(tabla)\nDescTools::Phi(tabla)\nDescTools::OddsRatio(tabla, method = "wald")\nDescTools::RelRisk(tabla, method = "wald"); DescTools::RelRisk(tabla[, 2:1], method = "wald")' : '');
+    sec.code = `# Asociación entre ${aName} y ${bName}\ntabla <- table(datos$${A}, datos$${B})\nprop.table(tabla, 1) * 100\nchisq.test(tabla, correct = FALSE)\nchisq.test(tabla, correct = FALSE)$expected\nchisq.test(tabla, correct = FALSE)$stdres\nDescTools::GTest(tabla)  # razón de verosimilitudes\nDescTools::CramerV(tabla); DescTools::ContCoef(tabla)` + (is2x2 ? '\nchisq.test(tabla, correct = TRUE)  # Yates\nfisher.test(tabla)\nDescTools::Phi(tabla)\n# Odds ratio y riesgos relativos con IC de Woolf (logarítmico), como Tharp y SPSS; con alguna casilla a 0 se suma 0.5 (Haldane)\nn4 <- as.numeric(t(tabla)); if (any(n4 == 0)) n4 <- n4 + .5; a1 <- n4[1]; b1 <- n4[2]; c1 <- n4[3]; d1 <- n4[4]; zq <- qnorm(.975)\nrbind(OR = (a1 * d1 / (b1 * c1)) * exp(c(0, -zq, zq) * sqrt(1 / a1 + 1 / b1 + 1 / c1 + 1 / d1)),\n  RR_columna1 = (a1 / (a1 + b1)) / (c1 / (c1 + d1)) * exp(c(0, -zq, zq) * sqrt(1 / a1 - 1 / (a1 + b1) + 1 / c1 - 1 / (c1 + d1))),\n  RR_columna2 = (b1 / (a1 + b1)) / (d1 / (c1 + d1)) * exp(c(0, -zq, zq) * sqrt(1 / b1 - 1 / (a1 + b1) + 1 / d1 - 1 / (c1 + d1))))  # valor, IC inferior, IC superior' : '');
     if (ffh) sec.code += '\nfisher.test(tabla)  # Fisher-Freeman-Halton (exacta R×C)';
-    if (oa) sec.code += '\nDescTools::GoodmanKruskalGamma(tabla, conf.level = .95)\nDescTools::KendallTauB(tabla, conf.level = .95)\nDescTools::StuartTauC(tabla, conf.level = .95)\nDescTools::SomersDelta(tabla, direction = "column", conf.level = .95)';
+    if (oa) sec.code += "\n# Medidas de asociación ordinal con los errores típicos asintóticos de SPSS (ASE1 para el IC, ASE0 para z), como Tharp\nasoc_ordinal <- function(t) {\n  t <- unclass(as.matrix(t)); R <- nrow(t); C <- ncol(t); n <- sum(t); rs <- rowSums(t); cs <- colSums(t)\n  A <- D <- matrix(0, R, C)\n  for (i in 1:R) for (j in 1:C) { A[i, j] <- sum(t[row(t) > i & col(t) > j]) + sum(t[row(t) < i & col(t) < j]); D[i, j] <- sum(t[row(t) > i & col(t) < j]) + sum(t[row(t) < i & col(t) > j]) }\n  P <- sum(t * A); Q <- sum(t * D); wr <- n^2 - sum(rs^2); wc <- n^2 - sum(cs^2); m <- min(R, C)\n  base0 <- sqrt(max(0, sum(t * (A - D)^2) - (P - Q)^2 / n)); ri <- matrix(rs, R, C); cj <- matrix(cs, R, C, byrow = TRUE)\n  g <- (P - Q) / (P + Q); tb <- (P - Q) / sqrt(wr * wc); tc <- m * (P - Q) / (n^2 * (m - 1)); dcr <- (P - Q) / wr; drc <- (P - Q) / wc\n  ase1 <- c(4 / (P + Q)^2 * sqrt(sum(t * (Q * A - P * D)^2)),\n    1 / (wr * wc) * sqrt(max(0, sum(t * (2 * sqrt(wr * wc) * (A - D) + tb * (ri * wc + cj * wr))^2) - n^3 * tb^2 * (wr + wc)^2)),\n    2 * m / ((m - 1) * n^2) * base0, 2 / wr^2 * sqrt(sum(t * (wr * (A - D) - (P - Q) * (n - ri))^2)), 2 / wc^2 * sqrt(sum(t * (wc * (A - D) - (P - Q) * (n - cj))^2)))\n  ase0 <- c(2 / (P + Q) * base0, 2 / sqrt(wr * wc) * base0, 2 * m / ((m - 1) * n^2) * base0, 2 / wr * base0, 2 / wc * base0)\n  est <- c(gamma = g, tau_b = tb, tau_c = tc, somers_columna_dep = dcr, somers_fila_dep = drc); z <- est / ase0\n  cbind(valor = est, EE = ase1, IC_inf = pmax(-1, est - qnorm(.975) * ase1), IC_sup = pmin(1, est + qnorm(.975) * ase1), z = z, p = 2 * pnorm(-abs(z)))\n}\nprint(asoc_ordinal(tabla), digits = 7)\n# Referencia: DescTools (su error típico de la tau-b y de la d de Somers difiere del de SPSS en la 3.ª-4.ª cifra)\nDescTools::GoodmanKruskalGamma(tabla, conf.level = .95)\nDescTools::KendallTauB(tabla, conf.level = .95)\nDescTools::StuartTauC(tabla, conf.level = .95)";
     if (mh) sec.code += `\n# Mantel-Haenszel estratificado por ${sName}\nt3 <- table(datos$${rn(aName)}, datos$${rn(bName)}, datos$${rn(sName)})\nmantelhaen.test(t3)\nDescTools::BreslowDayTest(t3, correct = TRUE)`;
     return sec;
   }
@@ -1270,7 +1283,7 @@
     sec.text.push(`Se aplicó una prueba χ² de bondad de ajuste para comparar las frecuencias de ${esc(name)} con ${probs ? 'las proporciones esperadas' : 'una distribución uniforme'}. ` + (r.p < .05
       ? `Las frecuencias observadas difirieron significativamente de las esperadas, χ²(${r.df}, <i>N</i> = ${N}) = ${f(r.chi)}, ${pt(r.p)}, <i>w</i> = ${nz(r.w.toFixed(2))}.`
       : `Las frecuencias observadas no difirieron significativamente de las esperadas, χ²(${r.df}, <i>N</i> = ${N}) = ${f(r.chi)}, ${pt(r.p)}.`));
-    sec.code = `# Bondad de ajuste de ${name}\nobs <- table(factor(datos$${X}, levels = c(${lv.map(rq).join(', ')})))\nchisq.test(obs${probs ? `, p = c(${r.probs.map(q => +q.toFixed(6)).join(', ')})` : ''})`;
+    sec.code = `# Bondad de ajuste de ${name}\nobs <- table(factor(datos$${X}, levels = c(${lv.map(rq).join(', ')})))\nprueba <- chisq.test(obs${probs ? `, p = c(${r.probs.map(q => +q.toFixed(6)).join(', ')})` : ''}); prueba\nc(w_de_Cohen = sqrt(unname(prueba$statistic) / sum(obs)))`;
     return sec;
   }
 
@@ -1306,7 +1319,7 @@
         sec.charts.push(fig(`Bland-Altman: ${names[0]} frente a ${names[1]}`, CH.blandAltmanPlot(ba.mean, ba.diff, ba.bias, ba.lo, ba.hi, `Media de ${names[0]} y ${names[1]}`)));
         sec.why.push('Con dos medidas cuantitativas se añade el análisis de Bland-Altman: muestra cuánto difieren en promedio (sesgo) y entre qué valores cae el 95 % de las diferencias (límites de acuerdo), algo que el CCI no informa.'); }
       sec.text.push(`Se calculó el coeficiente de correlación intraclase (${MW[key].toLowerCase()}) para evaluar el acuerdo entre ${list(names.map(esc))} en ${Y.length} sujetos. El CCI fue ${nz(sel.icc.toFixed(2))}, IC 95 % [${nz(sel.ci[0].toFixed(2))}, ${nz(sel.ci[1].toFixed(2))}], <i>F</i>(${sel.df1}, ${sel.df2}) = ${f(sel.F)}, ${pt(sel.p)}, lo que indica una fiabilidad ${lvl(sel.icc)} según los criterios de Koo y Li (2016). La concordancia de Kendall fue <i>W</i> = ${nz(kw.W.toFixed(2))}, ${pt(kw.p)}.${ba ? ` El análisis de Bland-Altman mostró un sesgo de ${f(ba.bias)}, IC 95 % [${f(ba.biasCI[0])}, ${f(ba.biasCI[1])}], con límites de acuerdo entre ${f(ba.lo)} y ${f(ba.hi)}.` : ''}`);
-      sec.code = `# Coeficiente de correlación intraclase\nd <- na.omit(datos[, ${Q}])\nirr::icc(d, model = "${opts.model === 'ICC1' ? 'oneway' : 'twoway'}", type = "${opts.model === 'ICC3' ? 'consistency' : 'agreement'}", unit = "${opts.unit}")\npsych::ICC(d)  # las 6 formas\nirr::kendall(d, correct = TRUE)\nirr::kripp.alpha(t(as.matrix(datos[, ${Q}])), method = "interval")` + (vs.length === 2 ? `\n# Bland-Altman\ndif <- d[[1]] - d[[2]]; c(sesgo = mean(dif), inferior = mean(dif) - 1.96 * sd(dif), superior = mean(dif) + 1.96 * sd(dif))\nsummary(lm(dif ~ I((d[[1]] + d[[2]]) / 2)))  # sesgo proporcional` : '');
+      sec.code = `# Coeficiente de correlación intraclase\nd <- na.omit(datos[, ${Q}])\nic <- irr::icc(d, model = "${opts.model === 'ICC1' ? 'oneway' : 'twoway'}", type = "${opts.model === 'ICC3' ? 'consistency' : 'agreement'}", unit = "${opts.unit}"); ic\nc(CCI = ic$value, IC_inf = ic$lbound, IC_sup = ic$ubound, F = ic$Fvalue, gl1 = ic$df1, gl2 = ic$df2, p = ic$p.value)  # sin redondear\n# Las 6 formas con irr (IC de McGraw y Wong, como Tharp; psych calcula de otro modo el IC de las formas promedio)\nfor (fm in list(c("oneway", "agreement", "single"), c("oneway", "agreement", "average"), c("twoway", "agreement", "single"), c("twoway", "agreement", "average"), c("twoway", "consistency", "single"), c("twoway", "consistency", "average"))) {\n  r6 <- irr::icc(d, model = fm[1], type = fm[2], unit = fm[3]); cat(paste(fm, collapse = "/"), "\\n"); print(c(CCI = r6$value, IC_inf = r6$lbound, IC_sup = r6$ubound, F = r6$Fvalue, gl1 = r6$df1, gl2 = r6$df2, p = r6$p.value)) }\npsych::ICC(d)  # referencia\nkw <- irr::kendall(d, correct = TRUE); kw\nc(W = kw$value, chi2 = unname(kw$statistic), gl = kw$df, p = kw$p.value)  # sin redondear\n# α de Krippendorff con su definición (matriz de coincidencias), como Tharp; admite valoraciones que faltan (NA)\n# (irr::kripp.alpha se desvía de la definición cuando no falta ningún dato)\nkripp <- function(u, nivel, orden = NULL) {  # u: sujetos × jueces\n  vals <- if (is.null(orden)) sort(unique(na.omit(as.vector(u)))) else orden; V <- length(vals); o <- matrix(0, V, V)\n  for (i in seq_len(nrow(u))) { r <- match(u[i, !is.na(u[i, ])], vals); mu <- length(r); if (mu < 2) next\n    for (a in 1:mu) for (b in 1:mu) if (a != b) o[r[a], r[b]] <- o[r[a], r[b]] + 1 / (mu - 1) }\n  nc <- rowSums(o); N <- sum(nc)\n  d2 <- function(c, k) switch(nivel, nominal = (c != k) * 1, ordinal = (sum(nc[min(c, k):max(c, k)]) - (nc[c] + nc[k]) / 2)^2, (vals[c] - vals[k])^2)\n  D <- outer(1:V, 1:V, Vectorize(d2)); 1 - (sum(o * D) / N) / (sum(outer(nc, nc) * D) / (N * (N - 1)))\n}\nkripp(as.matrix(datos[, ${Q}]), "interval")  # α de Krippendorff (intervalo)` + (vs.length === 2 ? `\n# Bland-Altman: sesgo y límites de acuerdo (± 1.96 DT) con IC 95 % (t; EE de los límites = √(3·DT²/n))\ndif <- d[[1]] - d[[2]]; nb <- length(dif); sb <- sd(dif); mb <- mean(dif); tq <- qt(.975, nb - 1); li <- mb - qnorm(.975) * sb; ls <- mb + qnorm(.975) * sb; eb <- sb / sqrt(nb); el <- sqrt(3 * sb^2 / nb)\nrbind(sesgo = c(mb, mb - tq * eb, mb + tq * eb), inferior = c(li, li - tq * el, li + tq * el), superior = c(ls, ls - tq * el, ls + tq * el))\nsummary(lm(dif ~ I((d[[1]] + d[[2]]) / 2)))  # sesgo proporcional` : '');
       return sec;
     }
     const cols = vs.map(catOf), idx = ST.rows.map((_, i) => i).filter(i => cols.every(c => c[i] !== null)), R = idx.map(i => cols.map(c => c[i]));
@@ -1314,7 +1327,7 @@
     const lv = ordOf(vs.find(v => v.order) || vs[0], R.flat());
     const ordK = vs.some(v => v.order), kaC = S.krippAlpha(ST.rows.map((_, i) => cols.map(c => c[i])).filter(u => u.filter(v => v !== null).length >= 2), ordK ? 'ordinal' : 'nominal', lv);
     const kaTab = () => apaTable('α de Krippendorff', ['Nivel de medida', 'α'], [[ordK ? 'Ordinal' : 'Nominal', nz(kaC.alpha.toFixed(3))]], 'Admite valoraciones que faltan. Orientativo (Krippendorff): ≥ .80 fiable; .667–.80 solo para conclusiones provisionales.');
-    const kaCode = `\n# α de Krippendorff\nm <- t(sapply(datos[, ${Q}], function(x) match(as.character(x), c(${lv.map(rq).join(', ')}))))\nirr::kripp.alpha(m, method = "${ordK ? 'ordinal' : 'nominal'}")`;
+    const kaCode = `\n# α de Krippendorff\nm <- t(sapply(datos[, ${Q}], function(x) match(as.character(x), c(${lv.map(rq).join(', ')}))))\n\n# α de Krippendorff con su definición (matriz de coincidencias), como Tharp; admite valoraciones que faltan (NA)\n# (irr::kripp.alpha se desvía de la definición cuando no falta ningún dato)\nkripp <- function(u, nivel, orden = NULL) {  # u: sujetos × jueces\n  vals <- if (is.null(orden)) sort(unique(na.omit(as.vector(u)))) else orden; V <- length(vals); o <- matrix(0, V, V)\n  for (i in seq_len(nrow(u))) { r <- match(u[i, !is.na(u[i, ])], vals); mu <- length(r); if (mu < 2) next\n    for (a in 1:mu) for (b in 1:mu) if (a != b) o[r[a], r[b]] <- o[r[a], r[b]] + 1 / (mu - 1) }\n  nc <- rowSums(o); N <- sum(nc)\n  d2 <- function(c, k) switch(nivel, nominal = (c != k) * 1, ordinal = (sum(nc[min(c, k):max(c, k)]) - (nc[c] + nc[k]) / 2)^2, (vals[c] - vals[k])^2)\n  D <- outer(1:V, 1:V, Vectorize(d2)); 1 - (sum(o * D) / N) / (sum(outer(nc, nc) * D) / (N * (N - 1)))\n}\nkripp(t(m), "${ordK ? 'ordinal' : 'nominal'}", 1:${lv.length})`;
     if (vs.length === 2) {
       const w = opts.weight, r = S.cohenKappa(R.map(x => x[0]), R.map(x => x[1]), lv, w), wn = { none: '', linear: ' ponderada lineal', quadratic: ' ponderada cuadrática' }[w];
       const lk = v => v < 0 ? 'peor que el azar' : v <= .2 ? 'leve' : v <= .4 ? 'aceptable' : v <= .6 ? 'moderado' : v <= .8 ? 'considerable' : 'casi perfecto';
@@ -1330,7 +1343,7 @@
         '<i>z</i> y <i>p</i> contrastan κ = 0 (Fleiss, Cohen y Everitt, 1969); IC con el error típico asintótico.'));
       sec.tables.push(kaTab());
       sec.text.push(`Se calculó la kappa de Cohen${wn} para evaluar el acuerdo entre ${esc(names[0])} y ${esc(names[1])} (${R.length} casos). El acuerdo observado fue del ${f(r.po * 100, 1)} % y la kappa fue ${nz(r.kappa.toFixed(2))}, IC 95 % [${nz(r.ci[0].toFixed(2))}, ${nz(r.ci[1].toFixed(2))}], <i>z</i> = ${f(r.z)}, ${pt(r.p)}, lo que indica un acuerdo ${lk(r.kappa)} (Landis y Koch, 1977). El α de Krippendorff (${ordK ? 'ordinal' : 'nominal'}) fue ${nz(kaC.alpha.toFixed(2))}.`);
-      sec.code = `# Kappa de Cohen\nd <- na.omit(datos[, ${Q}])\nirr::kappa2(d, weight = "${{ none: 'unweighted', linear: 'equal', quadratic: 'squared' }[w]}")\npsych::cohen.kappa(d)  # IC de kappa y kappa ponderada` + kaCode;
+      sec.code = `# Kappa de Cohen\n# códigos 1, 2, 3… en el orden de las categorías de Tharp (irr ordenaría el texto alfabéticamente y la ponderación sería errónea)\nd <- na.omit(datos[, ${Q}])\nd <- data.frame(lapply(d, function(x) match(as.character(x), c(${lv.map(rq).join(', ')}))))\nk <- irr::kappa2(d, weight = "${{ none: 'unweighted', linear: 'equal', quadratic: 'squared' }[w]}"); k\nc(kappa = k$value, z = k$statistic, p = k$p.value)  # sin redondear\n# EE asintótico e IC 95 % (Fleiss, Cohen y Everitt, 1969), como Tharp\nK <- ${lv.length}; P <- table(factor(d[[1]], 1:K), factor(d[[2]], 1:K)) / nrow(d); W <- outer(1:K, 1:K, function(i, j) ${w === 'linear' ? '1 - abs(i - j) / (K - 1)' : w === 'quadratic' ? '1 - ((i - j) / (K - 1))^2' : '(i == j) * 1'})\npr <- rowSums(P); pc <- colSums(P); pe <- sum(W * outer(pr, pc)); kap <- (sum(W * P) - pe) / (1 - pe); v1 <- sum(P * (W - outer(drop(W %*% pc), drop(t(W) %*% pr), "+") * (1 - kap))^2)\nee <- sqrt(max(0, (v1 - (kap - pe * (1 - kap))^2) / (nrow(d) * (1 - pe)^2))); c(kappa = kap, EE = ee, IC_inf = kap - qnorm(.975) * ee, IC_sup = kap + qnorm(.975) * ee)\npsych::cohen.kappa(d)  # IC de kappa y kappa ponderada` + kaCode;
       return sec;
     }
     const r = S.fleissKappa(R, lv);
@@ -1379,7 +1392,9 @@
     sec.charts.push(fig(`Curva ROC${res.length > 1 ? '' : ` de ${res[0].nm}`}`, CH.rocCurve(res.map(o => ({ name: o.nm, auc: o.r.auc, pts: o.r.pts })), res.length === 1 ? res[0].r.best : null), res.length > 1 ? CH.legend(res.map(o => o.nm)) : ''));
     sec.text.push(res.map(o => { const b = o.r.best;
       return `El área bajo la curva ROC de ${esc(o.nm)} fue ${nz(o.r.auc.toFixed(2))}, IC 95 % [${nz(o.r.ci[0].toFixed(2))}, ${nz(o.r.ci[1].toFixed(2))}], ${pt(o.r.p)}, lo que indica una capacidad de discriminación ${lev(o.r.auc)} entre «${esc(pos)}» y «${esc(neg)}». El punto de corte óptimo según el índice de Youden (${o.flip ? '≤' : '≥'} ${ct(o.flip ? -b.t : b.t)}) ofreció una sensibilidad de ${f(b.se * 100, 1)} % y una especificidad de ${f(b.sp * 100, 1)} %.`; }).join(' '));
-    sec.code = `# Curva ROC\nlibrary(pROC)\n` + res.map(o => `r <- roc(datos[[${rq(yName)}]], datos[[${rq(o.nm)}]], levels = c(${rq(neg)}, ${rq(pos)}), direction = "${o.flip ? '>' : '<'}")\nauc(r); ci.auc(r, method = "delong")\ncoords(r, "best", best.method = "youden", ret = c("threshold", "sensitivity", "specificity", "ppv", "npv"))\nplot(r)`).join('\n');
+    sec.code = `# Curva ROC\nlibrary(pROC)\n` + res.map(o => `r <- roc(datos[[${rq(yName)}]], datos[[${rq(o.nm)}]], levels = c(${rq(neg)}, ${rq(pos)}), direction = "${o.flip ? '>' : '<'}")\nauc(r); ci.auc(r, method = "delong")\nee <- sqrt(var(r)); z <- (as.numeric(auc(r)) - .5) / ee; c(AUC = as.numeric(auc(r)), EE = ee, z = z, p = 2 * pnorm(-abs(z)))  # EE de DeLong\n` +
+      `b <- coords(r, "best", best.method = "youden", ret = c("threshold", "sensitivity", "specificity", "ppv", "npv"), transpose = FALSE)\nb$youden <- b$sensitivity + b$specificity - 1; b$RV_pos <- b$sensitivity / (1 - b$specificity); b$RV_neg <- (1 - b$sensitivity) / b$specificity; print(b, digits = 7)\n` +
+      `cc <- coords(r, "all", ret = c("threshold", "sensitivity", "specificity"), transpose = FALSE); cc$youden <- cc$sensitivity + cc$specificity - 1; print(cc, digits = 7)  # coordenadas\nplot(r)`).join('\n');
     return sec;
   }
 
@@ -1459,7 +1474,7 @@
     let jj = 0; const modelo = spec.map((fc, k) => `${fname(fc, k)} =~ ${fc.items.map(it => iname(it, jj++)).join(' + ')}`).join('\n');
     sec.code = `# Análisis factorial confirmatorio (lavaan)\nitems <- datos[complete.cases(datos[, c(${all.map(rq).join(', ')})]), c(${all.map(rq).join(', ')})]\n` +
       (allSyn ? '' : `names(items) <- c(${all.map((_, j) => rq('i' + (j + 1))).join(', ')})  # ${all.map((it, j) => `i${j + 1} = ${it}`).join('; ')}\n`) +
-      `modelo <- '\n${modelo}\n'\najuste <- lavaan::cfa(modelo, data = items)\nsummary(ajuste, fit.measures = TRUE, standardized = TRUE)\nlavaan::fitMeasures(ajuste, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr"))\nlavaan::standardizedSolution(ajuste)`;
+      `modelo <- '\n${modelo}\n'\najuste <- lavaan::cfa(modelo, data = items)\nlavaan::summary(ajuste, fit.measures = TRUE, standardized = TRUE)  # con lavaan:: (sin cargar el paquete, summary() no lo reconoce)\nlavaan::fitMeasures(ajuste, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr"))\nlavaan::standardizedSolution(ajuste)`;
     return sec;
   }
 
@@ -1516,8 +1531,8 @@
     }
     sec.text.push(t);
     const fx = (xNames.length ? xNames.map(rn).join(' + ') : '1') + (hasI ? ` + ${rn(iA)}:${rn(iB)}` : '');
-    sec.code = `# Modelo lineal mixto: ${yN}\nmodelo <- lmerTest::lmer(${rn(yN)} ~ ${fx} + (${slopeN ? `1 + ${rn(slopeN)}` : '1'} | ${rn(gN)}), data = datos, REML = TRUE)\nsummary(modelo)  # gl de Satterthwaite\nconfint(modelo, method = "Wald")\n` +
-      `performance::r2_nakagawa(modelo)\nperformance::icc(lmerTest::lmer(${rn(yN)} ~ 1 + (1 | ${rn(gN)}), data = datos, REML = TRUE))  # CCI del modelo nulo`;
+    sec.code = `# Modelo lineal mixto: ${yN}\nmodelo <- lmerTest::lmer(${rn(yN)} ~ ${fx} + (${slopeN ? `1 + ${rn(slopeN)}` : '1'} | ${rn(gN)}), data = datos, REML = TRUE)\nsummary(modelo)  # gl de Satterthwaite\ncf <- summary(modelo)$coefficients; cbind(IC_inf = cf[, 1] - qt(.975, cf[, "df"]) * cf[, 2], IC_sup = cf[, 1] + qt(.975, cf[, "df"]) * cf[, 2])  # IC 95 % con t y gl de Satterthwaite (como Tharp y SPSS)\nconfint(modelo, method = "Wald")  # referencia: IC de Wald (normal)\n` +
+      `performance::r2_nakagawa(modelo)\nperformance::icc(lmerTest::lmer(${rn(yN)} ~ 1 + (1 | ${rn(gN)}), data = datos, REML = TRUE))  # CCI del modelo nulo\nshapiro.test(head(residuals(modelo), 5000))  # residuos condicionales (shapiro.test admite hasta 5000)`;
     return sec;
   }
 
@@ -1576,8 +1591,8 @@
     sec.text.push(t);
     const Y = rq(yN);
     sec.code = `# Moderación: ${xN} → ${yN}, moderador ${wN}\nd <- data.frame(Y = datos[[${Y}]], X = ${rCode01(xN, xi)}, W = ${rCode01(wN, wi)})\nd <- d[complete.cases(d), ]\n` +
-      (xi.bin ? '' : 'd$X <- d$X - mean(d$X)  # centrada\n') + (wi.bin ? '' : 'd$W <- d$W - mean(d$W)  # centrada\n') +
-      `modelo <- lm(Y ~ X * W, data = d)\nsummary(modelo); confint(modelo)\nanova(lm(Y ~ X + W, data = d), modelo)  # cambio en R² por la interacción\n` +
+      (wi.bin ? '' : 'c(bajo = mean(d$W) - sd(d$W), medio = mean(d$W), alto = mean(d$W) + sd(d$W))  # valores del moderador (−1 DT, media, +1 DT)\n') + (xi.bin ? '' : 'd$X <- d$X - mean(d$X)  # centrada\n') + (wi.bin ? '' : 'd$W <- d$W - mean(d$W)  # centrada\n') +
+      `modelo <- lm(Y ~ X * W, data = d)\nsummary(modelo); confint(modelo)\ns <- summary(modelo)$fstatistic; c(F = unname(s[1]), gl1 = unname(s[2]), gl2 = unname(s[3]), p = unname(pf(s[1], s[2], s[3], lower.tail = FALSE)))  # sin redondear\nanova(lm(Y ~ X + W, data = d), modelo)  # cambio en R² por la interacción\nshapiro.test(residuals(modelo))\nlmtest::bptest(modelo)\n` +
       `emmeans::emtrends(modelo, ~ W, var = "X", at = list(W = ${wi.bin ? 'c(0, 1)' : 'c(-sd(d$W), 0, sd(d$W))'}), infer = TRUE)  # pendientes simples\n# Región de Johnson-Neyman (paquete interactions): interactions::johnson_neyman(modelo, pred = X, modx = W)`;
     return sec;
   }
@@ -1633,11 +1648,11 @@
       body = eqs.concat([`bY <- coef(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`, `ind <- c(${paths.map(expr).join(', ')})`, 'c(ind, total = sum(ind))']).join('; '); }
     else if (model === 7) body = `eM <- coef(lm(M1 ~ X * W${Cf}, d)); b <- coef(lm(Y ~ X + M1${Cf}, d))["M1"]; c((eM["X"] + eM["X:W"] * ws) * b, indice = unname(eM["X:W"] * b))`;
     else body = `a <- coef(lm(M1 ~ X${Cf}, d))["X"]; eY <- coef(lm(Y ~ X + M1 * W${Cf}, d)); c(a * (eY["M1"] + eY["M1:W"] * ws), indice = unname(a * eY["M1:W"]))`;
-    const eqR = model === 4 ? Mn.map(m => `summary(lm(${m} ~ X${Cf}, d))`).concat([`summary(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`]) : model === 6 ? Mn.map((m, j) => `summary(lm(${m} ~ X${Mn.slice(0, j).map(z => ' + ' + z).join('')}${Cf}, d))`).concat([`summary(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`])
-      : model === 7 ? [`summary(lm(M1 ~ X * W${Cf}, d))`, `summary(lm(Y ~ X + M1${Cf}, d))`] : [`summary(lm(M1 ~ X${Cf}, d))`, `summary(lm(Y ~ X + M1 * W${Cf}, d))`];
+    const eqR = model === 4 ? Mn.map(m => `verF(lm(${m} ~ X${Cf}, d))`).concat([`verF(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`]) : model === 6 ? Mn.map((m, j) => `verF(lm(${m} ~ X${Mn.slice(0, j).map(z => ' + ' + z).join('')}${Cf}, d))`).concat([`verF(lm(Y ~ X + ${Mn.join(' + ')}${Cf}, d))`])
+      : model === 7 ? [`verF(lm(M1 ~ X * W${Cf}, d))`, `verF(lm(Y ~ X + M1${Cf}, d))`] : [`verF(lm(M1 ~ X${Cf}, d))`, `verF(lm(Y ~ X + M1 * W${Cf}, d))`];
     sec.code = `# PROCESS, modelo ${model} (${MN}) con bootstrap percentil\n# Y = ${yN}; X = ${xN}${mNames.map((m, j) => `; ${Mn[j]} = ${m}`).join('')}${wN ? `; W = ${wN}` : ''}${cNames.map((c, j) => `; ${Cn[j]} = ${c}`).join('')}\n${dfCode}\nd <- d[complete.cases(d), ]\n` +
       (wN ? `ws <- ${wv.bin ? 'c(0, 1)' : 'quantile(d$W, c(.16, .5, .84))'}  # valores de W (como PROCESS v4)\n` : '') +
-      `efectos <- function(d, i) { d <- d[i, ]; ${body} }\nset.seed(20261015)\nb <- boot::boot(d, efectos, R = 5000)\nb$t0  # estimaciones\nt(apply(b$t, 2, quantile, c(.025, .975)))  # IC 95 % percentil\n# Ecuaciones\n${eqR.join('\n')}\nsummary(lm(Y ~ X${Cf}, d))  # efecto total`;
+      `efectos <- function(d, i) { d <- d[i, ]; ${body} }\nset.seed(20261015)\nb <- boot::boot(d, efectos, R = 5000)\nb$t0  # estimaciones\nt(apply(b$t, 2, quantile, c(.025, .975)))  # IC 95 % percentil\n# Ecuaciones (resumen y F sin redondear)\nverF <- function(m) { s <- summary(m); print(s); print(confint(m)); f <- s$fstatistic; c(F = unname(f[1]), gl1 = unname(f[2]), gl2 = unname(f[3]), p = unname(pf(f[1], f[2], f[3], lower.tail = FALSE))) }\n${eqR.join('\n')}\nsummary(lm(Y ~ X${Cf}, d))  # efecto total\nconfint(lm(Y ~ X${Cf}, d))`;
     return sec;
   }
   function runMediation(yN, xN, mN) {
@@ -1675,7 +1690,7 @@
     sec.code = `# Mediación: ${xN} → ${mN} → ${yN} (bootstrap percentil)\nd <- data.frame(X = ${rCode01(xN, xi)}, M = datos[[${rq(mN)}]], Y = datos[[${rq(yN)}]])\nd <- d[complete.cases(d), ]\n` +
       `ruta_a <- lm(M ~ X, data = d); ruta_bc <- lm(Y ~ X + M, data = d); total <- lm(Y ~ X, data = d)\nsummary(ruta_a); summary(ruta_bc); summary(total)\n` +
       `set.seed(2026)\nindirecto <- replicate(5000, { i <- sample(nrow(d), replace = TRUE); coef(lm(M ~ X, data = d[i, ]))[["X"]] * coef(lm(Y ~ X + M, data = d[i, ]))[["M"]] })\n` +
-      `coef(ruta_a)[["X"]] * coef(ruta_bc)[["M"]]  # efecto indirecto\nquantile(indirecto, c(.025, .975))  # IC 95 % bootstrap`;
+      `coef(ruta_a)[["X"]] * coef(ruta_bc)[["M"]]  # efecto indirecto\ncoef(ruta_a)[["X"]] * coef(ruta_bc)[["M"]] * sd(d$X) / sd(d$Y)  # efecto indirecto estandarizado\nquantile(indirecto, c(.025, .975))  # IC 95 % bootstrap\n# Prueba de Sobel (como referencia)\na <- coef(ruta_a)[["X"]]; b <- coef(ruta_bc)[["M"]]; ea <- coef(summary(ruta_a))["X", 2]; eb <- coef(summary(ruta_bc))["M", 2]\nz <- a * b / sqrt(b^2 * ea^2 + a^2 * eb^2); c(z = z, p = 2 * pnorm(-abs(z)))`;
     return sec;
   }
 
@@ -1753,7 +1768,7 @@
     const Q = names2.map(rq).join(', ');
     sec.code = `# Análisis factorial exploratorio\nitems <- datos[complete.cases(datos[, c(${Q})]), c(${Q})]\npsych::KMO(items)\npsych::cortest.bartlett(cor(items), n = nrow(items))\npsych::fa.parallel(items, fm = "pa", fa = "pc", n.iter = 100, quant = .95)\n` +
       (PCA ? `afe <- psych::principal(items, nfactors = ${m}, rotate = "${m > 1 ? rot : 'none'}")` : `afe <- psych::fa(items, nfactors = ${m}, fm = "${ext}", rotate = "${m > 1 ? (rot === 'geomin' ? 'geominQ' : rot) : 'none'}")`) +
-      `\nprint(afe$loadings, cutoff = .3, sort = TRUE)\nafe$communality` + (m > 1 && OBL ? '\nafe$Phi' : '') + (ext === 'ml' ? '\nafe$STATISTIC; afe$dof; afe$PVAL; afe$RMSEA; afe$TLI  # ajuste' : '');
+      `\nprint(afe$loadings, cutoff = .3, sort = TRUE)\nafe$communality\nL <- unclass(afe$loadings); Ph <- if (is.null(afe$Phi)) diag(ncol(L)) else afe$Phi; sc <- diag(Ph %*% crossprod(L)); rbind(SC_cargas = sc, pct_varianza = 100 * sc / nrow(L))  # varianza explicada` + (m > 1 && OBL ? '\nafe$Phi' : '') + (ext === 'ml' ? '\nafe$STATISTIC; afe$dof; afe$PVAL; afe$RMSEA; afe$TLI  # ajuste' : '');
     return sec;
   }
 
@@ -1795,7 +1810,7 @@
     const keys = vars.filter((_, j) => rev[j]).map(v => rq(v.name));
     sec.code = `# Fiabilidad (alfa de Cronbach y omega de McDonald)\npsych::alpha(datos[, c(${vars.map(v => rq(v.name)).join(', ')})]${keys.length ? `, keys = c(${keys.join(', ')})` : ''})\n` +
       `it <- datos[complete.cases(datos[, c(${vars.map(v => rq(v.name)).join(', ')})]), c(${vars.map(v => rq(v.name)).join(', ')})]\n` + (keys.length ? `for (k in c(${keys.join(', ')})) it[[k]] <- ${lo} + ${hi} - it[[k]]  # ítems inversos\n` : '') +
-      `l <- as.numeric(psych::fa(it, nfactors = 1, fm = "pa")$loadings); l <- l * sign(sum(l))\nsum(l)^2 / (sum(l)^2 + sum(1 - l^2))  # omega total\npsych::alpha.ci(psych::alpha(it, warnings = FALSE)$total$raw_alpha, nrow(it), ncol(it))  # IC de Feldt` + (r.split ? `\nh1 <- rowSums(it[, 1:${r.split.k1}]); h2 <- rowSums(it[, -(1:${r.split.k1})]); r <- cor(h1, h2)\nc(r = r, spearman_brown = 2 * r / (1 + r), guttman = 2 * (1 - (var(h1) + var(h2)) / var(h1 + h2)))  # dos mitades` : '');
+      `l <- as.numeric(psych::fa(it, nfactors = 1, fm = "pa")$loadings); l <- l * sign(sum(l))\nsum(l)^2 / (sum(l)^2 + sum(1 - l^2))  # omega total\npsych::alpha.ci(psych::alpha(it, warnings = FALSE)$total$raw_alpha, nrow(it), ncol(it))  # IC de Feldt\ntotal <- rowSums(it); c(M_total = mean(total), DT_total = sd(total))` + (r.split ? `\nh1 <- rowSums(it[, 1:${r.split.k1}]); h2 <- rowSums(it[, -(1:${r.split.k1})]); r <- cor(h1, h2)\nc(r = r, spearman_brown = 2 * r / (1 + r), guttman = 2 * (1 - (var(h1) + var(h2)) / var(h1 + h2)))  # dos mitades\nc(alfa_mitad1 = psych::alpha(it[, 1:${r.split.k1}], warnings = FALSE)$total$raw_alpha, alfa_mitad2 = psych::alpha(it[, -(1:${r.split.k1})], warnings = FALSE)$total$raw_alpha)` : '');
     return sec;
   }
 
@@ -1853,9 +1868,9 @@
       (ORD ? ' ' + cols.slice(1).map((c, j) => { const b = m.beta[j], se = m.seBeta[j], pp = 2 * (1 - jStat.normal.cdf(Math.abs(b / se), 0, 1)); return pp < .05 ? `${esc(c.name)} se asoció con una ${b > 0 ? 'mayor' : 'menor'} probabilidad de categorías más altas (OR = ${f(Math.exp(b))}, IC 95 % [${f(Math.exp(b - z * se))}, ${f(Math.exp(b + z * se))}], ${pt(pp)}).` : ''; }).filter(Boolean).join(' ') : ''));
     const fml = `${xNames.map(rn).join(' + ')}`, Yf = `factor(datos[[${rq(yName)}]], levels = c(${lv.map(rq).join(', ')})${ORD ? ', ordered = TRUE' : ''})`;
     sec.code = `# Regresión logística ${ORD ? 'ordinal' : 'multinomial'}: ${yName}\nd <- datos; d$.y <- ${Yf}\nd <- d[complete.cases(d[, c(".y", ${xNames.map(rq).join(', ')})]), ]\n` +
-      (ORD ? `modelo <- MASS::polr(.y ~ ${fml}, data = d, Hess = TRUE)\nsummary(modelo)\nexp(cbind(OR = coef(modelo), confint.default(modelo)[names(coef(modelo)), ]))\ncar::Anova(modelo, type = 3)  # razón de verosimilitudes de cada predictor\nif (requireNamespace("brant", quietly = TRUE)) brant::brant(modelo)  # odds proporcionales\n`
-        : `modelo <- nnet::multinom(.y ~ ${fml}, data = d, trace = FALSE)\nsummary(modelo)\nz <- coef(modelo) / summary(modelo)$standard.errors; 2 * (1 - pnorm(abs(z)))  # p de Wald\nexp(coef(modelo))  # odds ratios\ncar::Anova(modelo, type = 3)  # razón de verosimilitudes de cada predictor\n`) +
-      `performance::r2_nagelkerke(modelo)\ntable(observado = d$.y, predicho = predict(modelo))`;
+      (ORD ? `modelo <- MASS::polr(.y ~ ${fml}, data = d, Hess = TRUE)\nsummary(modelo)\nct <- coef(summary(modelo)); cbind(ct, p = 2 * pnorm(-abs(ct[, "t value"])))  # p de Wald\nexp(cbind(OR = coef(modelo), confint.default(modelo)[names(coef(modelo)), ]))\ncar::Anova(modelo, type = 3)  # razón de verosimilitudes de cada predictor\n` + "# Prueba de Brant como Tharp: regresiones logísticas binarias por corte y su covarianza conjunta.\n# (El paquete brant no traspone los bloques de covarianza entre cortes: con varios predictores su χ² difiere.)\nbrant_tharp <- function(modelo, d) {\n  mm <- model.matrix(modelo); X <- mm[, colnames(mm) != \"(Intercept)\", drop = FALSE]; y <- as.integer(d$.y) - 1; J <- nlevels(d$.y) - 1\n  Xc <- cbind(1, X); p <- ncol(X); asg <- attr(mm, \"assign\")[colnames(mm) != \"(Intercept)\"]\n  ajustes <- lapply(1:J, function(j) glm.fit(Xc, as.numeric(y > j - 1), family = binomial(), control = list(epsilon = 1e-14, maxit = 100)))\n  pis <- lapply(ajustes, fitted); fits <- lapply(ajustes, coef)\n  XWX <- function(w) t(Xc) %*% (Xc * w); Inv <- lapply(pis, function(pi) solve(XWX(pi * (1 - pi)))); V <- matrix(0, J * p, J * p)\n  for (a in 1:J) for (b in a:J) { w <- if (a == b) pis[[a]] * (1 - pis[[a]]) else pis[[b]] - pis[[a]] * pis[[b]]\n    blk <- (Inv[[a]] %*% XWX(w) %*% Inv[[b]])[-1, -1, drop = FALSE]; ia <- (a - 1) * p + 1:p; ib <- (b - 1) * p + 1:p; V[ia, ib] <- blk; V[ib, ia] <- t(blk) }\n  beta <- unlist(lapply(fits, function(f) f[-1]))\n  prueba <- function(vars) { D <- do.call(rbind, lapply(2:J, function(j) t(sapply(vars, function(v) { r <- numeric(J * p); r[v] <- 1; r[(j - 1) * p + v] <- -1; r }))))\n    Db <- D %*% beta; chi <- drop(t(Db) %*% solve(D %*% V %*% t(D)) %*% Db); c(chi2 = chi, gl = nrow(D), p = pchisq(chi, nrow(D), lower.tail = FALSE)) }\n  rbind(Global = prueba(1:p), t(sapply(split(seq_len(p), attr(terms(modelo), \"term.labels\")[asg]), prueba)))\n}\nprint(brant_tharp(modelo, d), digits = 7)\n"
+        : `modelo <- nnet::multinom(.y ~ ${fml}, data = d, trace = FALSE)\nsummary(modelo)\nB <- coef(modelo); EE <- summary(modelo)$standard.errors; z <- B / EE\nprint(list(B = B, EE = EE, z = z, p = 2 * pnorm(-abs(z)), OR = exp(B), OR_inf = exp(B - qnorm(.975) * EE), OR_sup = exp(B + qnorm(.975) * EE)), digits = 7)  # coeficientes, Wald y odds ratios\ncar::Anova(modelo, type = 3)  # razón de verosimilitudes de cada predictor\n`) +
+      `nulo <- update(modelo, . ~ 1); chi2 <- deviance(nulo) - deviance(modelo); gl <- modelo$edf - nulo$edf\nc(m2LL_nulo = deviance(nulo), m2LL_modelo = deviance(modelo), chi2 = chi2, gl = gl, p = pchisq(chi2, gl, lower.tail = FALSE), R2_McFadden = 1 - deviance(modelo) / deviance(nulo),\n  R2_CoxSnell = 1 - exp(-chi2 / nrow(d)), R2_Nagelkerke = (1 - exp(-chi2 / nrow(d))) / (1 - exp(-deviance(nulo) / nrow(d))), AIC = AIC(modelo))  # ajuste frente al modelo nulo\nperformance::r2_nagelkerke(modelo)\ntable(observado = d$.y, predicho = predict(modelo))`;
     return sec;
   }
   function runLogistic(yName, xNames) {
@@ -1875,7 +1890,8 @@
     sec.why.push('Los efectos se expresan como odds ratios (OR): OR > 1 aumenta la probabilidad del suceso; OR < 1 la reduce.');
     sec.checks.push(chk(epv >= 10 ? 'ok' : 'no', `Sucesos por predictor: ${f(epv, 1)} (${ev} casos en la categoría menos frecuente para ${p - 1} coeficientes).${epv >= 10 ? ' Se cumple el criterio orientativo de ≥ 10.' : ' Por debajo de 10: el modelo puede ser inestable; reduce predictores.'}`));
     if (m.separation) sec.warn = 'Posible separación completa o casi completa: algún predictor clasifica los casos casi perfectamente y los coeficientes no son fiables. Consulta a un estadístico antes de continuar (puede necesitarse regresión de Firth).';
-    sec.checks.push(chk(m.hl.p >= .05 ? 'ok' : 'no', `Bondad de ajuste (Hosmer-Lemeshow): χ²(${m.hl.df}) = ${f(m.hl.chi)}, ${pt(m.hl.p)}. ${m.hl.p >= .05 ? 'El modelo ajusta adecuadamente.' : 'Indica falta de ajuste.'}`));
+    if (!(m.hl.df >= 1)) sec.checks.push(chk('info', `Bondad de ajuste (Hosmer-Lemeshow): no se puede calcular, porque el modelo solo predice ${m.hl.groups} probabilidades distintas y la prueba necesita al menos 3 grupos de riesgo. Es habitual con un único predictor categórico.`));
+    else sec.checks.push(chk(m.hl.p >= .05 ? 'ok' : 'no', `Bondad de ajuste (Hosmer-Lemeshow): χ²(${m.hl.df}) = ${f(m.hl.chi)}, ${pt(m.hl.p)}. ${m.hl.p >= .05 ? 'El modelo ajusta adecuadamente.' : 'Indica falta de ajuste.'}`));
     if (multi) { const vif = S.ols(X, X.map((_, i) => i)).vif, maxV = maxOf(vif.slice(1)); sec.checks.push(chk(maxV < 5 ? 'ok' : 'no', `Multicolinealidad: VIF máximo = ${f(maxV)}.${maxV < 5 ? ' Sin problemas.' : ' Revisa los predictores correlacionados.'}`)); }
     const sens = m.tab[1][1] / (m.tab[1][0] + m.tab[1][1]), spec = m.tab[0][0] / (m.tab[0][0] + m.tab[0][1]);
     if (Math.min(sens, spec) < .2) sec.checks.push(chk('no', `Clasificación desequilibrada: el modelo solo identifica correctamente al ${f(Math.min(sens, spec) * 100, 1)} % de los casos «${sens < spec ? ev1 : ev0}». El % correcto global (${f(m.acc * 100, 1)} %) refleja sobre todo la categoría mayoritaria: no lo presentes como capacidad predictiva.`));
@@ -1894,7 +1910,7 @@
     if (ns.length) t += `${list(ns)} no ${ns.length > 1 ? 'fueron predictores significativos' : 'fue un predictor significativo'}.`;
     sec.text.push(t);
     sec.charts.push(fig('Odds ratios e IC 95 %', CH.forest(cols.slice(1).map(c => c.name), m.or.slice(1), m.ci.slice(1))));
-    sec.code = `# Regresión logística: ${yName} (suceso = "${lv[1]}")\nmodelo <- glm(${rn(yName)} ~ ${xNames.map(rn).join(' + ')}, data = datos, family = binomial)\nsummary(modelo)\nexp(cbind(OR = coef(modelo), confint.default(modelo)))\nperformance::r2_coxsnell(modelo); performance::r2_nagelkerke(modelo)\nperformance::performance_hosmer(modelo, n_bins = 10)` + (multi ? '\ncar::vif(modelo)' : '');
+    sec.code = `# Regresión logística: ${yName} (suceso = "${lv[1]}")\nmodelo <- glm(${rn(yName)} ~ ${xNames.map(rn).join(' + ')}, data = datos, family = binomial)\nsummary(modelo)\nchi2 <- modelo$null.deviance - modelo$deviance; gl <- modelo$df.null - modelo$df.residual\nc(chi2 = chi2, gl = gl, p = pchisq(chi2, gl, lower.tail = FALSE))  # modelo frente al nulo\nexp(cbind(OR = coef(modelo), confint.default(modelo)))\nperformance::r2_coxsnell(modelo); performance::r2_nagelkerke(modelo)\n# Hosmer-Lemeshow: grupos por los deciles de la probabilidad predicha (como ResourceSelection::hoslem.test)\nprob <- fitted(modelo); yobs <- modelo$y\nG <- ${Math.min(10, Math.floor(n / 5))}; grupos <- cut(prob, unique(quantile(prob, (0:G) / G)), include.lowest = TRUE)\nobs <- xtabs(cbind(1 - yobs, yobs) ~ grupos); esp <- xtabs(cbind(1 - prob, prob) ~ grupos)\nhl <- sum((obs - esp)^2 / esp); c(chi2 = hl, gl = nlevels(grupos) - 2, p = pchisq(hl, nlevels(grupos) - 2, lower.tail = FALSE))` + (multi ? '\ncar::vif(modelo)' : '');
     return sec;
   }
 
@@ -1944,7 +1960,7 @@
       r.pairs.map(o => [`${esc(lv[o.i])} − ${esc(lv[o.j])}`, f(o.diff), f(o.se), f(o.t), r.dfE, pv(o.padj)])));
     sec.text.push(t);
     const Y = rn(yName), G = rn(gName), Cs = covNames.map(rn);
-    sec.code = `# ANCOVA: ${yName} ~ ${gName} + ${covNames.join(' + ')}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- lm(${Y} ~ ${G} + ${Cs.join(' + ')}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::eta_squared(car::Anova(modelo, type = 3), partial = TRUE)\n` +
+    sec.code = `# ANCOVA: ${yName} ~ ${gName} + ${covNames.join(' + ')}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- lm(${Y} ~ ${G} + ${Cs.join(' + ')}, data = datos)\ncar::Anova(modelo, type = 3)\naggregate(modelo$model[[1]], by = list(nivel = modelo$model[[${rq(gName)}]]), FUN = function(x) c(n = length(x), M = mean(x), DT = sd(x)))  # medias observadas (casos del modelo)\neffectsize::eta_squared(car::Anova(modelo, type = 3), partial = TRUE)\n` +
       `anova(modelo, lm(${Y} ~ ${G} * (${Cs.join(' + ')}), data = datos))  # homogeneidad de pendientes\ncar::leveneTest(residuals(modelo) ~ modelo$model[[${rq(gName)}]], center = mean)\nshapiro.test(residuals(modelo))\nemmeans::emmeans(modelo, pairwise ~ ${G}, adjust = "holm")`;
     return sec;
   }
@@ -1989,7 +2005,7 @@
         sec.tables.push(apaTable('Comparaciones por pares (McNemar, corrección de Holm)', ['Comparación', 'χ²', '<i>p</i> ajustada'], pairs.map(o => [`${esc(names[o.a])} − ${esc(names[o.b])}`, f(o.r.chi), pv(o.padj)])));
       } else t += `Las diferencias no fueron estadísticamente significativas, <i>Q</i>(${r.df}) = ${f(r.Q)}, ${pt(r.p)}.`;
       sec.text.push(t);
-      sec.code = `# Q de Cochran: ${names.join(', ')}\nmedidas <- c(${Q})\nd <- datos[complete.cases(datos[, medidas]), medidas]\nd01 <- as.data.frame(lapply(d, function(x) as.integer(x == ${rq(ev)})))\nd01$id <- factor(seq_len(nrow(d01)))\nlargo <- data.frame(id = rep(d01$id, ${k}), momento = factor(rep(medidas, each = nrow(d01)), levels = medidas), valor = unlist(d01[, medidas], use.names = FALSE))\nrstatix::cochran_qtest(largo, valor ~ momento | id)\nrstatix::pairwise_mcnemar_test(largo, valor ~ momento | id, p.adjust.method = "holm")`;
+      sec.code = `# Q de Cochran: ${names.join(', ')}\nmedidas <- c(${Q})\nd <- datos[complete.cases(datos[, medidas]), medidas]\nd01 <- as.data.frame(lapply(d, function(x) as.integer(x == ${rq(ev)})))\nd01$id <- factor(seq_len(nrow(d01)))\nlargo <- data.frame(id = rep(d01$id, ${k}), momento = factor(rep(medidas, each = nrow(d01)), levels = medidas), valor = unlist(d01[, medidas], use.names = FALSE))\nas.data.frame(rstatix::cochran_qtest(largo, valor ~ momento | id))  # Q de Cochran\nas.data.frame(rstatix::pairwise_mcnemar_test(largo, valor ~ momento | id, p.adjust.method = "holm"))`;
     }
     return sec;
   }
@@ -2053,7 +2069,7 @@
     sec.text.push(t);
     if (lb.length <= 8) sec.charts.push(fig(`Interacción ${aName} × ${bName}: medias e IC 95 %`, CH.interaction(la, lb.map((b, j) => ({ name: b, means: la.map((_, i) => S.mean(cells[i][j])), ci: la.map((_, i) => S.meanCI(cells[i][j])) })), yName), CH.legend(lb)));
     const Y = rn(yName), A = rn(aName), B = rn(bName);
-    sec.code = `# ANOVA factorial: ${yName} ~ ${aName} × ${bName}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- aov(${Y} ~ ${A} * ${B}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::eta_squared(car::Anova(modelo, type = 3), partial = TRUE)\ncar::leveneTest(${Y} ~ ${A} * ${B}, data = datos, center = mean)\nshapiro.test(residuals(modelo))\n# Medias marginales estimadas, comparaciones (Tukey) y d de Cohen (como JASP)\nfor (fac in c(${rq(aName)}, ${rq(bName)})) {\n  em <- emmeans::emmeans(modelo, fac)\n  print(em); print(pairs(em, adjust = "tukey"))\n  print(emmeans::eff_size(em, sigma = sigma(modelo), edf = df.residual(modelo)))\n}\n# Efectos simples\nemmeans::emmeans(modelo, pairwise ~ ${A} | ${B}, adjust = "holm")`;
+    sec.code = `# ANOVA factorial: ${yName} ~ ${aName} × ${bName}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- aov(${Y} ~ ${A} * ${B}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::eta_squared(car::Anova(modelo, type = 3), partial = TRUE)\naggregate(${Y} ~ ${A} + ${B}, data = datos, FUN = function(x) c(n = length(x), M = mean(x), DT = sd(x)))  # descriptivos por casilla\nfor (f in c(${rq(aName)}, ${rq(bName)})) print(aggregate(modelo$model[[1]], by = list(nivel = modelo$model[[f]]), FUN = function(x) c(n = length(x), M = mean(x), DT = sd(x))))  # medias observadas por nivel\ncar::leveneTest(${Y} ~ ${A} * ${B}, data = datos, center = mean)\nshapiro.test(residuals(modelo))\n# Medias marginales estimadas, comparaciones (Tukey) y d de Cohen (como JASP)\nfor (fac in c(${rq(aName)}, ${rq(bName)})) {\n  em <- emmeans::emmeans(modelo, fac)\n  print(em); print(pairs(em, adjust = "tukey"))\n  print(emmeans::eff_size(em, sigma = sigma(modelo), edf = df.residual(modelo)))\n}\n# Efectos simples\nemmeans::emmeans(modelo, pairwise ~ ${A} | ${B}, adjust = "holm")`;
     return sec;
   }
 
@@ -2103,7 +2119,7 @@
     sec.text.push(txt);
     const Yc = `cbind(${yNames.map(v => `\`${v}\``).join(', ')})`, Fs = fNames.map(v => `factor(\`${v}\`)`).join(' * '), Cs = cNames.map(v => `\`${v}\``).join(' + ');
     sec.code = `# ${cNames.length ? 'MANCOVA' : 'MANOVA'}\noptions(contrasts = c("contr.sum", "contr.poly"))\nd <- datos[complete.cases(datos[, c(${yNames.concat(fNames, cNames).map(rq).join(', ')})]), ]\nmodelo <- lm(${Yc} ~ ${Fs}${Cs ? ' + ' + Cs : ''}, data = d)\nm3 <- car::Anova(modelo, type = 3)\nfor (ts in c("Pillai", "Wilks", "Hotelling-Lawley", "Roy")) print(summary(m3, test = ts, univariate = FALSE))\n` +
-      `heplots::boxM(d[, c(${yNames.map(rq).join(', ')})], interaction(${fNames.map(v => `d[[${rq(v)}]]`).join(', ')}))  # M de Box\n# ANOVA de seguimiento\n` + yNames.map(v => `car::Anova(lm(\`${v}\` ~ ${Fs}${Cs ? ' + ' + Cs : ''}, data = d), type = 3)`).join('\n');
+      `for (f in c(${fNames.map(rq).join(', ')})) print(aggregate(d[, c(${yNames.map(rq).join(', ')})], by = list(nivel = d[[f]]), FUN = function(x) c(n = length(x), M = mean(x), DT = sd(x))))  # medias y DT\nheplots::boxM(d[, c(${yNames.map(rq).join(', ')})], interaction(${fNames.map(v => `d[[${rq(v)}]]`).join(', ')}))  # M de Box\n# ANOVA de seguimiento\n` + yNames.map(v => `car::Anova(lm(\`${v}\` ~ ${Fs}${Cs ? ' + ' + Cs : ''}, data = d), type = 3)`).join('\n');
     return sec;
   }
 
@@ -2168,8 +2184,9 @@
       sec.checks.push(chk('info', 'Hay interacciones significativas: analiza los efectos simples (el código R incluye cómo hacerlo con emmeans).')); }
     sec.text.push(txt);
     const Y = rn(yName), FS = fNames.map(rn).join(' * '), CS = cNames.map(rn).join(' + ');
-    sec.code = `# ${cNames.length ? 'ANCOVA' : 'ANOVA'} factorial: ${title}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- lm(${Y} ~ ${FS}${CS ? ' + ' + CS : ''}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::omega_squared(car::Anova(modelo, type = 3), partial = TRUE)\n` +
-      fNames.map(nm => `pairs(emmeans::emmeans(modelo, ${rq(nm)}), adjust = "tukey")`).join('\n') + `\n# Efectos simples\nemmeans::joint_tests(modelo, by = ${rq(fNames[1])})` + (cNames.length ? `\n# Homogeneidad de pendientes\nanova(modelo, update(modelo, . ~ . + (${fNames.map(rn).join(' + ')}):(${CS})))` : '');
+    sec.code = `# ${cNames.length ? 'ANCOVA' : 'ANOVA'} factorial: ${title}\noptions(contrasts = c("contr.sum", "contr.poly"))\nmodelo <- lm(${Y} ~ ${FS}${CS ? ' + ' + CS : ''}, data = datos)\ncar::Anova(modelo, type = 3)\neffectsize::eta_squared(car::Anova(modelo, type = 3), partial = TRUE)\neffectsize::omega_squared(car::Anova(modelo, type = 3), partial = TRUE)\n` +
+      `aggregate(modelo$model[[1]], by = modelo$model[, c(${fNames.map(rq).join(', ')}), drop = FALSE], FUN = function(x) c(n = length(x), M = mean(x), DT = sd(x)))  # descriptivos por casilla\ncar::leveneTest(modelo$model[[1]] ~ interaction(modelo$model[, c(${fNames.map(rq).join(', ')})], drop = TRUE), center = mean)  # Levene entre casillas\nshapiro.test(residuals(modelo))\n` +
+      fNames.map(nm => `emmeans::emmeans(modelo, ${rq(nm)})  # medias marginales estimadas\npairs(emmeans::emmeans(modelo, ${rq(nm)}), adjust = "tukey")`).join('\n') + `\n# Efectos simples\nemmeans::joint_tests(modelo, by = ${rq(fNames[1])})` + (cNames.length ? `\n# Homogeneidad de pendientes\nanova(modelo, update(modelo, . ~ . + (${fNames.map(rn).join(' + ')}):(${CS})))` : '');
     return sec;
   }
 
@@ -2303,15 +2320,16 @@
       `datos_c <- na.omit(datos[, c(${rq(yName)}, candidatos)])\n` +
       `ff <- function(v) reformulate(if (length(v)) sprintf("\`%s\`", v) else "1", response = sprintf("\`%s\`", ${rq(yName)}))\n` +
       `pvals <- function(tab) setNames(tab[-1, "Pr(>F)"], gsub("\`", "", rownames(tab)[-1]))\n` +
+      `# cada paso imprime R², ΔR² y la F de cambio (gl, p), como la tabla de pasos de Tharp\npaso <- function(antes, despues) { m0 <- lm(ff(antes), data = datos_c); m1 <- lm(ff(despues), data = datos_c); entra <- length(despues) > length(antes)\n  a <- if (entra) anova(m0, m1) else anova(m1, m0); print(c(R2 = summary(m1)$r.squared, dR2 = summary(m1)$r.squared - summary(m0)$r.squared, F = a$F[2], gl1 = a$Df[2], gl2 = a$Res.Df[2], p = a[["Pr(>F)"]][2]), digits = 7) }\n` +
       `dentro <- ${method === 'backward' ? 'candidatos' : 'character(0)'}\n` +
       `repeat {\n  cambio <- FALSE\n` +
-      (method !== 'backward' ? `  fuera <- setdiff(candidatos, dentro)\n  if (length(fuera)) {\n    pa <- pvals(add1(lm(ff(dentro), data = datos_c), scope = ff(candidatos), test = "F"))\n    if (min(pa) < .05) { dentro <- c(dentro, names(which.min(pa))); cambio <- TRUE }\n  }\n` : '') +
-      (method !== 'forward' ? `  if (length(dentro)) {\n    pd <- pvals(drop1(lm(ff(dentro), data = datos_c), test = "F"))\n    if (max(pd) > .10) { dentro <- setdiff(dentro, names(which.max(pd))); cambio <- TRUE }\n  }\n` : '') +
+      (method !== 'backward' ? `  fuera <- setdiff(candidatos, dentro)\n  if (length(fuera)) {\n    pa <- pvals(add1(lm(ff(dentro), data = datos_c), scope = ff(candidatos), test = "F"))\n    if (min(pa) < .05) { nuevo <- c(dentro, names(which.min(pa))); paso(dentro, nuevo); dentro <- nuevo; cambio <- TRUE }\n  }\n` : '') +
+      (method !== 'forward' ? `  if (length(dentro)) {\n    pd <- pvals(drop1(lm(ff(dentro), data = datos_c), test = "F"))\n    if (max(pd) > .10) { nuevo <- setdiff(dentro, names(which.max(pd))); paso(dentro, nuevo); dentro <- nuevo; cambio <- TRUE }\n  }\n` : '') +
       `  if (!cambio) break\n}\ndentro  # predictores seleccionados\n`;
     const hierCode = !hier ? '' : `# Regresión jerárquica: los mismos casos completos en todos los modelos\ndatos_c <- na.omit(datos[, c(${[yName].concat(blocks.flat()).map(rq).join(', ')})])\n` +
       blocks.map((b, i) => `m${i + 1} <- ${i === 0 ? `lm(${rn(yName)} ~ ${b.map(rn).join(' + ')}, data = datos_c)` : `update(m${i}, . ~ . + ${b.map(rn).join(' + ')})`}\n`).join('') +
-      blocks.slice(1).map((_, i) => `anova(m${i + 1}, m${i + 2})  # F de cambio del modelo ${i + 2} (como SPSS y JASP)\n`).join('') + `sapply(list(${blocks.map((_, i) => 'm' + (i + 1)).join(', ')}), function(m) summary(m)$r.squared)  # R² de cada modelo\nmodelo <- m${blocks.length}\n`;
-    sec.code = `# Regresión lineal${stepwise ? ` ${mName}` : hier ? ' jerárquica' : ''}: ${yName}\n` + (stepwise ? `${stepCode}modelo <- lm(ff(dentro), data = datos_c)\n` : hier ? hierCode : `modelo <- lm(${fml}, data = datos)\n`) + `summary(modelo)\nconfint(modelo)\nparameters::standardize_parameters(modelo, method = "basic")  # β como en SPSS\nshapiro.test(residuals(modelo))\nlmtest::bptest(modelo)\nlmtest::dwtest(modelo)\n` + (xNames.length > 1 ? 'car::vif(modelo)\n' : '') + `sum(cooks.distance(modelo) > 4 / nobs(modelo))` + (het ? '\nlmtest::coeftest(modelo, vcov = sandwich::vcovHC(modelo, type = "HC3"))' : '');
+      blocks.slice(1).map((_, i) => `anova(m${i + 1}, m${i + 2})  # F de cambio del modelo ${i + 2} (como SPSS y JASP)\n`).join('') + `sapply(list(${blocks.map((_, i) => 'm' + (i + 1)).join(', ')}), function(m) summary(m)$r.squared)  # R² de cada modelo\n` + blocks.slice(0, -1).map((_, i) => `print(summary(m${i + 1}), digits = 7); parameters::standardize_parameters(m${i + 1}, method = "basic")  # modelo ${i + 1}\n`).join('') + `modelo <- m${blocks.length}\n`;
+    sec.code = `# Regresión lineal${stepwise ? ` ${mName}` : hier ? ' jerárquica' : ''}: ${yName}\n` + (stepwise ? `${stepCode}modelo <- lm(ff(dentro), data = datos_c)\n` : hier ? hierCode : `modelo <- lm(${fml}, data = datos)\n`) + `summary(modelo)\ns <- summary(modelo)$fstatistic; c(F = unname(s[1]), gl1 = unname(s[2]), gl2 = unname(s[3]), p = unname(pf(s[1], s[2], s[3], lower.tail = FALSE)))  # sin redondear\nconfint(modelo)\nparameters::standardize_parameters(modelo, method = "basic")  # β como en SPSS\nshapiro.test(residuals(modelo))\nlmtest::bptest(modelo)\nlmtest::dwtest(modelo)\n` + 'X <- model.matrix(modelo)[, -1, drop = FALSE]; yv <- model.frame(modelo)[[1]]\nif (ncol(X) > 1) print(t(sapply(setNames(seq_len(ncol(X)), colnames(X)), function(j) { rx <- resid(lm(X[, j] ~ X[, -j])); ry <- resid(lm(yv ~ X[, -j])); sr <- cor(yv, rx)\n  c(r_orden_cero = cor(yv, X[, j]), r_parcial = cor(ry, rx), r_semiparcial = sr, sr2 = sr^2) })), digits = 7)  # como la tabla de colinealidad de Tharp\n' + 'if (length(attr(terms(modelo), "term.labels")) > 1) print(car::vif(modelo))  # VIF generalizado por variable\nif (ncol(X) > 1) { v <- sapply(setNames(seq_len(ncol(X)), colnames(X)), function(j) 1 / (1 - summary(lm(X[, j] ~ X[, -j]))$r.squared)); print(cbind(VIF = v, Tolerancia = 1 / v), digits = 7) }  # de cada columna, como Tharp\n' + `sum(cooks.distance(modelo) > 4 / nobs(modelo))` + (het ? '\nlmtest::coeftest(modelo, vcov = sandwich::vcovHC(modelo, type = "HC3"))' : '');
     return sec;
   }
 
@@ -2404,7 +2422,7 @@
         ${s.sens ? `<p class="small muted">${s.sens}</p>` : ''}
         <details open><summary>¿Por qué este análisis?</summary><ul class="why">${s.why.map(w => `<li>${w}</li>`).join('')}</ul>${s.alt ? `<p class="small" style="margin:10px 0 0"><b>Alternativa:</b> ${s.alt}</p>` : ''}</details>
         ${s.checks.length ? `<details open><summary>Supuestos comprobados</summary><ul class="checks">${s.checks.map(c => `<li class="${c.s}">${c.t}</li>`).join('')}</ul></details>` : ''}
-        <details><summary>Código R para reproducirlo</summary><pre>${esc(s.code)}</pre></details>
+        <details><summary>Código R para reproducirlo</summary><pre>${esc(rOut(s.code))}</pre></details>
       </div>`;
     }).join('') + (ST.sections.length ? citeBox() : '');
     $$('[data-cite]').forEach(b => b.onclick = () => { const el = $('#' + b.dataset.cite); navigator.clipboard.writeText(el.innerText).then(() => { b.textContent = 'Copiado ✓'; setTimeout(() => b.textContent = 'Copiar', 1500); }); track('copiar_cita'); });
@@ -2511,6 +2529,20 @@
       <p class="muted" style="margin-top:24pt">Los gráficos pueden descargarse en formato PNG desde Tharp e insertarse en este documento.</p></body></html>`;
     download('tharp_resultados.doc', new Blob(['﻿', html], { type: 'application/msword' }));
   }
+  // los tamaños del efecto de effectsize se imprimen con 2 decimales por defecto: se piden 4 para poder comprobar los de Tharp
+  // Las funciones de impresión de R redondean (summary a 4 cifras, psych y effectsize a 2 decimales…): para que cada número
+  // de Tharp se pueda comprobar en la salida, las llamadas sueltas a esas funciones se imprimen con más cifras.
+  const R_DIG = [[/^(effectsize::|parameters::)/, 4], [/^psych::cortest\.bartlett\(/, 7], [/^(psych::)/, 4], [/^car::Anova\(/, 7, 'con_mc'], [/^(summary|anova)\(/, 7]];
+  // las secciones que fijan la codificación de efectos (SC tipo III) la restauran al terminar, para no alterar las siguientes
+  const rContr = code => { const O = 'options(contrasts = c("contr.sum", "contr.poly"))';
+    return code.includes(O) ? code.replace(O, `op <- ${O}  # codificación de efectos (SC tipo III) en esta sección`) + '\noptions(op)  # se restaura la codificación por defecto para el resto del script' : code; };
+  const rOut = code => rContr(code || '').split('\n').map(line => {
+    const k = line.search(/\s+#/), call = (k >= 0 ? line.slice(0, k) : line).trim(), cm = k >= 0 ? line.slice(k) : '';
+    const rule = R_DIG.find(([re]) => re.test(call)); if (!rule || !call.endsWith(')') || /^\w[\w.]*\s*<-/.test(call) || /fit\.measures/.test(call)) return line;   // lavaan imprime su propio resumen
+    let depth = 0, ok = true; for (let i = 0; i < call.length; i++) { const c = call[i]; if (c === '"') { i = call.indexOf('"', i + 1); if (i < 0) { ok = false; break; } continue; }
+      if (c === '(') depth++; else if (c === ')') { depth--; if (depth === 0 && i < call.length - 1) { ok = false; break; } } }   // una sola llamada, sin «;»
+    return ok && depth === 0 ? `print(${rule[2] ? `${rule[2]}(${call})` : call}, digits = ${rule[1]})${cm}` : line;
+  }).join('\n');
   function exportR() {
     const isCsv = /\.(csv|tsv|txt)$/i.test(ST.fileName), isJasp = /\.jasp$/i.test(ST.fileName), isSav = /\.z?sav$/i.test(ST.fileName), cats = byType('cat');
     let s = `# ===============================================================\n# Script generado por Tharp ${citeTharp().version} (tharp.es) — ${new Date().toLocaleDateString('es-ES')}\n# Reproduce los análisis realizados sobre «${ST.fileName}»\n# Paquetes: psych, car, effectsize, rstatix, FSA, rcompanion, lmtest, sandwich, parameters\n#\n# Cómo citarlo (APA 7):\n#   ${citeTharp().refText}\n#   Cita también R y los paquetes que uses: citation() y citation(\"paquete\") dan sus referencias.\n# ===============================================================\n\n`;
@@ -2526,7 +2558,8 @@
       return `${x} <- factor(${src}, levels = c(${levelsOf(v).map(rq).join(', ')}))`; };
     if (cats.length) s += `\n# Variables categóricas como factor (mismo orden de categorías que en Tharp)\n${cats.map(fac).join('\n')}\n`;
     if (isSav) s += `datos <- as.data.frame(haven::zap_labels(datos))\n`;
-    s += '\n' + ST.sections.filter(x => !x.error).map(x => x.code).join('\n\n') + '\n';
+    s += '\n# Más cifras en la salida, para poder comprobar cada número de Tharp\noptions(digits = 7, pillar.sigfig = 7)\nif (requireNamespace("emmeans", quietly = TRUE)) emmeans::emm_options(opt.digits = FALSE)\n# Tablas de car::Anova con la media cuadrática (MC = SC / gl), como en Tharp\ncon_mc <- function(a) { if (!"Sum Sq" %in% names(a)) return(a); a <- as.data.frame(a); a$MC <- a[["Sum Sq"]] / a$Df; a }\n# Descriptivos como en Tharp: n, media, DT, mediana, IC 95 % de la media (t), mínimo y máximo\ndescr <- function(x) { x <- x[!is.na(x)]; n <- length(x); m <- mean(x); s <- sd(x); h <- qt(.975, n - 1) * s / sqrt(n)\n  c(n = n, M = m, DT = s, Mdn = median(x), IC_inf = m - h, IC_sup = m + h, Min = min(x), Max = max(x)) }\n';
+    s += '\n' + ST.sections.filter(x => !x.error).map(x => rOut(x.code)).join('\n\n') + '\n';
     download('tharp_analisis.R', new Blob([s], { type: 'text/plain' })); track('descarga_r');
   }
 
