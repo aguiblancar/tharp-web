@@ -171,7 +171,9 @@
     if (!valid.length) { v.type = 'ign'; v.note.push('Vacía'); }
     else if (okN.length / valid.length >= .95) {
       const ints = okN.every(Number.isInteger), u = new Set(okN).size;
-      if (isId && u === okN.length) { v.type = 'ign'; v.note.push('Identificador'); }
+      // «n» suele ser un tamaño muestral: solo es identificador si sus valores son consecutivos (1, 2, 3…)
+      const consec = (() => { const so = okN.slice().sort((x, y) => x - y); return so.every((x, j) => j === 0 || x === so[j - 1] + 1); })();
+      if (isId && u === okN.length && (!/^n$/i.test(name) || consec)) { v.type = 'ign'; v.note.push('Identificador'); }
       else if (ints && u <= 3) { v.type = 'cat'; v.note.push('Códigos numéricos con ' + u + ' valores: tratada como categórica'); }
       else { v.type = 'num'; if (ints && u <= 7) v.note.push('Pocos valores: ¿escala ordinal (Likert)?'); }
       if (v.nonNum) v.note.push(v.nonNum + ' valores no numéricos se tratarán como perdidos');
@@ -382,7 +384,12 @@
     let h = '';
     h += card('desc', true, 'Estadísticos descriptivos y gráficos', 'Media, desviación típica, mediana, asimetría y frecuencias, con histogramas y gráficos de barras.',
       `<div class="field"><span>Variables</span>${chips('desc', nums.concat(cats), () => true)}</div>
-       <label class="field"><span>Dividir por grupos (opcional)</span><select id="descG"><option value="">No</option>${facs.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label>`);
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Dividir por grupos (opcional)</span><select id="descG"><option value="">No</option>${facs.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label>
+       <label class="field"><span>Gráfico de distribución</span><select id="descPlot"><option value="box">Diagrama de caja</option><option value="violin">Violín</option><option value="rain">Nube de lluvia (densidad, caja y datos)</option></select></label></div>`);
+    const withNA = nums.filter(v => numOf(v).some(x => x === null));
+    h += card('miss', false, 'Análisis de valores perdidos (MCAR de Little)', 'Cuántos datos faltan en cada variable, qué patrones siguen y si faltan completamente al azar (prueba MCAR de Little), con las medias y desviaciones estimadas por EM.',
+      `<div class="field"><span>Variables cuantitativas</span>${chips('msV', nums, v => (withNA.length >= 2 ? withNA : nums).includes(v))}</div>`,
+      nums.length < 2 ? 'Necesitas al menos dos variables cuantitativas.' : '');
     h += card('corr', nums.length >= 2, 'Correlaciones', 'Matriz de correlaciones con significación. Tharp elige Pearson o Spearman según la distribución.',
       `<div class="field"><span>Variables cuantitativas</span>${chips('corr', nums, v => (D.corr ? D.corr.includes(v.name) : nums.indexOf(v) < 8))}</div>
        <label class="field"><span>Método</span><select id="corrM"><option value="auto">Automático (recomendado)</option><option value="pearson">Pearson</option><option value="spearman">Spearman</option><option value="kendall">Tau-b de Kendall</option></select></label>
@@ -393,7 +400,7 @@
       `<div class="field"><span>Variables dependientes (cuantitativas)</span>${chips('compY', nums, v => (dComp.y ? dComp.y.includes(v.name) : v === nums[0]))}</div>
        <label class="field"><span>Variable de agrupación</span>${sel('compG', facs, pick(dComp.g, facs[0] && facs[0].name))}</label>
        <label class="field"><span>Hipótesis (solo con 2 grupos)</span><select id="compAlt"><option value="two">Bilateral: los grupos difieren (recomendada)</option><option value="greater">Unilateral: el primer grupo puntúa más</option><option value="less">Unilateral: el primer grupo puntúa menos</option></select></label>
-       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Comparaciones post hoc (3 o más grupos)</span><select id="compPH" onchange="document.getElementById('compCtrlW').style.display = this.value === 'dunnett' ? '' : 'none'"><option value="auto">Automáticas: Tukey o Games-Howell según las varianzas (recomendado)</option><option value="tukey">Tukey HSD</option><option value="gh">Games-Howell</option><option value="bonferroni">Bonferroni</option><option value="holm">Holm</option><option value="sidak">Šidák</option><option value="scheffe">Scheffé</option><option value="tamhane">T2 de Tamhane</option><option value="dunnett">Dunnett (frente a un grupo control)</option><option value="lsd">DMS de Fisher (sin corrección)</option></select></label>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Comparaciones post hoc (3 o más grupos)</span><select id="compPH" onchange="document.getElementById('compCtrlW').style.display = this.value === 'dunnett' ? '' : 'none'"><option value="auto">Automáticas: Tukey o Games-Howell según las varianzas (recomendado)</option><option value="tukey">Tukey HSD</option><option value="gh">Games-Howell</option><option value="bonferroni">Bonferroni</option><option value="holm">Holm</option><option value="sidak">Šidák</option><option value="scheffe">Scheffé</option><option value="snk">Student-Newman-Keuls (SNK)</option><option value="duncan">Duncan</option><option value="regwq">REGWQ (Ryan-Einot-Gabriel-Welsch)</option><option value="gt2">GT2 de Hochberg</option><option value="gabriel">Gabriel</option><option value="tamhane">T2 de Tamhane</option><option value="dunnett">Dunnett (frente a un grupo control)</option><option value="lsd">DMS de Fisher (sin corrección)</option></select></label>
        <label class="field" id="compCtrlW" style="display:none"><span>Grupo control</span><select id="compCtrl"></select></label>
        <label class="field"><span>Contrastes planificados (opcional)</span><select id="compCon"><option value="">Ninguno</option><option value="polynomial">Polinómicos: tendencia lineal, cuadrática…</option><option value="simple">Simples: cada grupo frente al primero</option><option value="repeated">Repetidos: cada grupo frente al siguiente</option><option value="helmert">Helmert: cada grupo frente a la media de los siguientes</option><option value="difference">Diferencia: cada grupo frente a la media de los anteriores</option><option value="deviation">Desviación: cada grupo frente a la media global</option></select></label></div>
        <div class="field"><span>Pruebas no paramétricas adicionales (opcional)</span>${optChips('compNP', [['median', 'Prueba de la mediana'], ['ks', 'Kolmogorov-Smirnov (2 grupos)'], ['jt', 'Jonckheere-Terpstra (tendencia en el orden de los grupos)']])}</div>`,
@@ -403,6 +410,17 @@
        <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Valor de referencia</span><input id="oMu" type="number" step="any" value="0" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:140px"></label>
        <label class="field"><span>Hipótesis</span><select id="oAlt"><option value="two">Bilateral: la media difiere (recomendada)</option><option value="greater">Unilateral: la media es mayor</option><option value="less">Unilateral: la media es menor</option></select></label></div>
        <div class="field"><span>Pruebas adicionales (opcional)</span>${optChips('oNP', [['sign', 'Prueba de los signos (mediana frente al valor de referencia)'], ['runs', 'Prueba de rachas (aleatoriedad en el orden de los casos)']])}</div>`,
+      nums.length < 1 ? 'Necesitas una variable cuantitativa.' : '');
+    const fac2 = facs.filter(v => levelsOf(v).length === 2);
+    h += card('tost', false, 'Equivalencia (TOST)', 'Para mostrar que dos medias son prácticamente iguales (un p > .05 no lo demuestra): dos pruebas t unilaterales frente a unos límites de equivalencia que fijas tú antes de ver los datos.',
+      `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Diseño</span><select id="tDes"><option value="ind">Dos grupos independientes</option><option value="paired">Dos medidas de las mismas personas</option><option value="one">Una muestra frente a un valor</option></select></label>
+       <label class="field"><span>Variable cuantitativa</span><select id="tY">${nums.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label>
+       <label class="field"><span>Grupo (dos grupos)</span><select id="tG"><option value="">—</option>${fac2.map((v, k) => `<option value="${esc(v.name)}"${k === 0 ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
+       <label class="field"><span>Segunda medida (relacionadas)</span><select id="tY2"><option value="">—</option>${nums.map((v, k) => `<option value="${esc(v.name)}"${k === 1 ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>
+       <label class="field"><span>Valor de referencia (una muestra)</span><input id="tMu" type="number" step="any" value="0" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:110px"></label></div>
+       <div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Límites expresados en</span><select id="tUnit"><option value="d">d de Cohen (tamaño del efecto)</option><option value="raw">Unidades de la variable</option></select></label>
+       <label class="field"><span>Límite inferior</span><input id="tLow" type="number" step="any" value="-0.5" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:110px"></label><label class="field"><span>Límite superior</span><input id="tHigh" type="number" step="any" value="0.5" style="font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;width:110px"></label></div>
+       <p class="muted small">Los límites son la diferencia más pequeña que tendría importancia práctica en tu campo; justifícalos en el trabajo (estudios previos, criterio clínico…). Por defecto, ± 0.5 de d.</p>`,
       nums.length < 1 ? 'Necesitas una variable cuantitativa.' : '');
     const dP = D.paired || {};
     const pDef = (dP.vars || []).filter(has);
@@ -449,6 +467,39 @@
        ${[2, 3].map(b => `<div class="field rblk" style="display:${dR.method === 'blocks' ? '' : 'none'}"><span>Bloque ${b} (se añaden al modelo anterior${b === 3 ? '; opcional' : ''})</span>${chips('rB' + b, nums.concat(facs), v => ((dR['b' + b] || []).includes(v.name)))}</div>`).join('')}`,
       nums.length < 1 ? 'Necesitas una variable cuantitativa como dependiente.' : '');
     const bins = cats.filter(v => levelsOf(v).length === 2), dL = D.logit || {};
+    const cnts = nums.filter(v => { const x = numOf(v).filter(a => a !== null); return x.length && x.every(a => a >= 0 && Number.isInteger(a)); });
+    h += card('count', false, 'Regresión para recuentos (Poisson o binomial negativa)', 'Para variables dependientes que cuentan algo (número de visitas, síntomas, errores…): razones de tasas (IRR). Tharp comprueba la sobredispersión y elige entre Poisson y binomial negativa.',
+      `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Variable dependiente (recuento)</span><select id="cntY">${cnts.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label>
+       <label class="field"><span>Modelo</span><select id="cntF"><option value="auto">Automático (según la sobredispersión)</option><option value="poisson">Poisson</option><option value="negbin">Binomial negativa</option></select></label>
+       <label class="field"><span>Exposición (opcional: tiempo, población…)</span><select id="cntO"><option value="">Ninguna</option>${nums.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label></div>
+       <div class="field"><span>Predictores</span>${chips('cntX', nums.concat(cats), v => v === facs[0])}</div>`,
+      !cnts.length ? 'Necesitas una variable de recuento (números enteros ≥ 0).' : '');
+    const tvars = nums.filter(v => numOf(v).every(a => a === null || a >= 0)), evs = nums.filter(v => numOf(v).every(a => a === null || a === 0 || a === 1)).concat(cats.filter(v => levelsOf(v).length === 2));
+    h += card('surv', false, 'Análisis de supervivencia (Kaplan-Meier, log-rank y Cox)', 'Tiempo hasta un evento (recaída, abandono, alta…) con casos que aún no lo han tenido (censurados): curvas de supervivencia, comparación de grupos y regresión de Cox (hazard ratios).',
+      `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Tiempo de seguimiento</span><select id="svT">${tvars.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label>
+       <label class="field"><span>Evento (qué valor indica que sí ocurrió)</span><select id="svE">${evs.map(v => v.type === 'num' ? `<option value="${esc(v.name)}">${esc(v.name)} = 1</option>`
+         : (lv => { const neg = l => /^(sin|no|ningun|ninguno|ninguna|vivo|viva|censurad)/i.test(normTxt(l)), k = neg(lv[0]) && !neg(lv[1]) ? 1 : !neg(lv[0]) && neg(lv[1]) ? 0 : 1;
+             return [k, 1 - k].map(j => `<option value="${esc(v.name + '\u0001' + lv[j])}">${esc(v.name)} = ${esc(lv[j])}</option>`).join(''); })(levelsOf(v))).join('')}</select></label>
+       <label class="field"><span>Comparar grupos (opcional)</span><select id="svG"><option value="">No</option>${facs.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label></div>
+       <div class="field"><span>Predictores para la regresión de Cox (opcional)</span>${chips('svX', nums.concat(cats), v => false)}</div>`,
+      !tvars.length || !evs.length ? 'Necesitas una variable de tiempo (≥ 0) y otra que indique el evento (0/1 o dos categorías).' : '');
+    // columnas del metaanálisis reconocidas por su nombre; si no se reconocen, se dejan sin elegir (nunca por posición)
+    const G1 = '[_.\\s-]?(1|e|exp|tx|trat|i)', G2 = '[_.\\s-]?(2|c|con|ctrl|control)';
+    const MPAT = { M1: '^(m|mean|media|mu)' + G1 + '$', S1: '^(sd|s|dt|de)' + G1 + '$', N1: '^n' + G1 + '$', M2: '^(m|mean|media|mu)' + G2 + '$', S2: '^(sd|s|dt|de)' + G2 + '$', N2: '^n' + G2 + '$',
+      A: '^(ev|eventos?|events?)' + G1 + '$|^ai$', B: '^(no[_.\\s-]?ev|no[_.\\s-]?eventos?|non[_.\\s-]?events?)' + G1 + '$|^bi$', C: '^(ev|eventos?|events?)' + G2 + '$|^ci$', D: '^(no[_.\\s-]?ev|no[_.\\s-]?eventos?|non[_.\\s-]?events?)' + G2 + '$|^di$',
+      R: '^(r|ri|cor|correlaci[oó]n)$', N: '^(n|ni|n[_.\\s-]?total|tama[nñ]o)$', Y: '^(yi|g|d|es|te|efecto|effect|smd|hedges[_.\\s-]?g|cohen[_.\\s-]?d)$', E: '^(se|sei|ee|se[_.\\s-].+|ee[_.\\s-].+|error[_.\\s-]?t[ií]pico)$' };
+    const mguess = Object.fromEntries(Object.entries(MPAT).map(([k, re]) => { const v = nums.find(v => new RegExp(re, 'i').test(v.name.trim())); return [k, v ? v.name : '']; }));
+    const mtype = ['SMD', 'OR', 'COR', 'GEN'].find(T => ({ SMD: ['M1', 'S1', 'N1', 'M2', 'S2', 'N2'], OR: ['A', 'B', 'C', 'D'], COR: ['R', 'N'], GEN: ['Y', 'E'] }[T]).every(k => mguess[k])) || 'SMD';
+    const mlab = (ST.vars.find(v => /^(estudio|study|autor|author|referencia|reference)/i.test(v.name.trim())) || {}).name || '';
+    const msel = (id, lab) => `<label class="field"><span>${lab}</span><select id="${id}"><option value="">— elige —</option>${nums.map(v => `<option value="${esc(v.name)}"${v.name === mguess[id.slice(2)] ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label>`;
+    h += card('meta', false, 'Metaanálisis (una fila por estudio)', 'Combina los resultados de varios estudios: efecto global con IC, heterogeneidad (Q, I², τ²), intervalo de predicción, prueba de Egger y gráficos de bosque y embudo.',
+      `<div style="display:flex;gap:14px;flex-wrap:wrap"><label class="field"><span>Datos de cada estudio</span><select id="mtT">${[['SMD', 'Medias, DT y n de dos grupos → g de Hedges'], ['MD', 'Medias, DT y n de dos grupos → diferencia de medias'], ['OR', 'Tabla 2×2 (eventos y no eventos en cada grupo) → odds ratio'], ['COR', 'Correlación y n → r'], ['GEN', 'Tamaño del efecto ya calculado y su error típico']].map(([k, l]) => `<option value="${k}"${k === mtype ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+       <label class="field"><span>Modelo</span><select id="mtM"><option value="REML">Efectos aleatorios (REML, recomendado)</option><option value="DL">Efectos aleatorios (DerSimonian-Laird)</option><option value="FE">Efectos fijos</option></select></label>
+       <label class="field"><span>Nombre del estudio (opcional)</span><select id="mtL"><option value="">Fila 1, 2, 3…</option>${ST.vars.map(v => `<option value="${esc(v.name)}"${v.name === mlab ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label></div>
+       <p class="muted small">Medias y DT: grupo 1 (experimental) y grupo 2 (control). Tabla 2×2: eventos y no eventos del grupo 1 y del grupo 2. Correlación: r y n. Efecto ya calculado: el efecto y su error típico.</p>
+       <div style="display:flex;gap:10px;flex-wrap:wrap">${msel('mtM1', 'Media 1')}${msel('mtS1', 'DT 1')}${msel('mtN1', 'n 1')}${msel('mtM2', 'Media 2')}${msel('mtS2', 'DT 2')}${msel('mtN2', 'n 2')}</div>
+       <div style="display:flex;gap:10px;flex-wrap:wrap">${msel('mtA', 'Eventos 1')}${msel('mtB', 'No eventos 1')}${msel('mtC', 'Eventos 2')}${msel('mtD', 'No eventos 2')}${msel('mtR', 'r')}${msel('mtN', 'n')}${msel('mtY', 'Efecto')}${msel('mtE', 'Error típico')}</div>`,
+      nums.length < 2 ? 'Necesitas al menos dos variables cuantitativas (una fila por estudio).' : '');
     h += card('logit', !!D.logit && bins.length >= 1, 'Regresión logística binaria', 'Para variables dependientes dicotómicas (sí/no): odds ratios, R² de Nagelkerke, Hosmer-Lemeshow y tabla de clasificación.',
       `<label class="field"><span>Variable dependiente (2 categorías)</span>${sel('lY', bins, pick(dL.y, bins[0] && bins[0].name))}</label>
        <div class="field"><span>Predictores</span>${chips('lX', nums.concat(facs), v => (dL.x ? dL.x.includes(v.name) : false))}</div>`,
@@ -514,9 +565,10 @@
        <label class="field"><span>× predictor B</span><select id="lmIB"><option value="">—</option>${nums.concat(facs).map(v => `<option value="${esc(v.name)}"${dL2.ib === v.name ? ' selected' : ''}>${esc(v.name)}</option>`).join('')}</select></label></div>`,
       nums.length < 1 ? 'Necesitas una variable dependiente cuantitativa.' : '');
     const dCf = D.cfa || [];
-    h += card('cfa', !!D.cfa && nums.length >= 3, 'Análisis factorial confirmatorio', 'Contrasta una estructura de factores definida de antemano: índices de ajuste (CFI, TLI, RMSEA, SRMR), cargas estandarizadas, correlaciones entre factores y fiabilidad (ω, AVE).',
+    h += card('cfa', !!D.cfa && nums.length >= 3, 'Análisis factorial confirmatorio', 'Contrasta una estructura de factores definida de antemano: índices de ajuste (CFI, TLI, RMSEA, SRMR), cargas estandarizadas, correlaciones entre factores, fiabilidad (ω, AVE) y, si quieres, invarianza de medida entre grupos.',
       `<p class="small muted" style="margin:0 0 10px">Asigna cada ítem a un solo factor. Deja vacíos los factores que no uses.</p>` +
-      [0, 1, 2, 3].map(k => `<div class="field" style="border-top:1px solid var(--line);padding-top:10px"><span>Factor ${k + 1}: <input id="cfN${k}" value="${esc((dCf[k] && dCf[k].name) || `Factor ${k + 1}`)}" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px;width:200px"></span>${chips('cfI' + k, nums, v => !!(dCf[k] && dCf[k].items.includes(v.name)))}</div>`).join(''),
+      [0, 1, 2, 3].map(k => `<div class="field" style="border-top:1px solid var(--line);padding-top:10px"><span>Factor ${k + 1}: <input id="cfN${k}" value="${esc((dCf[k] && dCf[k].name) || `Factor ${k + 1}`)}" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px;width:200px"></span>${chips('cfI' + k, nums, v => !!(dCf[k] && dCf[k].items.includes(v.name)))}</div>`).join('') +
+      `<label class="field" style="border-top:1px solid var(--line);padding-top:10px"><span>Invarianza de medida entre grupos (opcional)</span><select id="cfG"><option value="">Sin comparación entre grupos</option>${facs.map(v => `<option value="${esc(v.name)}">${esc(v.name)}</option>`).join('')}</select></label>`,
       nums.length < 3 ? 'Necesitas al menos tres ítems cuantitativos.' : '');
     const dE = D.efa || {};
     h += card('efa', !!D.efa && nums.length >= 3, 'Análisis factorial exploratorio y componentes principales', 'Estructura interna de un cuestionario: KMO, Bartlett, análisis paralelo, cargas, comunalidades y varianza explicada; ejes principales, MinRes, máxima verosimilitud o ACP, con siete rotaciones.',
@@ -548,11 +600,12 @@
     tabNo++;
     return `<div class="scroll"><table class="apa ${cls}"><caption><b>Tabla ${tabNo}</b><i>${esc(title)}</i></caption><thead><tr>${head.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>${note ? `<div class="note"><i>Nota.</i> ${note}</div>` : ''}</div>`;
   }
-  const fig = (title, svg, legendHtml = '') => ({ title, svg, legend: legendHtml });
+  const fig = (title, svg, legendHtml = '', wide = false) => ({ title, svg, legend: legendHtml, wide });
   const chk = (s, t) => ({ s, t });
 
   // ---------- análisis ----------
-  function runDescriptives(names, gName = '') {
+  function runDescriptives(names, gName = '', plot = 'box') {
+    const BX = (groups, label) => (plot === 'box' ? CH.boxplot(groups, label) : CH.raincloud(groups, label, plot));
     const vars = names.map(vByName).filter(Boolean).filter(v => v.name !== gName), nums = vars.filter(v => v.type === 'num'), cats = vars.filter(v => v.type === 'cat');
     const sec = { title: 'Estadísticos descriptivos', test: 'Descriptivos', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     const G = gName ? vByName(gName) : null, gl = G ? levelsOf(G) : [], gc = G ? catOf(G) : null;
@@ -583,13 +636,13 @@
       sec.checks.push(skewed.length ? chk('no', `Asimetría marcada (|asimetría| > 1) en ${list(skewed.map(esc))}: para estas variables conviene informar mediana y rango intercuartílico.`)
         : chk('ok', 'Ninguna variable cuantitativa presenta una asimetría marcada (|asimetría| ≤ 1).'));
       sec.checks.push(outl.length ? chk('info', `Posibles valores atípicos: ${list(outl)}. Revisa que no sean errores de introducción de datos antes de decidir si se mantienen.`) : chk('ok', 'No hay valores atípicos según el criterio de 1.5·RIC ni |z| > 3.'));
-      if (nums.length <= 8) sec.charts.push(fig('Diagramas de caja', CH.boxplot(nums.map(v => ({ name: v.name, x: numOf(v).filter(a => a !== null) })).filter(g => g.x.length > 1), 'Variables')));
+      if (nums.length <= 8) sec.charts.push(fig({ box: 'Diagramas de caja', violin: 'Gráficos de violín', rain: 'Nubes de lluvia (densidad, caja y datos)' }[plot], BX(nums.map(v => ({ name: v.name, x: numOf(v).filter(a => a !== null) })).filter(g => g.x.length > 1), 'Variables')));
       const nt = nums.slice(0, 6).map(v => { const x = numOf(v).filter(a => a !== null); if (x.length < 2) return ''; const d = S.describe(x); return `${esc(v.name)} (<i>M</i> = ${f(d.mean)}, <i>DT</i> = ${f(d.sd)}; rango ${+d.min.toFixed(2)}–${+d.max.toFixed(2)})`; }).filter(Boolean);
       if (nt.length) textParts.push(`En cuanto a las variables cuantitativas, se obtuvieron los siguientes valores: ${list(nt)}.`);
       if (G) {
         const gr = []; nums.forEach(v => { const x = numOf(v); gl.forEach((l, j) => { const xs = x.filter((a, i) => a !== null && gc[i] === l); if (xs.length < 1) return; const d = S.describe(xs);
           gr.push([j === 0 ? esc(v.name) : '', esc(l), d.n, f(d.mean), xs.length > 1 ? f(d.sd) : '—', f(d.median), +d.min.toFixed(3), +d.max.toFixed(3)]); });
-          if (sec.charts.length < 24 && gl.length <= 10) sec.charts.push(fig(`${v.name} por ${gName}`, CH.boxplot(gl.map(l => ({ name: l, x: x.filter((a, i) => a !== null && gc[i] === l) })).filter(g => g.x.length > 1), v.name))); });
+          if (sec.charts.length < 24 && gl.length <= 10) sec.charts.push(fig(`${v.name} por ${gName}`, BX(gl.map(l => ({ name: l, x: x.filter((a, i) => a !== null && gc[i] === l) })).filter(g => g.x.length > 1), v.name))); });
         sec.tables.push(apaTable(`Estadísticos descriptivos por ${gName}`, ['Variable', esc(gName), '<i>n</i>', '<i>M</i>', '<i>DT</i>', '<i>Mdn</i>', 'Mín.', 'Máx.'], gr));
       }
     }
@@ -684,6 +737,8 @@
     return sec;
   }
 
+  // código R de GT2 de Hochberg y Gabriel: módulo máximo estudentizado integrado con la densidad de sqrt(χ²/gl)
+  const gtCode = meth => `print(tapply(dd$y, dd$g, mean), digits = 7)  # medias de los grupos\n# ${meth === 'gt2' ? 'GT2 de Hochberg' : 'Gabriel'}: módulo máximo estudentizado con m = k(k − 1)/2 comparaciones\nlocal({ m <- tapply(dd$y, dd$g, mean); n <- tapply(dd$y, dd$g, length); k <- length(m); gl <- nrow(dd) - k; mce <- sum(tapply(dd$y, dd$g, function(v) sum((v - mean(v))^2))) / gl; M <- k * (k - 1) / 2\n  dS <- function(s) exp(log(2) + (gl / 2) * log(gl / 2) - lgamma(gl / 2) + (gl - 1) * log(s) - gl * s^2 / 2)\n  psmm <- function(c) integrate(function(s) (2 * pnorm(c * s) - 1)^M * dS(s), 0, Inf, rel.tol = 1e-12, subdivisions = 2000L)$value; res <- NULL\n  for (a in 1:(k - 1)) for (b in (a + 1):k) { est <- abs(m[a] - m[b]) / ${meth === 'gt2' ? 'sqrt(mce * (1 / n[a] + 1 / n[b]))' : '(sqrt(mce) * (1 / sqrt(2 * n[a]) + 1 / sqrt(2 * n[b])))'}\n    res <- rbind(res, data.frame(par = paste(names(m)[a], "-", names(m)[b]), estadistico = est, p = 1 - psmm(est))) }\n  print(res, digits = 7) })`;
   function runCompare(yName, gName, alt = 'two', opts = {}) {
     const yv = vByName(yName), gv = vByName(gName), y = numOf(yv), g = catOf(gv), lv = levelsOf(gv);
     const sec = { title: `${yName} según ${gName}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
@@ -737,7 +792,11 @@
           : `No se encontraron diferencias estadísticamente significativas entre ${esc(A.name)} (${MD(A)}) y ${esc(B.name)} (${MD(B)}), ${st}.`));
         code += `with(datos, mean(${Y}[${G} == ${rq(A.name)}], na.rm = TRUE) - mean(${Y}[${G} == ${rq(B.name)}], na.rm = TRUE))  # diferencia de medias (${A.name} − ${B.name})\nt.test(${Y} ~ ${G}, data = datos, var.equal = ${eqVar ? 'TRUE' : 'FALSE'}${one ? `, alternative = "${rAlt}"` : ''})\n` +
           (eqVar ? `effectsize::cohens_d(${Y} ~ ${G}, data = datos${one ? `, alternative = "${rAlt}"` : ''})  # d con IC (t no central)\neffectsize::hedges_g(${Y} ~ ${G}, data = datos)`
-            : `# d de Welch como JASP: diferencia / sqrt((s1^2 + s2^2) / 2)\nwith(datos, diff(rev(tapply(${Y}, ${G}, mean))) / sqrt(mean(tapply(${Y}, ${G}, var))))`);
+            : `# d de Welch como JASP: diferencia / sqrt((s1^2 + s2^2) / 2); IC por la t no central con los gl de Welch y g de Hedges, como Tharp\n` +
+              `with(datos, { a <- ${Y}[${G} == ${rq(A.name)} & !is.na(${Y})]; b <- ${Y}[${G} == ${rq(B.name)} & !is.na(${Y})]; n1 <- length(a); n2 <- length(b)\n` +
+              `  d <- (mean(a) - mean(b)) / sqrt((var(a) + var(b)) / 2); gl <- (var(a) / n1 + var(b) / n2)^2 / ((var(a) / n1)^2 / (n1 - 1) + (var(b) / n2)^2 / (n2 - 1)); k <- sqrt(n1 * n2 / (n1 + n2))\n` +
+              `  ncp <- function(q) suppressWarnings(uniroot(function(m) pt(d * k, gl, m) - q, d * k + c(-1, 1) * (10 + abs(d * k)), extendInt = "yes", tol = 1e-12))$root  # pt avisa de precisión en las colas lejanas que explora la búsqueda\n` +
+              `  print(c(d = d, ic_inf = ${alt === 'less' ? '-Inf' : `ncp(${alt === 'two' ? '.975' : '.95'}) / k`}, ic_sup = ${alt === 'greater' ? 'Inf' : `ncp(${alt === 'two' ? '.025' : '.05'}) / k`}, g = d * exp(lgamma((n1 + n2 - 2) / 2) - log(sqrt((n1 + n2 - 2) / 2)) - lgamma((n1 + n2 - 3) / 2))), digits = 7) })`);
       } else {
         const r = S.mannWhitney(A.x, B.x, alt); sec.test = 'U de Mann-Whitney' + (one ? ' (unilateral)' : '');
         sec.decision = `Se eligió la U de Mann-Whitney${hyp} porque se comparan 2 grupos independientes y la normalidad no se cumple en algún grupo con muestra pequeña.`;
@@ -765,13 +824,15 @@
         if (eqVar) { om = cl; sec.test = 'ANOVA de un factor'; phName = 'Tukey HSD'; ph = S.hasTukey ? S.tukeyHSD(xs, cl.msw, cl.df2) : S.pairwiseHolm(xs, true); if (!S.hasTukey) phName = 't por pares con corrección de Holm'; }
         else { om = S.welchAnova(xs); sec.test = 'ANOVA de Welch'; phName = 'Games-Howell'; ph = S.hasTukey ? S.gamesHowell(xs) : S.pairwiseHolm(xs, false); if (!S.hasTukey) phName = 't de Welch por pares con corrección de Holm'; }
         // prueba post hoc elegida por la persona (si no, la automática según la homogeneidad de varianzas)
-        const PHN = { tukey: 'Tukey HSD', gh: 'Games-Howell', bonferroni: 'Bonferroni', holm: 'Holm', sidak: 'Šidák', scheffe: 'Scheffé', lsd: 'DMS de Fisher, sin corrección', tamhane: 'T2 de Tamhane', dunnett: 'Dunnett' };
+        const PHN = { tukey: 'Tukey HSD', gh: 'Games-Howell', bonferroni: 'Bonferroni', holm: 'Holm', sidak: 'Šidák', scheffe: 'Scheffé', lsd: 'DMS de Fisher, sin corrección', tamhane: 'T2 de Tamhane', dunnett: 'Dunnett', snk: 'Student-Newman-Keuls', duncan: 'Duncan', regwq: 'REGWQ', gt2: 'GT2 de Hochberg', gabriel: 'Gabriel' };
+        const STEP = ['snk', 'duncan', 'regwq']; let sw = null;
         const userPH = opts.ph && opts.ph !== 'auto' ? opts.ph : null, robustPH = m => m === 'gh' || m === 'tamhane';
         if (userPH) {
           phName = PHN[userPH];
           if (userPH === 'tukey') ph = S.tukeyHSD(xs, cl.msw, cl.df2);
           else if (userPH === 'gh') ph = S.gamesHowell(xs);
           else if (userPH === 'dunnett') { const ci = Math.max(0, names.indexOf(opts.ctrl)); ph = S.dunnett(xs, ci, cl.msw, cl.df2); phName = `Dunnett, frente a ${esc(names[ci])}`; }
+          else if (STEP.includes(userPH)) { sw = S.stepwisePH(xs, cl.msw, cl.df2, userPH); ph = sw.pairs; }
           else ph = S.posthocMethod(xs, cl.msw, cl.df2, userPH);
           sec.why.push(`Comparaciones post hoc elegidas por ti: ${phName}.${robustPH(userPH) !== !eqVar ? ` Ten en cuenta que ${eqVar ? 'las varianzas son homogéneas, así que Tukey sería suficiente' : 'las varianzas no son homogéneas: es preferible una prueba que no las asuma iguales (Games-Howell o T2 de Tamhane)'}.` : ''}`);
         }
@@ -803,9 +864,17 @@
         let t = `Se aplicó un ${sec.test} para comparar ${esc(yName)} según ${esc(gName)} (${groups.map(q => `${esc(q.name)}: ${MD(q)}`).join('; ')}). `;
         const phNote = (useAv ? '<i>d</i> = diferencia de medias / raíz de la media de las dos varianzas, adecuada cuando las varianzas difieren.' : '<i>d</i> = diferencia de medias / √<i>MC</i><sub>error</sub> (como JASP).')
           + ' Tamaño del efecto: 0.20 pequeño, 0.50 mediano, 0.80 grande (Cohen, 1988).'
-          + (userPH === 'lsd' ? ' <b>Sin corrección por comparaciones múltiples</b>: el riesgo de falsos positivos aumenta con el número de comparaciones.' : '');
+          + (userPH === 'lsd' ? ' <b>Sin corrección por comparaciones múltiples</b>: el riesgo de falsos positivos aumenta con el número de comparaciones.' : '')
+          + (sw ? ` Prueba de rango por pasos: cada par se compara con el rango estudentizado de las medias que abarca${userPH === 'snk' ? '' : userPH === 'duncan' ? ', con el nivel de Duncan' : ', con los niveles de Ryan-Einot-Gabriel-Welsch'}; un par solo difiere si también difieren todos los rangos que lo contienen, por eso su <i>p</i> es la mayor de esas comparaciones.` : '')
+          + (userPH === 'duncan' ? ' Duncan no controla el error de tipo I del conjunto de comparaciones: es más liberal que Tukey.' : '')
+          + (userPH === 'gt2' || userPH === 'gabriel' ? ` Distribución del módulo máximo estudentizado con ${k * (k - 1) / 2} comparaciones${userPH === 'gabriel' ? '; Gabriel ajusta el error típico cuando los tamaños de los grupos difieren' : ''}.` : '');
         const phRows = ph.map(c => [`${esc(names[c.i])} − ${esc(names[c.j])}`, f(c.diff), pv(c.padj), f(c.d)]);
-        const phTable = () => sec.tables.push(apaTable(`Comparaciones post hoc (${phName})`, ['Comparación', 'Diferencia de medias', '<i>p</i> ajustada', '<i>d</i> de Cohen'], phRows, phNote));
+        const phTable = () => { sec.tables.push(apaTable(`Comparaciones post hoc (${phName})`, ['Comparación', 'Diferencia de medias', '<i>p</i> ajustada', '<i>d</i> de Cohen'], phRows, phNote));
+          if (sw) { const S_ = sw.subsets;
+            sec.tables.push(apaTable(`Subconjuntos homogéneos (${phName})`, [esc(gName), '<i>n</i>'].concat(S_.map((_, q) => `Subconjunto ${q + 1}`)),
+              sw.order.map(gi => [esc(names[gi]), xs[gi].length].concat(S_.map(s => (s.members.includes(gi) ? f(S.mean(xs[gi])) : ''))))
+                .concat([['<i>p</i>', ''].concat(S_.map(s => (s.members.length > 1 ? pv(s.p) : '—')))]),
+              `Medias de los grupos que no difieren entre sí (α = .05), ordenadas de menor a mayor, como en SPSS. <i>p</i>: prueba del rango del subconjunto.`)); } };
         if (om.p < .05) {
           t += `Se encontraron diferencias estadísticamente significativas, ${st}, con un tamaño del efecto ${lbl.eta(cl.eta2)}.` + posthocText(ph, phName, false);
           phTable();
@@ -816,7 +885,11 @@
         if (userPH) code += '\n# Comparaciones post hoc elegidas\n' + ({ bonferroni: 'pairwise.t.test(dd$y, dd$g, p.adjust.method = "bonferroni", pool.sd = TRUE)', holm: 'pairwise.t.test(dd$y, dd$g, p.adjust.method = "holm", pool.sd = TRUE)',
           lsd: 'pairwise.t.test(dd$y, dd$g, p.adjust.method = "none", pool.sd = TRUE)', sidak: 'p <- pairwise.t.test(dd$y, dd$g, p.adjust.method = "none", pool.sd = TRUE)$p.value; m <- sum(!is.na(p)); 1 - (1 - p)^m  # Šidák',
           scheffe: 'DescTools::ScheffeTest(aov(y ~ g, data = dd))', tamhane: 'PMCMRplus::tamhaneT2Test(y ~ g, data = dd)', tukey: 'TukeyHSD(aov(y ~ g, data = dd))', gh: 'rstatix::games_howell_test(dd, y ~ g)',
-          dunnett: `dd$g <- relevel(dd$g, ref = ${rq(opts.ctrl || names[0])})\nsummary(multcomp::glht(aov(y ~ g, data = dd), linfct = multcomp::mcp(g = "Dunnett")))` })[userPH];
+          dunnett: `dd$g <- relevel(dd$g, ref = ${rq(opts.ctrl || names[0])})\nsummary(multcomp::glht(aov(y ~ g, data = dd), linfct = multcomp::mcp(g = "Dunnett")))`,
+          snk: 'print(tapply(dd$y, dd$g, mean), digits = 7)  # medias de los grupos\nsnk <- PMCMRplus::snkTest(y ~ g, data = dd); print(snk$p.value, digits = 7)  # p de cada par (Tharp aplica además la regla paso a paso)',
+          duncan: 'print(tapply(dd$y, dd$g, mean), digits = 7)  # medias de los grupos\ndun <- PMCMRplus::duncanTest(y ~ g, data = dd); print(dun$p.value, digits = 7)  # p de cada par (Tharp aplica además la regla paso a paso)',
+          regwq: `print(tapply(dd$y, dd$g, mean), digits = 7)  # medias de los grupos\n# REGWQ: rango estudentizado con la media armónica de los n y los niveles de Ryan-Einot-Gabriel-Welsch, p de cada par\nlocal({ m <- tapply(dd$y, dd$g, mean); n <- tapply(dd$y, dd$g, length); k <- length(m); gl <- nrow(dd) - k; mce <- sum(tapply(dd$y, dd$g, function(v) sum((v - mean(v))^2))) / gl\n  pos <- match(seq_len(k), order(m, decreasing = TRUE)); res <- NULL\n  for (a in 1:(k - 1)) for (b in (a + 1):k) { r <- abs(pos[a] - pos[b]) + 1; q <- abs(m[a] - m[b]) / sqrt(mce / (k / sum(1 / n))); p <- ptukey(q, r, gl, lower.tail = FALSE)\n    res <- rbind(res, data.frame(par = paste(names(m)[a], "-", names(m)[b]), pasos = r, q = q, p = if (r < k - 1) min(1, 1 - (1 - p)^(k / r)) else p)) }\n  print(res, digits = 7) })`,
+          gt2: gtCode('gt2'), gabriel: gtCode('gabriel') })[userPH];
       } else {
         const kw = S.kruskal(xs), ph = S.dunn(xs, kw); sec.test = 'Prueba de Kruskal-Wallis';
         sec.decision = `Se eligió la prueba de Kruskal-Wallis porque se comparan ${k} grupos independientes y la normalidad no se cumple en algún grupo con muestra pequeña.`;
@@ -889,6 +962,58 @@
   }
 
   // Una muestra frente a un valor de referencia (por ejemplo, el punto medio de una escala o una norma publicada)
+  // Equivalencia (TOST, Schuirmann, 1987; Lakens, 2017): dos pruebas t unilaterales frente a los límites [low, high]; IC del 90 %
+  function runTost(o) {
+    const D = { ind: 'dos grupos independientes', paired: 'dos medidas relacionadas', one: 'una muestra' }[o.des];
+    const sec = { title: `Equivalencia (TOST): ${o.y || ''}${o.des === 'ind' && o.g ? ` según ${o.g}` : o.des === 'paired' && o.y2 ? ` frente a ${o.y2}` : o.des === 'one' && isFinite(o.mu) ? ` frente a ${fmtNum(o.mu)}` : ''}`, test: 'Prueba de equivalencia (TOST)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (!o.y || !vByName(o.y)) { sec.error = 'Elige la variable cuantitativa.'; return sec; }
+    if (!(isFinite(o.low) && isFinite(o.high)) || !(o.low < 0 && o.high > 0)) { sec.error = 'Los límites de equivalencia deben ser un número negativo (inferior) y otro positivo (superior), por ejemplo −0.5 y 0.5.'; return sec; }
+    const y = numOf(vByName(o.y)), U = o.unit === 'd' ? 'd' : 'raw', Y = rq(o.y);
+    let a, b = null, lab, rc;
+    if (o.des === 'ind') {
+      if (!o.g || !vByName(o.g)) { sec.error = 'Elige la variable de grupo (con exactamente dos categorías).'; return sec; }
+      const g = catOf(vByName(o.g)), lv = levelsOf(vByName(o.g)); if (lv.length !== 2) { sec.error = 'La variable de grupo debe tener exactamente dos categorías.'; return sec; }
+      a = []; b = []; y.forEach((v, i) => { if (v !== null && g[i] === lv[0]) a.push(v); else if (v !== null && g[i] === lv[1]) b.push(v); });
+      lab = [`${esc(lv[0])} − ${esc(lv[1])}`]; rc = `x = datos[[${Y}]][datos[[${rq(o.g)}]] == ${rq(lv[0])}], y = datos[[${Y}]][datos[[${rq(o.g)}]] == ${rq(lv[1])}], var.equal = FALSE`;
+      sec.why.push(`Se comparan las medias de ${esc(o.y)} en ${esc(lv[0])} y ${esc(lv[1])} con la t de Welch, que no supone varianzas iguales (como TOSTER por defecto).`);
+    } else if (o.des === 'paired') {
+      if (!o.y2 || !vByName(o.y2) || o.y2 === o.y) { sec.error = 'Elige la segunda medida (distinta de la primera).'; return sec; }
+      const y2 = numOf(vByName(o.y2)); a = []; b = []; y.forEach((v, i) => { if (v !== null && y2[i] !== null) { a.push(v); b.push(y2[i]); } });
+      lab = [`${esc(o.y2)} − ${esc(o.y)}`]; rc = `x = d2[[${rq(o.y2)}]], y = d2[[${Y}]], paired = TRUE`;
+      sec.why.push(`Se analiza la diferencia ${esc(o.y2)} − ${esc(o.y)} dentro de cada persona (casos con las dos medidas).`);
+    } else {
+      if (!isFinite(o.mu)) { sec.error = 'Escribe un valor de referencia numérico.'; return sec; }
+      a = y.filter(v => v !== null); lab = [`${esc(o.y)} − ${fmtNum(o.mu)}`]; rc = `x = datos[[${Y}]], mu = ${fmtNum(o.mu)}`;
+      sec.why.push(`Se compara la media de ${esc(o.y)} con el valor de referencia ${fmtNum(o.mu)}.`);
+    }
+    if (a.length < 3 || (b && b.length < 3)) { sec.error = 'Se necesitan al menos 3 casos en cada grupo o medida.'; return sec; }
+    const r = S.tost(a, b, { type: o.des, mu: o.mu, low: o.low, high: o.high, bound: U, equalVar: false });
+    if (!(r.se > 0)) { sec.error = 'No hay variabilidad en los datos: no se puede realizar la prueba.'; return sec; }
+    const bTxt = U === 'd' ? `d = ${fmtNum(o.low)} y ${fmtNum(o.high)} (en unidades de ${esc(o.y)}: ${f(r.low)} y ${f(r.high)})` : `${fmtNum(o.low)} y ${fmtNum(o.high)}`;
+    sec.decision = `Prueba de equivalencia (TOST) para ${D}, con límites de equivalencia ${bTxt} y α = .05.`;
+    sec.why.push('Un resultado no significativo en la prueba t clásica no demuestra que no haya diferencia. La prueba de equivalencia contrasta si la diferencia es menor que la mínima que tendría importancia práctica: hay equivalencia si las dos pruebas unilaterales (la diferencia es mayor que el límite inferior y menor que el superior) son significativas, es decir, si el IC del 90 % queda dentro de los límites.');
+    // normalidad, como en las demás pruebas t
+    const nrm = (x, nm) => { const w = S.shapiro(x), n = x.length, T = w ? `Shapiro-Wilk${nm ? ` en ${nm}` : ''}: <i>W</i> = ${nz(w.W.toFixed(3))}, ${pt(w.p)}` : `Shapiro-Wilk no calculable${nm ? ` en ${nm}` : ''}`;
+      return w && w.p >= .05 ? chk('ok', T + '. Se cumple la normalidad.') : n >= 30 ? chk('info', T + `. No es normal, pero con <i>n</i> = ${n} ≥ 30 la prueba t es robusta.`) : chk('no', T + '. No se cumple y la muestra es pequeña: interpreta con cautela.'); };
+    if (o.des === 'ind') { sec.checks.push(nrm(a, lab[0].split(' − ')[0])); sec.checks.push(nrm(b, lab[0].split(' − ')[1])); }
+    else sec.checks.push(nrm(o.des === 'paired' ? b.map((v, i) => v - a[i]) : a, o.des === 'paired' ? 'las diferencias' : ''));
+    if (U === 'd') sec.checks.push(chk('info', `Límites en d pasados a unidades de la variable con la ${o.des === 'ind' ? 'raíz de la media de las varianzas de los dos grupos' : o.des === 'paired' ? 'DT de las diferencias' : 'DT de la muestra'} (DT = ${f(r.sd)}), como TOSTER. Si conoces la diferencia mínima relevante en las unidades de la variable, es preferible fijarla así.`));
+    sec.checks.push(chk('info', 'Los límites deben fijarse antes de ver los datos y justificarse (estudios previos, criterio clínico o la diferencia mínima importante).'));
+    sec.tables.push(apaTable('Prueba de equivalencia (TOST)', ['Comparación', 'Diferencia', 'IC 90 %', 'Límites', '<i>t</i> (límite inferior)', '<i>p</i>', '<i>t</i> (límite superior)', '<i>p</i>', '<i>gl</i>', '<i>p</i> TOST'],
+      [[lab[0], f(r.est), `[${f(r.ci[0])}, ${f(r.ci[1])}]`, `[${f(r.low)}, ${f(r.high)}]`, f(r.tLo), pv(r.pLo), f(r.tHi), pv(r.pHi), dfF(r.df), pv(r.p)]],
+      `La <i>p</i> del TOST es la mayor de las dos pruebas unilaterales. Prueba t clásica (diferencia = 0): <i>t</i>(${dfF(r.df)}) = ${f(r.t0)}, ${pt(r.p0)}. d = ${f(r.dEst)}.`));
+    const nhst = r.p0 < .05;
+    sec.text.push(`Se realizó una prueba de equivalencia de dos pruebas unilaterales (TOST; Lakens, 2017) para ${D}, con límites de equivalencia de ${bTxt}. La diferencia fue de ${f(r.est)}, IC 90 % [${f(r.ci[0])}, ${f(r.ci[1])}]. ` +
+      (r.equivalent ? `El efecto fue estadísticamente equivalente: queda dentro de los límites, <i>t</i>(${dfF(r.df)}) = ${f(r.pLo > r.pHi ? r.tLo : r.tHi)}, ${pt(r.p)}. ` : `No se pudo concluir que haya equivalencia, <i>t</i>(${dfF(r.df)}) = ${f(r.pLo > r.pHi ? r.tLo : r.tHi)}, ${pt(r.p)}: el IC del 90 % no queda dentro de los límites. `) +
+      `La prueba t clásica ${nhst ? 'sí' : 'no'} detectó una diferencia distinta de 0, <i>t</i>(${dfF(r.df)}) = ${f(r.t0)}, ${pt(r.p0)}${r.equivalent && nhst ? ', por lo que la diferencia existe pero es demasiado pequeña para tener importancia práctica' : !r.equivalent && !nhst ? ', así que el resultado no es concluyente (posiblemente falta tamaño muestral)' : ''}.`);
+    sec.code = `# Equivalencia (TOST) con TOSTER\n` + (o.des === 'paired' ? `d2 <- na.omit(datos[, c(${Y}, ${rq(o.y2)})])\n` : '') +
+      (o.des === 'ind' ? `tapply(datos[[${Y}]], datos[[${rq(o.g)}]], shapiro.test)  # normalidad por grupo\n` : o.des === 'paired' ? `shapiro.test(d2[[${rq(o.y2)}]] - d2[[${Y}]])  # normalidad de las diferencias\n` : `shapiro.test(datos[[${Y}]])  # normalidad\n`) +
+      (o.des === 'one' ? `# en una muestra, TOSTER toma los límites en la escala de la variable: valor de referencia + límite\n` : '') +
+      `r <- TOSTER::t_TOST(${rc}, low_eqbound = ${o.des === 'one' ? `${fmtNum(o.mu)} + ` : ''}${U === 'd' && o.des === 'one' ? `${fmtNum(o.low)} * sd(datos[[${Y}]], na.rm = TRUE)` : fmtNum(o.low)}, high_eqbound = ${o.des === 'one' ? `${fmtNum(o.mu)} + ` : ''}${U === 'd' && o.des === 'one' ? `${fmtNum(o.high)} * sd(datos[[${Y}]], na.rm = TRUE)` : fmtNum(o.high)}, eqbound_type = "${U === 'd' && o.des !== 'one' ? 'SMD' : 'raw'}", alpha = .05)\n` +
+      `r\nprint(r$TOST, digits = 7)  # t, EE, gl y p de la t clásica y de las dos pruebas unilaterales\nprint(r$effsize, digits = 7)  # diferencia con IC del 90 %\nprint(r$eqb, digits = 7)  # límites en unidades de la variable\n${o.des === 'one' ? `c(limite_inf = r$eqb$low_eq[1] - ${fmtNum(o.mu)}, limite_sup = r$eqb$high_eq[1] - ${fmtNum(o.mu)})  # límites respecto al valor de referencia\n` : ''}max(r$TOST[2:3, "p.value"])  # p del TOST`;
+    return sec;
+  }
+
   function runOneSample(name, mu, alt = 'two') {
     const sec = { title: `${name} frente a ${fmtNum(mu)} (una muestra)`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     const x = numOf(vByName(name)).filter(v => v !== null), n = x.length;
@@ -1443,7 +1568,7 @@
   }
   function rCode01(v, info) { return info.bin ? `as.numeric(datos[[${rq(v)}]] == ${rq(info.lv[1])})  # 0 = ${info.lv[0]}, 1 = ${info.lv[1]}` : `datos[[${rq(v)}]]`; }
 
-  function runCfa(spec) {
+  function runCfa(spec, gN) {
     const sec = { title: 'Análisis factorial confirmatorio', test: 'AFC (máxima verosimilitud)', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     if (!spec.length) { sec.error = 'Asigna ítems al menos a un factor.'; return sec; }
     const all = spec.flatMap(fc => fc.items), dup = all.filter((v, i) => all.indexOf(v) !== i);
@@ -1493,15 +1618,79 @@
     t += sat ? 'Al tratarse de un modelo saturado (0 grados de libertad), su ajuste no puede contrastarse. ' : `El ajuste del modelo fue ${verdict}, χ²(${r.df}) = ${f(r.chi)}, ${pt(r.pval)}, CFI = ${nz(r.cfi.toFixed(2))}, TLI = ${nz(r.tli.toFixed(2))}, RMSEA = ${nz(r.rmsea.toFixed(3))}, IC 90 % [${nz(r.rmseaCI[0].toFixed(3))}, ${nz(r.rmseaCI[1].toFixed(3))}], SRMR = ${nz(r.srmr.toFixed(3))}. `;
     const absS = r.std.map(Math.abs); t += `Las cargas estandarizadas oscilaron entre ${nz(minOf(absS).toFixed(2))} y ${nz(maxOf(absS).toFixed(2))}${neg.length ? ' en valor absoluto' : ''}`;
     t += `, y la fiabilidad compuesta fue ${list(spec.map((fc, k) => `${m > 1 ? `${esc(fc.name)} ` : ''}ω = ${nz(r.rel[k].omega.toFixed(2))}`))}.`;
-    if (m > 1) { const cs = []; for (let a = 0; a < m; a++) for (let b = 0; b < a; b++) cs.push(r.facCor[a][b]); t += ` Las correlaciones entre factores oscilaron entre ${r2s(minOf(cs))} y ${r2s(maxOf(cs))}.`; }
+    if (m > 1) { const cs = []; for (let a = 0; a < m; a++) for (let b = 0; b < a; b++) cs.push(r.facCor[a][b]); t += m === 2 ? ` La correlación entre los factores fue <i>r</i> = ${r2s(cs[0])}.` : ` Las correlaciones entre factores oscilaron entre ${r2s(minOf(cs))} y ${r2s(maxOf(cs))}.`; }
     sec.text.push(t);
     const syn = n0 => /^[A-Za-z.][A-Za-z0-9._]*$/.test(n0), allSyn = all.every(syn) && spec.every(fc => syn(fc.name.replace(/\s+/g, '_')));
     const iname = (it, j) => (allSyn ? it : `i${j + 1}`), fname = (fc, k) => (allSyn ? fc.name.replace(/\s+/g, '_') : `F${k + 1}`);
     let jj = 0; const modelo = spec.map((fc, k) => `${fname(fc, k)} =~ ${fc.items.map(it => iname(it, jj++)).join(' + ')}`).join('\n');
     sec.code = `# Análisis factorial confirmatorio (lavaan)\nitems <- datos[complete.cases(datos[, c(${all.map(rq).join(', ')})]), c(${all.map(rq).join(', ')})]\n` +
       (allSyn ? '' : `names(items) <- c(${all.map((_, j) => rq('i' + (j + 1))).join(', ')})  # ${all.map((it, j) => `i${j + 1} = ${it}`).join('; ')}\n`) +
-      `modelo <- '\n${modelo}\n'\najuste <- lavaan::cfa(modelo, data = items)\nlavaan::summary(ajuste, fit.measures = TRUE, standardized = TRUE)  # con lavaan:: (sin cargar el paquete, summary() no lo reconoce)\nlavaan::fitMeasures(ajuste, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr"))\nlavaan::standardizedSolution(ajuste)`;
+      `modelo <- '\n${modelo}\n'\najuste <- lavaan::cfa(modelo, data = items)\nlavaan::summary(ajuste, fit.measures = TRUE, standardized = TRUE)  # con lavaan:: (sin cargar el paquete, summary() no lo reconoce)\nlavaan::fitMeasures(ajuste, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr"))\nlavaan::standardizedSolution(ajuste)\n` +
+      `est <- lavaan::lavInspect(ajuste, "est"); est_std <- lavaan::lavInspect(ajuste, "std")\nfiabilidad <- t(sapply(colnames(est$lambda), function(f) { it <- est$lambda[, f] != 0; sl <- sum(abs(est$lambda[it, f]))^2 * est$psi[f, f]\n  c(omega = sl / (sl + sum(diag(est$theta)[it])), AVE = mean(est_std$lambda[it, f]^2)) }))  # ω con |λ|: los ítems inversos cuentan como recodificados\nprint(fiabilidad, digits = 6)`;
+    if (gN) cfaInvariance(sec, spec, all, facIdx, gN, cols, all.map(iname), spec.map(fname));
     return sec;
+  }
+
+  // Invarianza de medida entre grupos (AFC multigrupo): configural → métrica → escalar → estricta
+  function cfaInvariance(sec, spec, all, facIdx, gN, cols, rItems, fnames) {
+    const gv = vByName(gN);
+    if (!gv) return;
+    if (all.includes(gN)) { sec.checks.push(chk('no', 'Invarianza: la variable de agrupación no puede ser uno de los ítems.')); return; }
+    const gc = catOf(gv), idx = ST.rows.map((_, i) => i).filter(i => gc[i] !== null && cols.every(c => c[i] !== null));
+    const lv = ordOf(gv, idx.map(i => gc[i])), p = all.length, G = lv.length;
+    if (G < 2) { sec.checks.push(chk('no', `Invarianza: ${esc(gN)} solo tiene un grupo con casos completos.`)); return; }
+    const gi = lv.map(l => idx.filter(i => gc[i] === l)), ng = gi.map(a => a.length);
+    const small = lv.filter((_, g) => ng[g] < p + 5);
+    if (small.length) { sec.checks.push(chk('no', `Invarianza no calculada: ${list(small.map(esc))} ${small.length > 1 ? 'tienen' : 'tiene'} muy pocos casos completos para ${p} ítems (hacen falta al menos ${p + 5} por grupo).`)); return; }
+    const Xg = gi.map(a => a.map(i => cols.map(c => c[i])));
+    if (Xg.some(X => all.some((_, j) => S.sd(X.map(r => r[j])) === 0))) { sec.checks.push(chk('no', 'Invarianza no calculada: algún ítem tiene el mismo valor en todos los casos de un grupo.')); return; }
+    const LEV = ['configural', 'metric', 'scalar', 'strict'], NAME = ['Configural', 'Métrica (cargas iguales)', 'Escalar (+ interceptos iguales)', 'Estricta (+ varianzas residuales iguales)'];
+    const fits = LEV.map(l => S.cfaMG(Xg, facIdx, l));
+    if (fits.some(r => !isFinite(r.chi))) { sec.checks.push(chk('no', 'Invarianza no calculada: algún modelo multigrupo no pudo estimarse (matriz de covarianzas singular en algún grupo).')); return; }
+    if (fits.some(r => !r.converged)) sec.warn = (sec.warn ? sec.warn + ' ' : '') + 'Algún modelo de invarianza no convergió del todo: interpreta esa comparación con cautela.';
+    if (fits.some(r => r.params.some(q => q.key[0] === 'u' && q.est < 0))) sec.warn = (sec.warn ? sec.warn + ' ' : '') + 'Algún modelo de invarianza tiene varianzas residuales negativas (caso Heywood) en algún grupo: el modelo puede estar mal especificado para ese grupo.';
+    sec.decision += ` Se evaluó además su invarianza de medida entre los ${G} grupos de ${esc(gN)}.`;
+    const c0 = fits[0], fitOk = c0.cfi >= .90 && c0.tli >= .90 && c0.rmsea <= .08 && c0.srmr <= .10, fitGood = c0.cfi >= .95 && c0.tli >= .95 && c0.rmsea <= .06 && c0.srmr <= .08;
+    const dl = fits.map((r, k) => (k ? { chi: r.chi - fits[k - 1].chi, df: r.df - fits[k - 1].df, cfi: r.cfi - fits[k - 1].cfi, rmsea: r.rmsea - fits[k - 1].rmsea } : null));
+    dl.forEach(d => { if (d) d.p = d.df > 0 ? 1 - jStat.chisquare.cdf(Math.max(d.chi, 0), d.df) : NaN; });
+    // nivel alcanzado: el primero que no se sostiene corta la secuencia (ΔCFI ≥ −.010 y ΔRMSEA ≤ .015)
+    const cFail = [c0.cfi < .90 && 'CFI < .90', c0.tli < .90 && 'TLI < .90', c0.rmsea > .08 && 'RMSEA > .08', c0.srmr > .10 && 'SRMR > .10'].filter(Boolean);
+    let reached = 0;
+    for (let k = 1; k < 4 && reached === k - 1; k++) if (dl[k].cfi >= -.01 && dl[k].rmsea <= .015) reached = k;
+    const ix = v => (isFinite(v) ? nz(v.toFixed(3)) : '—'), sg = v => (isFinite(v) ? (v < 0 ? '−' : '') + nz(Math.abs(v).toFixed(3)) : '—');
+    const dec = k => (k === 0 ? (fitGood ? 'Ajuste bueno' : fitOk ? 'Ajuste aceptable' : `Ajuste insuficiente (${cFail.join(', ')})`) : reached >= k ? 'Se sostiene' : reached === k - 1 ? 'No se sostiene' : 'No procede');
+    sec.why.push(`La invarianza de medida comprueba si el cuestionario mide lo mismo en todos los grupos de ${esc(gN)}, condición para comparar sus puntuaciones. Se ajustan modelos cada vez más restrictivos: configural (misma estructura), métrica (mismas cargas; permite comparar relaciones), escalar (mismos interceptos; permite comparar medias) y estricta (mismas varianzas residuales).`);
+    sec.why.push('Cada nivel se acepta si el ajuste apenas empeora respecto al anterior: ΔCFI ≥ −.010 (Cheung y Rensvold, 2002) y ΔRMSEA ≤ .015 (Chen, 2007). La diferencia de χ² se informa, pero con muestras grandes detecta diferencias triviales.');
+    sec.checks.push(chk(ng.every(n => n >= 200) ? 'ok' : 'info', `Invarianza: ${G} grupos de ${esc(gN)} (${lv.map((l, g) => `${esc(l)}: ${ng[g]}`).join('; ')}).${ng.every(n => n >= 200) ? '' : ' Se recomiendan al menos 200 casos por grupo.'}`));
+    if (!fitOk) sec.checks.push(chk('no', `El modelo configural no cumple todos los criterios de ajuste aceptable (${list(cFail)}): la estructura factorial podría no ser la misma en todos los grupos. Interpreta con cautela los niveles siguientes.`));
+    sec.checks.push(chk(reached >= 2 ? 'ok' : 'info', `Nivel de invarianza alcanzado: ${['configural', 'métrica', 'escalar', 'estricta'][reached]}.${reached >= 2 ? ' Las medias de los factores pueden compararse entre grupos.' : reached === 1 ? ' Pueden compararse las relaciones entre variables, pero no las medias (prueba la invarianza parcial en R liberando interceptos).' : ' Las cargas difieren entre grupos: las puntuaciones no son comparables.'}`));
+    sec.tables.push(apaTable(`Invarianza de medida entre grupos de ${esc(gN)}: ajuste de los modelos`, ['Modelo', 'χ²', '<i>gl</i>', '<i>p</i>', 'CFI', 'TLI', 'RMSEA', 'IC 90 % RMSEA', 'SRMR'],
+      fits.map((r, k) => [NAME[k], f(r.chi), r.df, pv(r.p), ix(r.cfi), ix(r.tli), ix(r.rmsea), `[${ix(r.rmseaCI[0])}, ${ix(r.rmseaCI[1])}]`, ix(r.srmr)]),
+      `AFC multigrupo por máxima verosimilitud con estructura de medias (${c0.N} casos). El RMSEA multigrupo incluye el factor √G, como lavaan. Modelo configural: ${dec(0).toLowerCase()}.`));
+    sec.tables.push(apaTable(`Invarianza de medida entre grupos de ${esc(gN)}: comparación de modelos`, ['Comparación', 'Δχ²', 'Δ<i>gl</i>', '<i>p</i>', 'ΔCFI', 'ΔRMSEA', 'Decisión'],
+      [1, 2, 3].map(k => [`${['', 'Métrica', 'Escalar', 'Estricta'][k]} frente a ${['configural', 'métrica', 'escalar'][k - 1]}`, f(dl[k].chi), dl[k].df, pv(dl[k].p), sg(dl[k].cfi), sg(dl[k].rmsea), dec(k)]),
+      'Criterio: el nivel se sostiene si ΔCFI ≥ −.010 y ΔRMSEA ≤ .015. Cuando un nivel no se sostiene, los siguientes no proceden.'));
+    let lm = null;
+    if (reached >= 2) {
+      const sc = fits[2], P = new Map(sc.params.map(q => [q.key, q]));
+      lm = []; spec.forEach((fc, k) => lv.forEach((l, g) => { if (!g) return; const q = P.get(`a:${k}:${g}`), z = q.est / q.se; lm.push({ fc, l, est: q.est, se: q.se, z, p: 2 * (1 - jStat.normal.cdf(Math.abs(z), 0, 1)) }); }));
+      sec.tables.push(apaTable('Diferencias de medias latentes (modelo escalar)', ['Factor', 'Grupo', 'Diferencia', '<i>EE</i>', '<i>z</i>', '<i>p</i>'],
+        lm.map(o => [esc(o.fc.name), esc(o.l), f(o.est, 3), f(o.se, 3), f(o.z), pv(o.p)]), `Diferencia de cada grupo respecto a ${esc(lv[0])} (grupo de referencia, con media latente fijada en 0), en la escala del ítem marcador de cada factor.`));
+    }
+    let t = `Se evaluó la invarianza de medida entre los ${G} grupos de ${esc(gN)} (${lv.map((l, g) => `${esc(l)}: <i>n</i> = ${ng[g]}`).join('; ')}) mediante análisis factorial confirmatorio multigrupo. `;
+    t += `El modelo configural mostró un ajuste ${fitGood ? 'bueno' : fitOk ? 'aceptable' : 'insuficiente'}, χ²(${c0.df}) = ${f(c0.chi)}, CFI = ${nz(c0.cfi.toFixed(3))}, RMSEA = ${nz(c0.rmsea.toFixed(3))}, SRMR = ${nz(c0.srmr.toFixed(3))}`;
+    t += fitOk ? '' : ` (incumple el criterio: ${list(cFail)})`;
+    { const done = []; for (let k = 1; k < 4 && reached >= k - 1; k++) done.push(`la invarianza ${['', 'métrica', 'escalar', 'estricta'][k]} ${reached >= k ? 'se sostuvo' : 'no se sostuvo'} (Δχ²(${dl[k].df}) = ${f(dl[k].chi)}, ${pt(dl[k].p)}, ΔCFI = ${sg(dl[k].cfi)}, ΔRMSEA = ${sg(dl[k].rmsea)})`);
+      t += `; ${list(done)}. ${reached >= 2 ? `Por tanto, las medias de los factores pueden compararse entre los grupos de ${esc(gN)}.` : reached === 1 ? `Por tanto, pueden compararse las relaciones entre variables, pero no las medias de los factores entre los grupos de ${esc(gN)}.` : `Por tanto, las puntuaciones no son comparables entre los grupos de ${esc(gN)}.`}`; }
+    if (lm) { const sig = lm.filter(o => o.p < .05); t += sig.length ? ` En el modelo escalar, ${list(sig.map(o => `la media latente de ${esc(o.fc.name)} en ${esc(o.l)} fue ${o.est > 0 ? 'mayor' : 'menor'} que en ${esc(lv[0])} (diferencia = ${f(o.est, 2)}, <i>z</i> = ${f(o.z)}, ${pt(o.p)})`))}.` : ` En el modelo escalar, ninguna media latente difirió significativamente de la de ${esc(lv[0])}.`; }
+    sec.text.push(t);
+    sec.code += `\n\n# Invarianza de medida entre grupos de ${gN} (AFC multigrupo, lavaan)\nmg <- datos[complete.cases(datos[, c(${all.concat(gN).map(rq).join(', ')})]), ]\n` +
+      `mg <- data.frame(setNames(mg[, c(${all.map(rq).join(', ')})], c(${rItems.map(rq).join(', ')})), grupo_inv = factor(as.character(mg[[${rq(gN)}]]), levels = c(${lv.map(rq).join(', ')})))\n` +
+      `niveles <- list(configural = NULL, metrica = "loadings", escalar = c("loadings", "intercepts"), estricta = c("loadings", "intercepts", "residuals"))\n` +
+      `ajustes_inv <- lapply(niveles, function(eq) lavaan::cfa(modelo, data = mg, group = "grupo_inv", group.equal = eq))\n` +
+      `indices <- t(sapply(ajustes_inv, lavaan::fitMeasures, c("chisq", "df", "pvalue", "cfi", "tli", "rmsea", "rmsea.ci.lower", "rmsea.ci.upper", "srmr")))\nprint(indices, digits = 6)\n` +
+      `cambios <- data.frame(d_chisq = diff(indices[, "chisq"]), d_gl = diff(indices[, "df"]), p = pchisq(diff(indices[, "chisq"]), diff(indices[, "df"]), lower.tail = FALSE), d_CFI = diff(indices[, "cfi"]), d_RMSEA = diff(indices[, "rmsea"]))\nprint(cambios, digits = 6)  # criterio: d_CFI >= -0.010 y d_RMSEA <= 0.015` +
+      (lm ? `\nmedias <- lavaan::parameterEstimates(ajustes_inv$escalar); medias <- medias[medias$op == "~1" & medias$lhs %in% c(${fnames.map(rq).join(', ')}) & medias$group > 1, ]\nmedias$grupo <- levels(mg$grupo_inv)[medias$group]; print(medias[, c("lhs", "grupo", "est", "se", "z", "pvalue")], digits = 6)  # diferencias respecto a ${lv[0]}` : '');
   }
 
   function runLmm(yN, xNames, gN, slopeN, inter = []) {
@@ -1901,6 +2090,201 @@
       `nulo <- update(modelo, . ~ 1); chi2 <- deviance(nulo) - deviance(modelo); gl <- modelo$edf - nulo$edf\nc(m2LL_nulo = deviance(nulo), m2LL_modelo = deviance(modelo), chi2 = chi2, gl = gl, p = pchisq(chi2, gl, lower.tail = FALSE), R2_McFadden = 1 - deviance(modelo) / deviance(nulo),\n  R2_CoxSnell = 1 - exp(-chi2 / nrow(d)), R2_Nagelkerke = (1 - exp(-chi2 / nrow(d))) / (1 - exp(-deviance(nulo) / nrow(d))), AIC = AIC(modelo))  # ajuste frente al modelo nulo\nperformance::r2_nagelkerke(modelo)\ntable(observado = d$.y, predicho = predict(modelo))`;
     return sec;
   }
+  // Valores perdidos: resumen por variable, patrones y prueba MCAR de Little (EM como norm::em.norm; prueba como naniar::mcar_test)
+  function runMissing(names) {
+    const sec = { title: 'Análisis de valores perdidos', test: 'Prueba MCAR de Little', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    if (names.length < 2) { sec.error = 'Selecciona al menos dos variables cuantitativas.'; return sec; }
+    const cols = names.map(nm => numOf(vByName(nm))), N = ST.rows.length, X = ST.rows.map((_, i) => cols.map(c => c[i]));
+    const miss = cols.map(c => c.filter(x => x === null).length), complete = X.filter(r => r.every(x => x !== null)).length, totalMiss = S.sum(miss);
+    const few = names.filter((_, j) => N - miss[j] < 2);
+    if (few.length) { sec.error = `${list(few.map(esc))} ${few.length > 1 ? 'tienen' : 'tiene'} menos de 2 valores observados.`; return sec; }
+    const obs = cols.map(c => c.filter(x => x !== null)), r = totalMiss ? S.littleMCAR(X) : null;
+    sec.decision = `Se analizaron los valores perdidos de ${names.length} variables cuantitativas en ${N} casos.`;
+    sec.why.push('Antes de analizar conviene saber cuántos datos faltan y si faltan al azar: si no es así, los análisis con casos completos pueden estar sesgados.');
+    sec.why.push('La prueba de Little (1988) compara las medias de cada patrón de valores perdidos con las medias estimadas con todos los datos (algoritmo EM). Si no es significativa, los datos son compatibles con faltar completamente al azar (MCAR); no lo demuestra.');
+    sec.tables.push(apaTable('Valores perdidos por variable', ['Variable', '<i>n</i>', 'Perdidos', '%', '<i>M</i>', '<i>DT</i>'].concat(r && !r.singular ? ['<i>M</i> (EM)', '<i>DT</i> (EM)'] : []),
+      names.map((nm, j) => [esc(nm), N - miss[j], miss[j], f(miss[j] / N * 100, 1), f(S.mean(obs[j])), f(S.sd(obs[j]))].concat(r && !r.singular ? [f(r.mu[j]), f(Math.sqrt(r.sigma[j][j]))] : [])),
+      `<i>M</i> y <i>DT</i>: con los casos disponibles en cada variable.${r && !r.singular ? ' EM: estimaciones de máxima verosimilitud con todos los casos, que suponen que los datos faltan al azar (MAR).' : ''}`));
+    if (totalMiss) {
+      const g = r.groups.slice().sort((a, b) => b.n - a.n || a.key.localeCompare(b.key)), lab = q => (q.missing.length ? list(q.missing.map(j => esc(names[j]))) : 'Ninguna (casos completos)'), MAXP = 12;
+      sec.tables.push(apaTable('Patrones de valores perdidos', ['Variables con valores perdidos', '<i>n</i>', '%'],
+        g.slice(0, MAXP).map(q => [lab(q), q.n, f(q.n / N * 100, 1)]).concat(g.length > MAXP ? [[`Otros ${g.length - MAXP} patrones`, S.sum(g.slice(MAXP).map(q => q.n)), f(S.sum(g.slice(MAXP).map(q => q.n)) / N * 100, 1)]] : []),
+        `${g.length} patrones distintos. Casos completos: ${complete} (${f(complete / N * 100, 1)} %).`));
+      if (r.singular) sec.warn = 'Hay demasiados valores perdidos para estimar las covarianzas entre las variables (la estimación por EM no converge a una matriz válida), así que la prueba de Little no es fiable y no se muestra. Prueba con menos variables o con las que tengan menos perdidos.';
+      else sec.tables.push(apaTable('Prueba MCAR de Little', ['χ²', '<i>gl</i>', '<i>p</i>', 'Patrones'], [[f(r.chi), r.df, pv(r.p), r.patterns]], 'H₀: los datos faltan completamente al azar (MCAR).'));
+    }
+    if (totalMiss) sec.charts.push(fig('Porcentaje de valores perdidos por variable', CH.barsCat(names, miss.map(m => +(m / N * 100).toFixed(1)), '% de valores perdidos')));
+    const pmax = Math.max(...miss) / N * 100;
+    sec.checks.push(chk(!totalMiss ? 'ok' : pmax <= 5 ? 'ok' : 'info', !totalMiss ? 'No hay valores perdidos en las variables elegidas.' : `El porcentaje de perdidos por variable va de ${f(Math.min(...miss) / N * 100, 1)} % a ${f(pmax, 1)} %.${pmax > 5 ? ' Por encima del 5 %, la forma de tratarlos puede influir en los resultados.' : ''}`));
+    if (r && !r.singular) sec.checks.push(chk(r.p >= .05 ? 'ok' : 'no', r.p >= .05 ? `Little: ${pt(r.p)}. Los datos son compatibles con faltar completamente al azar.` : `Little: ${pt(r.p)}. Los datos no faltan completamente al azar: los análisis con casos completos pueden estar sesgados; valora la imputación múltiple o métodos de máxima verosimilitud, que suponen MAR.`));
+    sec.text.push(`Se analizaron los valores perdidos de ${names.length} variables cuantitativas (<i>N</i> = ${N}; ${complete} casos completos, ${f(complete / N * 100, 1)} %). ` +
+      (!totalMiss ? 'No había valores perdidos.' : `El porcentaje de valores perdidos por variable osciló entre el ${f(Math.min(...miss) / N * 100, 1)} % y el ${f(pmax, 1)} %. ` +
+        (r.singular ? 'La prueba MCAR de Little no pudo calcularse de forma fiable por la cantidad de valores perdidos.' : r.p >= .05
+          ? `La prueba MCAR de Little no fue estadísticamente significativa, χ²(${r.df}) = ${f(r.chi)}, ${pt(r.p)}, lo que es compatible con que los datos falten completamente al azar.`
+          : `La prueba MCAR de Little fue estadísticamente significativa, χ²(${r.df}) = ${f(r.chi)}, ${pt(r.p)}, lo que indica que los datos no faltan completamente al azar.`)));
+    const V = `c(${names.map(rq).join(', ')})`;
+    sec.code = `# Análisis de valores perdidos\nd <- datos[, ${V}]\nprint(data.frame(n = colSums(!is.na(d)), perdidos = colSums(is.na(d)), porcentaje = 100 * colMeans(is.na(d)), M = sapply(d, mean, na.rm = TRUE), DT = sapply(d, sd, na.rm = TRUE)), digits = 7)\n` +
+      `patron <- apply(is.na(d), 1, function(r) paste(names(d)[r], collapse = ", "))\nprint(cbind(n = sort(table(patron), decreasing = TRUE), porcentaje = 100 * sort(prop.table(table(patron)), decreasing = TRUE)), digits = 7)  # patrones (vacío = casos completos)\nc(casos_completos = sum(complete.cases(d)), porcentaje = 100 * mean(complete.cases(d)))` +
+      (totalMiss && !r.singular ? `\nnaniar::mcar_test(d)  # prueba MCAR de Little (EM con el criterio de convergencia por defecto de norm)\n# La misma prueba con el EM convergido del todo, como Tharp\nmcar_tharp <- function(x) {\n  x <- as.matrix(x); s <- norm::prelim.norm(x); pr <- norm::getparam.norm(s, norm::em.norm(s, showits = FALSE, criterion = 1e-10, maxits = 10000))\n  clave <- apply(is.na(x), 1, paste, collapse = ""); d2 <- 0; k <- 0\n  for (g in unique(clave)) { xx <- x[clave == g, , drop = FALSE]; o <- which(!is.na(xx[1, ])); if (!length(o)) next; k <- k + length(o)\n    dv <- colMeans(xx[, o, drop = FALSE]) - pr$mu[o]; d2 <- d2 + nrow(xx) * drop(t(dv) %*% solve(pr$sigma[o, o, drop = FALSE]) %*% dv) }\n  print(rbind(M_EM = pr$mu, DT_EM = sqrt(diag(pr$sigma))), digits = 7)\n  print(c(chi2 = d2, gl = k - ncol(x), p = pchisq(d2, k - ncol(x), lower.tail = FALSE), patrones = length(unique(clave))), digits = 7)\n}\nmcar_tharp(d)` : '');
+    return sec;
+  }
+
+  // Metaanálisis: una fila por estudio; tamaños del efecto como metafor::escalc y modelo como rma (REML, DL o efectos fijos)
+  function runMeta(o) {
+    const T = o.type, need = { SMD: ['M1', 'S1', 'N1', 'M2', 'S2', 'N2'], MD: ['M1', 'S1', 'N1', 'M2', 'S2', 'N2'], OR: ['A', 'B', 'C', 'D'], COR: ['R', 'N'], GEN: ['Y', 'E'] }[T];
+    const ENAME = { SMD: 'g de Hedges', MD: 'diferencia de medias', OR: 'odds ratio', COR: 'r', GEN: 'tamaño del efecto' }[T], HEAD = { SMD: '<i>g</i> de Hedges', MD: 'Diferencia de medias', OR: 'Odds ratio', COR: '<i>r</i>', GEN: 'Tamaño del efecto' }[T], AXL = HEAD.replace(/<\/?i>/g, ''), back = T === 'OR' ? Math.exp : T === 'COR' ? Math.tanh : v => v, ref = 0;
+    const sec = { title: `Metaanálisis (${ENAME})`, test: `Metaanálisis de ${{ REML: 'efectos aleatorios (REML)', DL: 'efectos aleatorios (DerSimonian-Laird)', FE: 'efectos fijos' }[o.method]}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const names = need.map(k => o.cols[k]); if (names.some(nm => !nm || !vByName(nm))) { sec.error = `Elige en el análisis las columnas de cada estudio: ${need.filter(k => !o.cols[k] || !vByName(o.cols[k])).map(k => ({ M1: 'media 1', S1: 'DT 1', N1: 'n 1', M2: 'media 2', S2: 'DT 2', N2: 'n 2', A: 'eventos 1', B: 'no eventos 1', C: 'eventos 2', D: 'no eventos 2', R: 'r', N: 'n', Y: 'efecto', E: 'error típico' }[k])).join(', ')} (una fila por estudio).`; return sec; }
+    if (new Set(names).size < names.length) { sec.error = 'Cada dato debe estar en una columna distinta.'; return sec; }
+    const C = Object.fromEntries(need.map(k => [k, numOf(vByName(o.cols[k]))])), lab = o.label && vByName(o.label) ? vByName(o.label).raw : null;
+    const ok = i => need.every(k => C[k][i] !== null) && (T === 'COR' ? C.N[i] > 3 && Math.abs(C.R[i]) < 1 : T === 'GEN' ? C.E[i] > 0 : T === 'OR' ? need.every(k => C[k][i] >= 0) : C.N1[i] > 1 && C.N2[i] > 1 && C.S1[i] > 0 && C.S2[i] > 0);
+    const idx = ST.rows.map((_, i) => i).filter(ok), k = idx.length;
+    if (k < 2) { sec.error = 'Se necesitan al menos 2 estudios con todos los datos válidos.'; return sec; }
+    const es = idx.map(i => (T === 'GEN' ? { yi: C.Y[i], vi: C.E[i] ** 2 } : S.effectSize(T, T === 'OR' ? { a: C.A[i], b: C.B[i], c: C.C[i], d: C.D[i] } : T === 'COR' ? { r: C.R[i], n: C.N[i] } : { m1: C.M1[i], sd1: C.S1[i], n1: C.N1[i], m2: C.M2[i], sd2: C.S2[i], n2: C.N2[i] })));
+    const y = es.map(e => e.yi), v = es.map(e => e.vi), m = S.meta(y, v, o.method); if (!m) { sec.error = 'No se pudo estimar el modelo.'; return sec; }
+    const zq = 1.959963984540054, L = (i, q) => (lab ? String(lab[i] === null ? `Fila ${i + 1}` : lab[i]) : `Estudio ${q + 1}`), B = x => f(back(x)), RE = o.method !== 'FE';
+    sec.decision = `Metaanálisis de ${k} estudios (${ENAME}) con un modelo de ${RE ? `efectos aleatorios (${o.method === 'REML' ? 'REML' : 'DerSimonian-Laird'})` : 'efectos fijos'}.`;
+    sec.why.push(RE ? 'El modelo de efectos aleatorios supone que cada estudio estima un efecto distinto (por diferencias de población, diseño o medida) y estima su media y su variabilidad (τ²); es el recomendado cuando los estudios no son réplicas exactas.' : 'El modelo de efectos fijos supone que todos los estudios estiman el mismo efecto; solo es apropiado si son réplicas prácticamente idénticas.');
+    if (T === 'SMD') sec.why.push('g de Hedges: diferencia de medias estandarizada con la corrección del sesgo en muestras pequeñas (como metafor::escalc).');
+    if (T === 'OR') sec.why.push('Las odds ratio se combinan en escala logarítmica y se muestran en la original; si alguna casilla es 0, se suma 0.5 a las cuatro de ese estudio.');
+    if (T === 'COR') sec.why.push('Las correlaciones se combinan con la transformación z de Fisher y se muestran como r.');
+    sec.tables.push(apaTable('Estudios incluidos', ['Estudio', HEAD, 'IC 95 %', 'Peso (%)'],
+      idx.map((i, q) => { const se_ = Math.sqrt(v[q]); return [esc(L(i, q)), B(y[q]), `[${B(y[q] - zq * se_)}, ${B(y[q] + zq * se_)}]`, f(m.weights[q], 1)]; })));
+    sec.tables.push(apaTable('Efecto combinado', ['<i>k</i>', HEAD, 'IC 95 %', '<i>z</i>', '<i>p</i>'].concat(RE ? ['Intervalo de predicción 95 %'] : []),
+      [[k, B(m.est), `[${B(m.ci[0][0])}, ${B(m.ci[0][1])}]`, f(m.z[0]), pv(m.pval[0])].concat(RE ? [`[${B(m.pi[0])}, ${B(m.pi[1])}]`] : [])],
+      `${T === 'OR' || T === 'COR' ? `Estimación en escala ${T === 'OR' ? 'logarítmica' : 'z de Fisher'}: ${f(m.est, 3)} (EE = ${f(m.se[0], 3)}). ` : `EE = ${f(m.se[0], 3)}. `}${RE ? 'El intervalo de predicción indica dónde estaría el efecto de un estudio nuevo.' : ''}`));
+    const ci = m.tau2CI;
+    sec.tables.push(apaTable('Heterogeneidad', ['<i>Q</i>', '<i>gl</i>', '<i>p</i>', 'I² (%)'].concat(RE ? ['IC 95 % (I²)', 'τ²', 'IC 95 % (τ²)'] : []).concat(['H²']),
+      [[f(m.QE), m.dfQ, pv(m.pQ), f(m.I2, 1)].concat(RE ? [`[${f(ci.I2[0], 1)}, ${f(ci.I2[1], 1)}]`, f(m.tau2, 3), `[${f(ci.tau2[0], 3)}, ${f(ci.tau2[1], 3)}]`] : []).concat([f(m.H2)])],
+      `I²: proporción de la variabilidad debida a diferencias reales entre estudios (orientativo: 25 % baja, 50 % moderada, 75 % alta). ${RE ? 'IC de τ² e I² por el método del perfil de Q.' : ''}`));
+    if (m.egger) sec.tables.push(apaTable('Prueba de Egger (asimetría del embudo)', ['<i>z</i>', '<i>p</i>', 'Efecto con EE → 0', 'IC 95 %'], [[f(m.egger.z), pv(m.egger.p), B(m.egger.b), `[${B(m.egger.ci[0])}, ${B(m.egger.ci[1])}]`]],
+      'Metarregresión del efecto sobre su error típico (como metafor::regtest). Una p < .05 sugiere sesgo de publicación o efectos de estudios pequeños.'));
+    sec.checks.push(chk(k >= 10 ? 'ok' : 'info', `Número de estudios: ${k}.${k >= 10 ? '' : ' Con menos de 10 estudios, la prueba de Egger y el gráfico de embudo tienen poca potencia y τ² se estima con poca precisión.'}`));
+    sec.checks.push(chk(m.pQ >= .05 ? 'ok' : 'info', `Heterogeneidad: Q(${m.dfQ}) = ${f(m.QE)}, ${pt(m.pQ)}; I² = ${f(m.I2, 1)} %.${m.pQ < .05 ? (RE ? ' Hay heterogeneidad: el modelo de efectos aleatorios la tiene en cuenta; conviene explorar sus causas (subgrupos o metarregresión).' : ' Hay heterogeneidad: un modelo de efectos aleatorios sería más adecuado.') : ''}`));
+    sec.charts.push(fig(`Gráfico de bosque (${ENAME})`, CH.metaForest(idx.map((i, q) => { const se_ = Math.sqrt(v[q]); return { label: L(i, q), y: y[q], lo: y[q] - zq * se_, hi: y[q] + zq * se_, w: m.weights[q] }; }),
+      { y: m.est, lo: m.ci[0][0], hi: m.ci[0][1], pi: RE ? m.pi : [NaN, NaN] }, `${AXL}${T === 'OR' ? ' (escala logarítmica)' : ''}`, back, ref, T === 'OR' ? 'log' : T === 'COR' ? 'tanh' : ''), '', true));
+    sec.charts.push(fig('Gráfico de embudo', CH.funnel(y, v.map(Math.sqrt), m.est, T === 'OR' ? 'log(odds ratio)' : T === 'COR' ? 'z de Fisher' : ENAME)));
+    sec.text.push(`Se realizó un metaanálisis de ${RE ? `efectos aleatorios (estimación de τ² por ${o.method === 'REML' ? 'máxima verosimilitud restringida' : 'DerSimonian-Laird'})` : 'efectos fijos'} con ${k} estudios. El efecto combinado fue ${{ SMD: '<i>g</i>', MD: 'una diferencia de medias de', OR: '<i>OR</i>', COR: '<i>r</i>', GEN: '' }[T]}${T === 'MD' || T === 'GEN' ? ' ' : ' = '}${B(m.est)}, IC 95 % [${B(m.ci[0][0])}, ${B(m.ci[0][1])}], <i>z</i> = ${f(m.z[0])}, ${pt(m.pval[0])}. ` +
+      `La heterogeneidad ${m.pQ < .05 ? 'fue' : 'no fue'} estadísticamente significativa, <i>Q</i>(${m.dfQ}) = ${f(m.QE)}, ${pt(m.pQ)}, I² = ${f(m.I2, 1)} %${RE ? `, τ² = ${f(m.tau2, 3)}; el intervalo de predicción del 95 % fue [${B(m.pi[0])}, ${B(m.pi[1])}]` : ''}.` +
+      (m.egger ? ` La prueba de Egger ${m.egger.p < .05 ? 'indicó' : 'no indicó'} asimetría en el gráfico de embudo, <i>z</i> = ${f(m.egger.z)}, ${pt(m.egger.p)}.` : ''));
+    const cn = kk => rq(o.cols[kk]), dsel = `dm <- datos[complete.cases(datos[, c(${names.map(rq).join(', ')})]), ]`;
+    const esc_ = { SMD: `es <- escalc("SMD", m1i = dm[[${cn('M1')}]], sd1i = dm[[${cn('S1')}]], n1i = dm[[${cn('N1')}]], m2i = dm[[${cn('M2')}]], sd2i = dm[[${cn('S2')}]], n2i = dm[[${cn('N2')}]])`,
+      MD: `es <- escalc("MD", m1i = dm[[${cn('M1')}]], sd1i = dm[[${cn('S1')}]], n1i = dm[[${cn('N1')}]], m2i = dm[[${cn('M2')}]], sd2i = dm[[${cn('S2')}]], n2i = dm[[${cn('N2')}]])`,
+      OR: `es <- escalc("OR", ai = dm[[${cn('A')}]], bi = dm[[${cn('B')}]], ci = dm[[${cn('C')}]], di = dm[[${cn('D')}]], add = .5, to = "only0")`,
+      COR: `es <- escalc("ZCOR", ri = dm[[${cn('R')}]], ni = dm[[${cn('N')}]])`, GEN: `es <- data.frame(yi = dm[[${cn('Y')}]], vi = dm[[${cn('E')}]]^2)` }[T];
+    const tr = T === 'OR' ? ', transf = exp' : T === 'COR' ? ', transf = transf.ztor' : '';
+    sec.code = `# Metaanálisis (${ENAME})\nlibrary(metafor)\n${dsel}\n${esc_}\nprint(es, digits = 7)\nm <- rma(yi, vi, data = es, method = "${o.method}", control = list(threshold = 1e-10))${lab ? `\nm$slab <- as.character(dm[[${rq(o.label)}]])` : ''}\nprint(m, digits = 7)\n` +
+      `print(predict(m${tr}), digits = 7)  # efecto combinado${RE ? ' e intervalo de predicción' : ''}${tr ? ' en la escala original' : ''}\nprint(cbind(yi = es$yi, peso = weights(m)), digits = 7)\n` +
+      (tr ? `print(cbind(efecto = ${T === 'OR' ? 'exp' : 'transf.ztor'}(es$yi), ic_inf = ${T === 'OR' ? 'exp' : 'transf.ztor'}(es$yi - qnorm(.975) * sqrt(es$vi)), ic_sup = ${T === 'OR' ? 'exp' : 'transf.ztor'}(es$yi + qnorm(.975) * sqrt(es$vi))), digits = 7)  # cada estudio en la escala original\n` : `print(cbind(ic_inf = es$yi - qnorm(.975) * sqrt(es$vi), ic_sup = es$yi + qnorm(.975) * sqrt(es$vi)), digits = 7)  # IC de cada estudio\n`) +
+      (RE ? `print(confint(m, control = list(tol = 1e-10)), digits = 7)  # IC de τ², I² y H² (perfil de Q)\n` : '') +
+      (m.egger ? `eg <- regtest(m); eg\nprint(c(z = eg$zval, p = eg$pval, limite = eg$est, ic_inf = eg$ci.lb, ic_sup = eg$ci.ub), digits = 7)  # Egger${tr ? ` (límite en la escala original: ${T === 'OR' ? 'exp' : 'transf.ztor'}(eg$est))` : ''}\n${tr ? `print(${T === 'OR' ? 'exp' : 'transf.ztor'}(c(eg$est, eg$ci.lb, eg$ci.ub)), digits = 7)\n` : ''}` : '') +
+      `forest(m${tr ? `, atransf = ${T === 'OR' ? 'exp' : 'transf.ztor'}` : ''})\nfunnel(m)`;
+    return sec;
+  }
+
+  // Supervivencia: Kaplan-Meier (con IC de la mediana), log-rank entre grupos y regresión de Cox (empates de Efron)
+  function runSurv(tN, eN, gN, xNames) {
+    const sec = { title: `Supervivencia: ${tN || ''}${gN ? ` según ${gN}` : ''}`, test: 'Análisis de supervivencia', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const eLvSel = eN && eN.includes('\u0001') ? eN.split('\u0001')[1] : null; if (eLvSel !== null) eN = eN.split('\u0001')[0];
+    if (!tN || !eN || !vByName(tN) || !vByName(eN)) { sec.error = 'Elige la variable de tiempo y la del evento.'; return sec; }
+    if (tN === eN) { sec.error = 'El tiempo y el evento deben ser variables distintas.'; return sec; }
+    const tv = numOf(vByName(tN)), ev = vByName(eN), eAll = ev.type === 'cat' ? levelsOf(ev) : null;
+    // con una variable categórica, la persona elige qué categoría es el evento (eLv[1]); la otra es la censura (eLv[0])
+    const eLv = eAll ? (eLvSel !== null && eAll.includes(eLvSel) ? [eAll.find(l => l !== eLvSel), eLvSel] : eAll) : null;
+    const evOf = i => { const x = ev.raw[i]; if (x === null) return null; if (eLv) return String(x) === eLv[1] ? 1 : String(x) === eLv[0] ? 0 : null; const n_ = numOf(ev)[i]; return n_ === 1 ? 1 : n_ === 0 ? 0 : null; };
+    const gv = gN ? catOf(vByName(gN)) : null, gl = gN ? levelsOf(vByName(gN)) : null;
+    xNames = xNames.filter(n => ![tN, eN].includes(n));
+    const ok = i => tv[i] !== null && tv[i] >= 0 && evOf(i) !== null && (!gv || (gv[i] !== null && gl.includes(gv[i])));
+    const idx = ST.rows.map((_, i) => i).filter(ok), t = idx.map(i => tv[i]), e = idx.map(evOf), n = idx.length, ne = S.sum(e);
+    if (n < 5 || ne < 2) { sec.error = 'Se necesitan al menos 5 casos y 2 eventos.'; return sec; }
+    const evTxt = eLv ? `«${esc(eLv[1])}»` : '1';
+    sec.decision = `Análisis de supervivencia de ${esc(tN)} con ${n} casos: ${ne} eventos (${esc(eN)} = ${evTxt}) y ${n - ne} censurados${eLv ? ` (${esc(eN)} = «${esc(eLv[0])}»)` : ''}.`;
+    sec.why.push('El análisis de supervivencia estudia el tiempo hasta un evento teniendo en cuenta a quienes todavía no lo han tenido al final del seguimiento (casos censurados): no se pueden excluir ni tratar como si el evento no fuera a ocurrir.');
+    sec.why.push('La curva de Kaplan-Meier estima la proporción que sigue sin el evento en cada momento; la mediana es el tiempo en que esa proporción baja al 50 %.');
+    const grp = gv ? gl.map(l => ({ name: l, ii: idx.map((i, q) => q).filter(q => gv[idx[q]] === l) })).filter(o => o.ii.length) : [{ name: 'Todos', ii: idx.map((_, q) => q) }];
+    const km = grp.map(o => ({ name: o.name, r: S.kaplanMeier(o.ii.map(q => t[q]), o.ii.map(q => e[q])), times: o.ii.map(q => t[q]), cens: o.ii.filter(q => e[q] === 0).map(q => t[q]) }));
+    const md = v => (isFinite(v) ? f(v) : 'no alcanzada');
+    sec.tables.push(apaTable('Supervivencia mediana (Kaplan-Meier)', [gN ? esc(gN) : '', '<i>n</i>', 'Eventos', 'Censurados', 'Mediana', 'IC 95 %'],
+      km.map(o => [esc(o.name), o.r.n, o.r.events, o.r.n - o.r.events, md(o.r.median), `[${md(o.r.medianCI[0])}, ${md(o.r.medianCI[1])}]`]),
+      'IC de la mediana a partir del IC de la curva (escala logarítmica, como survival::survfit). «No alcanzada»: la supervivencia no bajó del 50 % (o el límite del IC no llega a cruzarlo).'));
+    const lt = km[0].r.rows.length <= 30 ? km : null;
+    if (lt) sec.tables.push(apaTable('Tabla de supervivencia', (gN ? [esc(gN)] : []).concat(['Tiempo', 'En riesgo', 'Eventos', 'S(t)', '<i>EE</i>', 'IC 95 %']),
+      km.flatMap(o => o.r.rows.map((r, k) => (gN ? [k === 0 ? esc(o.name) : ''] : []).concat([fmtNum(r.t), r.nrisk, r.nevent, nz(r.surv.toFixed(3)), isFinite(r.se) ? nz(r.se.toFixed(3)) : '—', isFinite(r.lower) ? `[${nz(r.lower.toFixed(3))}, ${nz(r.upper.toFixed(3))}]` : '—']))),
+      'EE de Greenwood. Solo se muestran los tiempos con algún evento.'));
+    sec.charts.push(fig(`Curvas de supervivencia de Kaplan-Meier${gN ? ` por ${gN}` : ''}`, CH.kmCurve(km.map(o => ({ name: o.name, rows: o.r.rows, times: o.times, cens: o.cens })), tN), gN ? CH.legend(km.map(o => o.name)) : ''));
+    let txt = `Se estimaron las curvas de supervivencia de Kaplan-Meier para ${esc(tN)} (${n} casos, ${ne} eventos). ` + km.map(o => `${gN ? `En ${esc(o.name)}, l` : 'L'}a mediana fue ${isFinite(o.r.median) ? `${f(o.r.median)}, IC 95 % [${md(o.r.medianCI[0])}, ${md(o.r.medianCI[1])}]` : 'no alcanzada (más del 50 % no tuvo el evento)'}`).join('; ') + '.';
+    let lr = null;
+    if (gN && km.length >= 2) { const gi = idx.map(i => km.findIndex(o => o.name === gv[i])); lr = S.logrank(t, e, gi, km.length);
+      sec.tables.push(apaTable('Prueba de log-rank', [esc(gN), 'Observados', 'Esperados'], km.map((o, j) => [esc(o.name), lr.O[j], f(lr.E[j])]), `χ²(${lr.df}) = ${f(lr.chi)}, ${pt(lr.p)}. Compara las curvas de supervivencia (mismo peso a todos los momentos).`));
+      txt += ` La prueba de log-rank ${lr.p < .05 ? 'mostró diferencias significativas' : 'no mostró diferencias significativas'} entre las curvas, χ²(${lr.df}) = ${f(lr.chi)}, ${pt(lr.p)}.`; }
+    sec.text.push(txt);
+    let cx = null, cols = null;
+    if (xNames.length) { const d_ = design(xNames, i => ok(i)); cols = d_.cols.slice(1);
+      const tt = d_.idx.map(i => tv[i]), ee = d_.idx.map(evOf), X = d_.X.map(r => r.slice(1)), EPV = S.sum(ee) / cols.length;
+      cx = S.cox(X, tt, ee);
+      if (!cx || cx.b.some(v => !isFinite(v) || Math.abs(v) > 15)) sec.checks.push(chk('no', 'La regresión de Cox no converge con estos datos (posible separación: algún predictor anticipa el evento casi perfectamente, o hay muy pocos eventos). Reduce el número de predictores.'));
+      else {
+        sec.checks.push(chk(EPV >= 10 ? 'ok' : 'no', `Eventos por predictor: ${f(EPV, 1)}${EPV >= 10 ? '.' : ' (se recomiendan al menos 10): los coeficientes pueden ser inestables.'}`));
+        sec.checks.push(chk('info', 'Riesgos proporcionales: la regresión de Cox supone que el efecto de cada predictor es constante en el tiempo. Compruébalo en R con cox.zph (está en el script) o mirando si las curvas de Kaplan-Meier se cruzan.'));
+        sec.tables.push(apaTable('Regresión de Cox', ['Predictor', '<i>B</i>', '<i>EE</i>', '<i>z</i>', '<i>p</i>', 'HR', 'IC 95 % (HR)'],
+          cols.map((c, j) => [esc(c.name), f(cx.b[j], 3), f(cx.se[j], 3), f(cx.z[j]), pv(cx.p[j]), f(cx.hr[j]), `[${f(cx.ci[j][0])}, ${f(cx.ci[j][1])}]`]),
+          `HR = hazard ratio (exp(B)); empates de Efron. Modelo global: razón de verosimilitudes χ²(${cx.lr.df}) = ${f(cx.lr.chi)}, ${pt(cx.lr.p)}; Wald χ²(${cx.wald.df}) = ${f(cx.wald.chi)}, ${pt(cx.wald.p)}; puntuación (log-rank) χ²(${cx.score.df}) = ${f(cx.score.chi)}, ${pt(cx.score.p)}. ${cx.n} casos, ${cx.events} eventos.`));
+        const sig = cols.map((c, j) => ({ c, j })).filter(o => cx.p[o.j] < .05);
+        sec.text.push(`Se ajustó una regresión de riesgos proporcionales de Cox con ${list(xNames.map(esc))} (${cx.n} casos, ${cx.events} eventos). El modelo ${cx.lr.p < .05 ? 'fue' : 'no fue'} estadísticamente significativo, χ²(${cx.lr.df}) = ${f(cx.lr.chi)}, ${pt(cx.lr.p)}. ` +
+          (sig.length ? sig.map(o => `${esc(o.c.name)} se asoció con un riesgo ${cx.b[o.j] > 0 ? 'mayor' : 'menor'} del evento (HR = ${f(cx.hr[o.j])}, IC 95 % [${f(cx.ci[o.j][0])}, ${f(cx.ci[o.j][1])}], ${pt(cx.p[o.j])})`).join('; ') + '.' : 'Ningún predictor se asoció significativamente con el riesgo del evento.'));
+      } }
+    const Tq = rq(tN), Eexpr = eLv ? `as.integer(datos[[${rq(eN)}]] == ${rq(eLv[1])})` : `datos[[${rq(eN)}]]`;
+    sec.code = `# Supervivencia: ${tN}${gN ? ` según ${gN}` : ''}\nlibrary(survival)\nd <- data.frame(tiempo = datos[[${Tq}]], evento = ${Eexpr}${gN ? `, grupo = droplevels(datos[[${rq(gN)}]])` : ''})\nd <- d[complete.cases(d) & d$tiempo >= 0, ]  # casos para Kaplan-Meier y log-rank\n` +
+      `km <- survfit(Surv(tiempo, evento) ~ ${gN ? 'grupo' : '1'}, data = d)\nkm  # n, eventos, mediana e IC\nprint(summary(km), digits = 7)  # tabla de supervivencia (EE de Greenwood, IC en escala log)\nprint(quantile(km, .5), digits = 7)  # mediana con IC\nplot(km, mark.time = TRUE${gN ? `, col = 1:${km.length}` : ''})\n` +
+      (lr ? `lr <- survdiff(Surv(tiempo, evento) ~ grupo, data = d); lr\nprint(cbind(observados = lr$obs, esperados = lr$exp), digits = 7)\nc(chi2 = lr$chisq, gl = length(lr$n) - 1, p = pchisq(lr$chisq, length(lr$n) - 1, lower.tail = FALSE))\n` : '') +
+      (cx ? `dc <- data.frame(tiempo = datos[[${Tq}]], evento = ${Eexpr}${gN ? `, grupo = datos[[${rq(gN)}]]` : ''}, ${xNames.map(x => `${rn(x)} = datos[[${rq(x)}]]`).join(', ')}, check.names = FALSE)\ndc <- dc[complete.cases(dc) & dc$tiempo >= 0, ]  # casos para Cox (también con los predictores)\ncox <- coxph(Surv(tiempo, evento) ~ ${xNames.map(rn).join(' + ')}, data = dc, ties = "efron")\nprint(summary(cox), digits = 7)\nc(LR = 2 * diff(cox$loglik), Wald = unname(cox$wald.test), puntuacion = unname(cox$score))  # pruebas globales sin redondear\ncox.zph(cox)  # riesgos proporcionales (p < .05 indica que no se cumplen)` : '');
+    return sec;
+  }
+
+  // Regresión para recuentos: Poisson o binomial negativa (enlace log), con exposición opcional (offset = log de la exposición)
+  function runCount(yName, xNames, fam, offName) {
+    const sec = { title: `Regresión para recuentos: ${yName || ''}`, why: [], checks: [], tables: [], charts: [], text: [], code: '' };
+    const J_chi = (x, df) => jStat.chisquare.cdf(x, df);
+    xNames = xNames.filter(n => n !== yName && n !== offName);
+    if (!yName || !vByName(yName)) { sec.error = 'Elige la variable dependiente (un recuento).'; return sec; }
+    if (!xNames.length) { sec.error = 'Selecciona al menos un predictor distinto de la variable dependiente.'; return sec; }
+    const yv = numOf(vByName(yName)), ov = offName ? numOf(vByName(offName)) : null;
+    const { idx, cols, X } = design(xNames, i => yv[i] !== null && (!ov || (ov[i] !== null && ov[i] > 0))), y = idx.map(i => yv[i]), n = idx.length, p = cols.length;
+    if (y.some(v => v < 0 || !Number.isInteger(v))) { sec.error = `${yName} no es un recuento: debe tomar valores enteros iguales o mayores que 0.`; return sec; }
+    if (n < p + 5) { sec.error = `Hay pocos casos completos (${n}) para estimar ${p} coeficientes.`; return sec; }
+    const off = ov ? idx.map(i => Math.log(ov[i])) : null;
+    const mp = S.countReg(X, y, 'poisson', off); if (!mp) { sec.error = 'No se pudo estimar el modelo (colinealidad perfecta entre los predictores).'; return sec; }
+    const mn = S.countReg(X, y, 'negbin', off), lrNB = mn && !mn.poissonLimit ? Math.max(0, 2 * (mn.ll - mp.ll)) : 0, pNB = .5 * (1 - J_chi(lrNB, 1));
+    const useNB = fam === 'negbin' || (fam === 'auto' && mn && !mn.poissonLimit && pNB < .05), m = useNB && mn && !mn.poissonLimit ? mn : mp, NB = m === mn;
+    const nul = S.countReg(X.map(() => [1]), y, NB ? 'negbin' : 'poisson', off), lr = Math.max(0, 2 * (m.ll - nul.ll)), dfm = p - 1, pLR = 1 - J_chi(lr, dfm);
+    const MN = NB ? 'binomial negativa' : 'de Poisson';
+    sec.test = `Regresión ${MN}`;
+    sec.decision = `Se ajustó una regresión ${MN} (enlace logarítmico) para ${esc(yName)} con ${n} casos completos${offName ? `, con ${esc(offName)} como exposición` : ''}.`;
+    sec.why.push(`${esc(yName)} es un recuento (números enteros ≥ 0): los modelos para recuentos respetan que no puede ser negativo y que su variabilidad crece con la media. Los coeficientes se interpretan como razones de tasas (IRR): cuántas veces cambia el recuento esperado por cada unidad del predictor.`);
+    if (fam === 'auto') sec.why.push(mn && !mn.poissonLimit ? `Sobredispersión: la binomial negativa ${pNB < .05 ? 'mejora' : 'no mejora'} significativamente a la de Poisson (razón de verosimilitudes, χ² = ${f(lrNB)}, ${pt(pNB)}; θ en el límite del espacio, por eso p = ½·P(χ²₁ > χ²)), así que se usa la regresión ${MN}.` : 'No hay sobredispersión (la binomial negativa coincide con la de Poisson: θ tiende a infinito), así que se usa la regresión de Poisson.');
+    else if (fam === 'negbin' && (!mn || mn.poissonLimit)) sec.checks.push(chk('info', 'Has elegido la binomial negativa, pero los datos no tienen sobredispersión (θ tiende a infinito): equivale a la regresión de Poisson, que es la que se muestra.'));
+    sec.checks.push(chk(mp.dispersion <= 1.5 ? 'ok' : NB ? 'info' : 'no', `Dispersión del modelo de Poisson (χ² de Pearson / gl) = ${f(mp.dispersion)}${mp.dispersion <= 1.5 ? ': sin sobredispersión relevante.' : NB ? ': hay sobredispersión, por eso se usa la binomial negativa.' : ': hay sobredispersión; los errores típicos de Poisson pueden ser demasiado pequeños (valora la binomial negativa).'}`));
+    const z0 = y.filter(v => v === 0).length, e0 = S.sum(m.mu.map(u => (NB ? Math.pow(m.theta / (m.theta + u), m.theta) : Math.exp(-u))));
+    sec.checks.push(chk(z0 <= 1.5 * e0 + 2 ? 'ok' : 'info', `Ceros observados: ${z0}; esperados según el modelo: ${f(e0, 1)}.${z0 > 1.5 * e0 + 2 ? ' Hay más ceros de los esperados: podría convenir un modelo con exceso de ceros (en R, pscl::zeroinfl o hurdle).' : ''}`));
+    sec.tables.push(apaTable('Ajuste del modelo', ['<i>n</i>', 'Log-verosimilitud', 'Desvianza', 'AIC', 'χ² (frente al nulo)', '<i>gl</i>', '<i>p</i>'].concat(NB ? ['θ', 'EE (θ)'] : []),
+      [[n, f(m.ll), f(m.dev), f(m.aic), f(lr), dfm, pv(pLR)].concat(NB ? [f(m.theta, 3), f(m.thetaSE, 3)] : [])], `χ² = razón de verosimilitudes frente al modelo solo con la constante${NB ? ' (cada uno con su θ)' : ''}.${NB ? ' θ = parámetro de dispersión de la binomial negativa (varianza = μ + μ²/θ).' : ''}`));
+    sec.tables.push(apaTable(`Coeficientes de la regresión ${MN}`, ['Predictor', '<i>B</i>', '<i>EE</i>', '<i>z</i>', '<i>p</i>', 'IRR', 'IC 95 % (IRR)'],
+      cols.map((c, j) => [esc(c.name), f(m.b[j], 3), f(m.se[j], 3), f(m.z[j]), pv(m.p[j]), j ? f(m.irr[j]) : '', j ? `[${f(m.ci[j][0])}, ${f(m.ci[j][1])}]` : '']),
+      `IRR = razón de tasas (exp(B)); IC de Wald.${offName ? ` La exposición (${esc(offName)}) entra como desplazamiento: los coeficientes se refieren a la tasa por unidad de exposición.` : ''}`));
+    const sig = cols.map((c, j) => ({ c, j })).filter(o => o.j > 0 && m.p[o.j] < .05);
+    sec.text.push(`Se realizó una regresión ${MN} para predecir ${esc(yName)}${offName ? ` (con ${esc(offName)} como exposición)` : ''} a partir de ${list(xNames.map(esc))} (<i>N</i> = ${n}). El modelo ${pLR < .05 ? 'fue' : 'no fue'} estadísticamente significativo frente al modelo nulo, χ²(${dfm}) = ${f(lr)}, ${pt(pLR)}. ` +
+      (sig.length ? sig.map(o => `${esc(o.c.name)} se asoció con ${m.b[o.j] > 0 ? 'un aumento' : 'una disminución'} del recuento esperado (IRR = ${f(m.irr[o.j])}, IC 95 % [${f(m.ci[o.j][0])}, ${f(m.ci[o.j][1])}], ${pt(m.p[o.j])})`).join('; ') + '.' : 'Ningún predictor se asoció significativamente con el recuento.'));
+    const fml = xNames.map(rn).join(' + ') + (offName ? ` + offset(log(${rn(offName)}))` : '');
+    sec.code = `# Regresión para recuentos: ${yName}\nd <- datos[complete.cases(datos[, c(${[yName].concat(xNames, offName ? [offName] : []).map(rq).join(', ')})]), ]${offName ? `\nd <- d[d[[${rq(offName)}]] > 0, ]` : ''}\n` +
+      `pois <- glm(${rn(yName)} ~ ${fml}, data = d, family = poisson)\nsum(residuals(pois, "pearson")^2) / df.residual(pois)  # dispersión\nnb <- MASS::glm.nb(${rn(yName)} ~ ${fml}, data = d)\n` +
+      `lr <- 2 * (as.numeric(logLik(nb)) - as.numeric(logLik(pois))); c(chi2 = lr, p = .5 * pchisq(lr, 1, lower.tail = FALSE))  # binomial negativa frente a Poisson\n` +
+      `modelo <- ${NB ? 'nb' : 'pois'}\nprint(summary(modelo), digits = 7)\nprint(exp(cbind(IRR = coef(modelo), confint.default(modelo))), digits = 7)  # razones de tasas con IC de Wald\n` +
+      `nulo <- ${NB ? `MASS::glm.nb(${rn(yName)} ~ 1${offName ? ` + offset(log(${rn(offName)}))` : ''}, data = d)` : `glm(${rn(yName)} ~ 1${offName ? ` + offset(log(${rn(offName)}))` : ''}, data = d, family = poisson)`}\n` +
+      `c(logLik = as.numeric(logLik(modelo)), desvianza = deviance(modelo), AIC = AIC(modelo), chi2 = 2 * (as.numeric(logLik(modelo)) - as.numeric(logLik(nulo))), gl = ${dfm})${NB ? '\nc(theta = modelo$theta, EE = modelo$SE.theta)' : ''}\n` +
+      `c(ceros_observados = sum(d[[${rq(yName)}]] == 0), ceros_esperados = sum(${NB ? 'dnbinom(0, mu = fitted(modelo), size = modelo$theta)' : 'dpois(0, fitted(modelo))'}))`;
+    return sec;
+  }
+
   function runLogistic(yName, xNames) {
     const sec = { title: `Regresión logística: ${yName}`, test: 'Regresión logística binaria', why: [], checks: [], tables: [], charts: [], text: [], code: '' };
     xNames = xNames.filter(n => n !== yName);
@@ -2376,12 +2760,14 @@
     log.push('Valores perdidos: cada análisis usa los casos con datos completos en sus variables (las correlaciones, por parejas).');
     const add = s => { secs.push(s); if (s.decision) log.push(`<b>${esc(s.title)}:</b> ${s.decision}`); else if (s.error) log.push(`<b>${esc(s.title)}:</b> no se pudo realizar. ${esc(s.error)}`); };
     try {
-      if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v, ($('#descG') || {}).value || '')); }
+      if (isOn('desc')) { const v = checkedVals('desc'); if (v.length) add(runDescriptives(v, ($('#descG') || {}).value || '', ($('#descPlot') || {}).value || 'box')); }
       if (isOn('corr')) add(runCorrelations(checkedVals('corr'), $('#corrM').value, checkedVals('corrZ')));
       if (isOn('comp')) { const g = $('#compG') && $('#compG').value; checkedVals('compY').forEach(y => add(addNPGroups(runCompare(y, g, ($('#compAlt') || {}).value || 'two', { ph: ($('#compPH') || {}).value || 'auto', ctrl: ($('#compCtrl') || {}).value || '', con: ($('#compCon') || {}).value || '' }), y, g, checkedVals('compNP')))); }
       if (isOn('one')) { const ys = checkedVals('oY'), mu = parseFloat(String(($('#oMu') || {}).value || '').replace(',', '.'));
         if (ys.length) ys.forEach(y => add(addNPOne(runOneSample(y, mu, ($('#oAlt') || {}).value || 'two'), y, mu, ($('#oAlt') || {}).value || 'two', checkedVals('oNP'))));
         else add({ title: 'Una muestra', error: 'Selecciona al menos una variable.', why: [], checks: [], tables: [], charts: [], text: [] }); }
+      if (isOn('tost')) { const num = id => parseFloat(String(($(id) || {}).value || '').replace(',', '.'));
+        add(runTost({ des: ($('#tDes') || {}).value || 'ind', y: ($('#tY') || {}).value, g: ($('#tG') || {}).value, y2: ($('#tY2') || {}).value, mu: num('#tMu'), unit: ($('#tUnit') || {}).value || 'd', low: num('#tLow'), high: num('#tHigh') })); }
       if (isOn('prop')) { const vs = checkedVals('prV'), p0 = parseFloat(String(($('#prP0') || {}).value || '0.5').replace(',', '.')), pr = String(($('#prProbs') || {}).value || '').trim();
         if (vs.length) vs.forEach(v => add(runProp(v, p0, ($('#prAlt') || {}).value || 'two', pr)));
         else add({ title: 'Proporciones', error: 'Selecciona al menos una variable categórica.', why: [], checks: [], tables: [], charts: [], text: [] }); }
@@ -2400,13 +2786,17 @@
       if (isOn('manova')) add(runManova(checkedVals('mvY'), [($('#mvA') || {}).value, ($('#mvB') || {}).value].filter(Boolean), checkedVals('mvC')));
       if (isOn('mlogit')) add(runPolyLogit(($('#mlY') || {}).value, checkedVals('mlX'), ($('#mlM') || {}).value || 'auto'));
       if (isOn('logit')) add(runLogistic($('#lY').value, checkedVals('lX')));
+      if (isOn('miss')) add(runMissing(checkedVals('msV')));
+      if (isOn('meta')) { const g = id => ($(id) || {}).value || ''; add(runMeta({ type: g('#mtT') || 'SMD', method: g('#mtM') || 'REML', label: g('#mtL'), cols: Object.fromEntries(['M1', 'S1', 'N1', 'M2', 'S2', 'N2', 'A', 'B', 'C', 'D', 'R', 'N', 'Y', 'E'].map(k => [k, g('#mt' + k)])) })); }
+      if (isOn('surv')) add(runSurv(($('#svT') || {}).value, ($('#svE') || {}).value, ($('#svG') || {}).value || '', checkedVals('svX')));
+      if (isOn('count')) add(runCount(($('#cntY') || {}).value, checkedVals('cntX'), ($('#cntF') || {}).value || 'auto', ($('#cntO') || {}).value || ''));
       if (isOn('fact')) { const ys = checkedVals('fY');
         const f3 = ($('#fC') || {}).value || '', cv = checkedVals('fCov');
         if (ys.length) ys.forEach(y => add(f3 || cv.length ? runFactorialG(y, [$('#fA').value, $('#fB').value].concat(f3 ? [f3] : []), cv) : runFactorial(y, $('#fA').value, $('#fB').value)));
         else add({ title: 'ANOVA factorial', error: 'Selecciona al menos una variable dependiente.', why: [], checks: [], tables: [], charts: [], text: [] }); }
       if (isOn('ancova')) add(runAncova($('#acY').value, $('#acG').value, checkedVals('acC')));
       if (isOn('binrel')) add(runBinRel(checkedVals('bR')));
-      if (isOn('cfa')) add(runCfa([0, 1, 2, 3].map(k => ({ name: $('#cfN' + k).value.trim() || `Factor ${k + 1}`, items: checkedVals('cfI' + k) })).filter(fc => fc.items.length)));
+      if (isOn('cfa')) add(runCfa([0, 1, 2, 3].map(k => ({ name: $('#cfN' + k).value.trim() || `Factor ${k + 1}`, items: checkedVals('cfI' + k) })).filter(fc => fc.items.length), $('#cfG').value));
       if (isOn('lmm')) add(runLmm($('#lmY').value, checkedVals('lmX'), $('#lmG').value, $('#lmS').value, [$('#lmIA').value, $('#lmIB').value]));
       if (isOn('mod')) add(runModeration($('#moY').value, $('#moX').value, $('#moW').value));
       if (isOn('med')) { const mo = ($('#meMod') || {}).value || '4', cvs = checkedVals('meC');
@@ -2439,7 +2829,7 @@
     $('#log').innerHTML = ST.log.map(l => `<li>${l}</li>`).join('');
     $('#results').innerHTML = ST.sections.map((s, si) => {
       if (s.error) return `<div class="res"><h2>${esc(s.title)}</h2><div class="warnbox">⚠️ ${esc(s.error)}</div></div>`;
-      const charts = s.charts.map((c, ci) => { figNo++; return `<figure><figcaption><span>Figura ${figNo}. ${esc(c.title)}</span><button data-png="${si}-${ci}">PNG</button></figcaption>${c.legend}${c.svg}</figure>`; }).join('');
+      const charts = s.charts.map((c, ci) => { figNo++; return `<figure${c.wide ? ' class="wide"' : ''}><figcaption><span>Figura ${figNo}. ${esc(c.title)}</span><button data-png="${si}-${ci}">PNG</button></figcaption>${c.legend}${c.svg}</figure>`; }).join('');
       return `<div class="res" data-sec="${si}">
         <h2>${esc(s.title)}</h2><span class="test">${esc(s.test || '')}</span>
         <p class="decision">${s.decision || ''}</p>
@@ -2494,12 +2884,18 @@
       const NONE = { style: D.BorderStyle.NONE, size: 0, color: 'FFFFFF' }, LINE = sz => ({ style: D.BorderStyle.SINGLE, size: sz, color: '000000' });
       const tableFrom = html => {
         const el = document.createElement('div'); el.innerHTML = html; const t = el.querySelector('table'), out = [];
-        const cap = t.querySelector('caption'); if (cap) { out.push(P(`<b>${cap.querySelector('b').innerHTML}</b>`, { p: { spacing: { before: 240, after: 0 } } })); out.push(P(`<i>${cap.querySelector('i').innerHTML}</i>`)); }
+        const cap = t.querySelector('caption'); if (cap) { out.push(P(`<b>${cap.querySelector('b').innerHTML}</b>`, { p: { keepNext: true, spacing: { before: 240, after: 0 } } })); out.push(P(`<i>${cap.querySelector('i').innerHTML}</i>`, { p: { keepNext: true } })); }
         const head = [...t.querySelectorAll('thead th')], body = [...t.querySelectorAll('tbody tr')];
-        const cell = (h, i, borders, bold) => new D.TableCell({ borders, children: [new D.Paragraph({ alignment: i === 0 ? D.AlignmentType.LEFT : D.AlignmentType.CENTER, children: runs(h.replace(/<span[^>]*>|<\/span>/g, ''), bold ? { bold: true } : {}) })] });
+        // ancho de cada columna según su contenido (los encabezados pueden partirse entre palabras) y letra más pequeña solo si la tabla no cabe en la página
+        const plain = h => h.replace(/<[^>]+>/g, '').replace(/&[a-z]+;/g, 'x').trim(), nc = head.length, len = new Array(nc).fill(3), PAGE = 9000;
+        head.forEach((h, i) => { len[i] = Math.max(len[i], ...plain(h.innerHTML).split(/\s+/).map(w => w.length)); });
+        body.forEach(r => { const cs = [...r.children]; if (cs.length === nc) cs.forEach((c, i) => { len[i] = Math.max(len[i], Math.min(28, plain(c.innerHTML).length)); }); });
+        const need = sz => len.map(l => l * sz * 5 + 150), fits = sz => need(sz).reduce((a, b) => a + b, 0) <= PAGE;   // ~0,5 em por carácter + márgenes de la celda (twips)
+        const size = [22, 20, 18].find(fits) || 16, nd = need(size), tot = nd.reduce((a, b) => a + b, 0), widths = nd.map(w => Math.round(w * PAGE / tot));
+        const cell = (h, i, borders, bold, last) => new D.TableCell({ borders, margins: { left: 60, right: 60 }, width: widths[i] ? { size: widths[i], type: D.WidthType.DXA } : undefined, children: [new D.Paragraph({ keepNext: !last, alignment: i === 0 ? D.AlignmentType.LEFT : D.AlignmentType.CENTER, children: runs(h.replace(/<span[^>]*>|<\/span>/g, ''), bold ? { bold: true, size } : { size }) })] });
         const rows = [new D.TableRow({ tableHeader: true, children: head.map((h, i) => cell(h.innerHTML, i, { top: LINE(12), bottom: LINE(8), left: NONE, right: NONE }, false)) })];
-        body.forEach((r, k) => rows.push(new D.TableRow({ children: [...r.children].map((c, i) => cell(c.innerHTML, i, { top: NONE, bottom: k === body.length - 1 ? LINE(12) : NONE, left: NONE, right: NONE })) })));
-        out.push(new D.Table({ rows, width: { size: 100, type: D.WidthType.PERCENTAGE }, borders: { top: NONE, bottom: NONE, left: NONE, right: NONE, insideHorizontal: NONE, insideVertical: NONE } }));
+        body.forEach((r, k) => rows.push(new D.TableRow({ cantSplit: true, children: [...r.children].map((c, i) => cell(c.innerHTML, i, { top: NONE, bottom: k === body.length - 1 ? LINE(12) : NONE, left: NONE, right: NONE }, false, k === body.length - 1)) })));
+        out.push(new D.Table({ rows, width: { size: PAGE, type: D.WidthType.DXA }, columnWidths: widths, borders: { top: NONE, bottom: NONE, left: NONE, right: NONE, insideHorizontal: NONE, insideVertical: NONE } }));
         const note = el.querySelector('.note'); if (note) out.push(P(note.innerHTML, { run: { size: 20 }, p: { spacing: { before: 80, after: 200 } } }));
         return out;
       };
@@ -2517,8 +2913,8 @@
         s.text.forEach(t => kids.push(P(t)));
         for (const c of s.charts) {
           figN++; const { buf, w, h } = await svgToPngBuffer(c.svg), W = Math.min(560, w * (w > 400 ? .87 : 1.2)), Hh = W * h / w;
-          kids.push(P(`<b>Figura ${figN}</b>`, { p: { spacing: { before: 240, after: 0 } } }), P(`<i>${esc(c.title)}</i>`));
-          if (c.legend) kids.push(P(c.legend.replace(/<i[^>]*><\/i>/g, '■ '), { run: { size: 18 } }));
+          kids.push(P(`<b>Figura ${figN}</b>`, { p: { keepNext: true, spacing: { before: 240, after: 0 } } }), P(`<i>${esc(c.title)}</i>`, { p: { keepNext: true } }));
+          if (c.legend) kids.push(P(c.legend.replace(/<i[^>]*><\/i>/g, '■ '), { run: { size: 18 }, p: { keepNext: true } }));
           kids.push(new D.Paragraph({ children: [new D.ImageRun({ data: buf, transformation: { width: W, height: Hh } })] }));
         }
         kids.push(new D.Paragraph({ heading: D.HeadingLevel.HEADING_2, children: [new D.TextRun('Justificación y supuestos')] }));
@@ -2733,4 +3129,6 @@
   $('#dlR').onclick = exportR;
   window.TharpState = ST; // solo lectura: lo usan las pruebas automáticas
   show(1);
+  // app.html#ejemplo (enlace de la portada): carga los datos de ejemplo y muestra directamente un análisis completo
+  if (location.hash === '#ejemplo') { history.replaceState(null, '', location.pathname); $('#demo').click(); show(3); $('#run').click(); track('ejemplo_portada'); }
 })();

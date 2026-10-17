@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tharp · Análisis estadístico automático para tu TFM, tesis o artículo</title>
-<meta name="description" content="Sube tus datos (Excel, CSV, SPSS o JASP) y Tharp comprueba los supuestos, elige la prueba adecuada y genera tablas APA, gráficos, el apartado de resultados redactado y el código R. Gratis durante el lanzamiento y sin subir tus datos a ningún servidor.">
+<title>Tharp · From question to evidence · Análisis estadístico para tu artículo, tesis o proyecto</title>
+<meta name="description" content="Sube tus datos (Excel, CSV, SPSS o JASP) y Tharp comprueba los supuestos, elige la prueba adecuada y genera tablas APA, gráficos, el apartado de resultados redactado y el código R. Validado contra R. Gratis durante el lanzamiento y sin subir tus datos a ningún servidor.">
 <link rel="canonical" href="https://tharp.es/">
-<meta name="theme-color" content="#07131f">
+<meta name="theme-color" content="#0b2230">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Tharp">
 <meta property="og:locale" content="es_ES">
 <meta property="og:url" content="https://tharp.es/">
 <meta property="og:title" content="Tharp · From question to evidence">
-<meta property="og:description" content="Análisis estadístico automático para investigación: supuestos, pruebas, tablas APA, gráficos y resultados redactados. Gratis durante el lanzamiento y sin que tus datos salgan de tu ordenador.">
+<meta property="og:description" content="Análisis estadístico para investigación: supuestos, pruebas, tablas APA, gráficos y resultados redactados, con el código R que los reproduce. Gratis durante el lanzamiento y sin que tus datos salgan de tu ordenador.">
 <meta property="og:image" content="https://tharp.es/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -21,294 +21,99 @@
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <script>/* ?no-contar excluye este navegador de las estadísticas (Umami); ?contar lo vuelve a incluir */try{var q=location.search;if(/[?&]no-contar(&|=|$)/.test(q)){localStorage.setItem("umami.disabled","1");alert("Listo: las visitas desde este navegador ya no se cuentan en las estadísticas.")}else if(/[?&]contar(&|=|$)/.test(q)){localStorage.removeItem("umami.disabled");alert("Las visitas desde este navegador vuelven a contarse.")}}catch(e){}</script>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
-<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="fuentes.css">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
  {"@type":"Organization","@id":"https://tharp.es/#org","name":"Tharp","url":"https://tharp.es/","logo":"https://tharp.es/img/logo-512.png","email":"info@tharp.es","sameAs":["https://www.instagram.com/tharpstats/"]},
- {"@type":"WebApplication","name":"Tharp","url":"https://tharp.es/app.html","applicationCategory":"EducationalApplication","operatingSystem":"Navegador web","inLanguage":"es","description":"Análisis estadístico automático para investigación: comprobación de supuestos, pruebas estadísticas, tablas APA, gráficos, redacción de resultados y código R reproducible.","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"publisher":{"@id":"https://tharp.es/#org"}},
+ {"@type":"WebApplication","name":"Tharp","url":"https://tharp.es/app.html","applicationCategory":"EducationalApplication","operatingSystem":"Navegador web","inLanguage":"es","description":"Análisis estadístico para investigación: comprobación de supuestos, pruebas estadísticas, tablas APA, gráficos, redacción de resultados y código R reproducible.","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"publisher":{"@id":"https://tharp.es/#org"}},
  {"@type":"FAQPage","mainEntity":[
   {"@type":"Question","name":"¿Tharp es gratis?","acceptedAnswer":{"@type":"Answer","text":"Durante el lanzamiento, sí, y sin registro. Más adelante habrá planes de pago, que se anunciarán con antelación."}},
   {"@type":"Question","name":"¿Mis datos se suben a algún servidor?","acceptedAnswer":{"@type":"Answer","text":"No. Todo el cálculo se hace en tu navegador. El archivo no sale de tu ordenador y nada se guarda cuando cierras la pestaña."}},
   {"@type":"Question","name":"¿Qué archivos puedo usar?","acceptedAnswer":{"@type":"Answer","text":"Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp), con sus etiquetas de valor y sus valores perdidos."}},
-  {"@type":"Question","name":"¿Los resultados son fiables?","acceptedAnswer":{"@type":"Answer","text":"Cada prueba está validada automáticamente contra R y las librerías estadísticas de Python, y Tharp genera el script de R para que puedas reproducir cada resultado."}},
-  {"@type":"Question","name":"¿Puedo usarlo para mi TFM o mi tesis?","acceptedAnswer":{"@type":"Answer","text":"Sí. Tharp genera tablas y texto en formato APA y un documento Word editable. Revisa siempre los resultados: la interpretación final es tuya."}}
+  {"@type":"Question","name":"¿Los resultados son fiables?","acceptedAnswer":{"@type":"Answer","text":"Cada análisis está validado automáticamente contra R, número a número, y Tharp genera el script de R para que cualquiera pueda reproducir cada resultado."}},
+  {"@type":"Question","name":"¿Qué análisis incluye?","acceptedAnswer":{"@type":"Answer","text":"Descriptivos, comparación de grupos y de medidas repetidas con sus post hoc, correlaciones, tablas de contingencia, regresión lineal, logística, multinomial, ordinal y de recuentos, ANOVA factorial, ANCOVA y MANOVA, modelos mixtos, moderación y mediación, análisis factorial exploratorio y confirmatorio con invarianza de medida, fiabilidad y acuerdo entre jueces, supervivencia, metaanálisis, curva ROC, valores perdidos y potencia estadística."}},
+  {"@type":"Question","name":"¿Puedo usarlo en mi artículo o mi tesis? ¿Cómo lo cito?","acceptedAnswer":{"@type":"Answer","text":"Sí. Tharp genera tablas y texto en formato APA y un documento Word editable, y te da la cita del software en formato APA 7 para el apartado de método."}}
  ]}
 ]}
 </script>
-<style>
-:root{
-  --night:#07131f; --ink:#0b2540; --ink-2:#123a5e; --sea:#1d6f8f; --wave:#2a8db5; --teal:#2bb3a6; --foam:#8fe0dc;
-  --sand:#f6f3ec; --paper:#ffffff; --text:#14202b; --muted:#566676; --line:#e3e0d7;
-  --warn-bg:#fff5e0; --warn:#8a5a00;
-  --radius:14px; --max:1140px;
-}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--text);background:var(--sand);line-height:1.6;-webkit-font-smoothing:antialiased}
-a{color:inherit}
-img{max-width:100%;display:block}
-.wrap{max-width:var(--max);margin:0 auto;padding:0 20px}
-h1,h2,h3{font-family:Fraunces,Georgia,serif;font-weight:650;line-height:1.12;letter-spacing:-.01em;margin:0}
-h2{font-size:clamp(1.8rem,3.6vw,2.7rem)}
-.eyebrow{font-size:.78rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--sea)}
-.lead{font-size:1.15rem;color:var(--muted);max-width:660px}
-section{padding:96px 0}
-@media(max-width:600px){section{padding:68px 0}}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 24px;border-radius:999px;font-weight:600;text-decoration:none;border:0;cursor:pointer;font-size:1rem;font-family:inherit;transition:transform .15s,background .15s}
-.btn:hover{transform:translateY(-1px)}
-.btn-primary{background:var(--foam);color:var(--night)}
-.btn-primary:hover{background:#a9eae6}
-.btn-ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.35)}
-.btn-dark{background:var(--ink);color:#fff}
-.btn-dark:hover{background:var(--ink-2)}
-.btn-line{background:transparent;border:1px solid var(--line);color:var(--ink)}
-
-/* nav */
-nav{position:absolute;top:0;left:0;right:0;z-index:5}
-nav .wrap{display:flex;align-items:center;justify-content:space-between;height:76px}
-.logo{display:flex;align-items:center;gap:11px;color:#fff;text-decoration:none;font-family:Fraunces,serif;font-size:1.5rem;font-weight:650}
-.logo img{width:36px;height:36px}
-.navlinks{display:flex;gap:26px;align-items:center}
-.navlinks a{color:rgba(255,255,255,.82);text-decoration:none;font-size:.95rem}
-.navlinks a:hover{color:#fff}
-@media(max-width:820px){.navlinks a:not(.btn){display:none}}
-
-/* hero */
-.hero{position:relative;background:radial-gradient(1100px 620px at 78% 0%,#16496e 0%,var(--ink) 48%,var(--night) 100%);color:#fff;padding:150px 0 100px;overflow:hidden}
-.hero svg.contours{position:absolute;inset:0;width:100%;height:100%;opacity:.2;pointer-events:none}
-.hero .wrap{position:relative;display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
-@media(max-width:960px){.hero .wrap{grid-template-columns:1fr}.hero-card{display:none}}
-.badge{display:inline-block;padding:6px 12px;border-radius:999px;background:rgba(143,224,220,.12);color:var(--foam);font-size:.82rem;font-weight:500;border:1px solid rgba(143,224,220,.3)}
-.hero h1{font-size:clamp(2.7rem,6.4vw,4.9rem);margin:22px 0 10px}
-.hero h1 em{font-style:normal;color:var(--foam)}
-.hero .sub{font-family:Fraunces,serif;font-size:clamp(1.2rem,2.2vw,1.55rem);color:rgba(255,255,255,.92);margin:0 0 18px}
-.hero p.desc{font-size:1.12rem;color:rgba(255,255,255,.76);max-width:600px;margin:0 0 32px}
-.hero .ctas{display:flex;gap:12px;flex-wrap:wrap}
-.trust{display:flex;gap:10px 22px;flex-wrap:wrap;margin-top:34px;font-size:.9rem;color:rgba(255,255,255,.72)}
-.trust span::before{content:"✓";color:var(--foam);margin-right:7px;font-weight:700}
-.hero-card{background:#fff;color:var(--text);border-radius:16px;box-shadow:0 30px 80px -30px rgba(0,0,0,.6);overflow:hidden;font-size:.92rem}
-.hero-card .hd{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--line)}
-.hero-card .hd b{font-family:Fraunces,serif;font-size:1.05rem}
-.hero-card .bd{padding:18px 20px}
-.mini{width:100%;border-collapse:collapse;margin:6px 0 14px;font-size:.86rem}
-.mini caption{text-align:left;font-size:.84rem;margin-bottom:6px}
-.mini caption i{display:block;font-style:italic}
-.mini th,.mini td{padding:5px 6px;text-align:center}
-.mini th:first-child,.mini td:first-child{text-align:left}
-.mini thead th{border-top:1.5px solid #000;border-bottom:1px solid #000;font-weight:500}
-.mini tbody tr:last-child td{border-bottom:1.5px solid #000}
-.apa-text{background:#f4f8f8;border-left:3px solid var(--teal);padding:10px 12px;border-radius:6px;font-family:Georgia,serif;font-size:.9rem;line-height:1.5}
-.chk{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.chk span{font-size:.76rem;padding:4px 9px;border-radius:999px;background:#e6f6f4;color:#11756c;font-weight:600}
-
-/* before / after */
-.ba{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:46px}
-@media(max-width:860px){.ba{grid-template-columns:1fr}}
-.ba > div{border-radius:var(--radius);padding:30px;border:1px solid var(--line);background:var(--paper)}
-.ba .with{background:var(--ink);color:#fff;border-color:var(--ink)}
-.ba h3{font-size:1.35rem;margin-bottom:14px}
-.ba ol{margin:0;padding-left:22px}
-.ba li{margin:7px 0}
-.ba .without li{color:var(--muted)}
-.ba .with li::marker{color:var(--foam)}
-.ba .note{margin-top:16px;font-size:.88rem;color:rgba(255,255,255,.65)}
-
-/* steps */
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:48px}
-@media(max-width:860px){.grid3{grid-template-columns:1fr}}
-.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:28px}
-.card h3{font-size:1.3rem;margin:14px 0 8px}
-.card p{margin:0;color:var(--muted)}
-.num{font-family:JetBrains Mono,monospace;font-size:.85rem;color:var(--sea);font-weight:500}
-
-.split{display:grid;grid-template-columns:1fr 1.1fr;gap:56px;align-items:center}
-@media(max-width:900px){.split{grid-template-columns:1fr;gap:36px}}
-.shot{border-radius:var(--radius);border:1px solid var(--line);box-shadow:0 24px 60px -28px rgba(11,37,64,.45);overflow:hidden;background:#fff}
-.panel{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 20px 50px -25px rgba(11,37,64,.35);overflow:hidden}
-.panel-head{padding:16px 22px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;font-size:.9rem}
-.panel-head b{font-family:Fraunces,serif;font-size:1.08rem}
-.tag{font-size:.75rem;padding:3px 9px;border-radius:999px;background:#e6f6f4;color:#11756c;font-weight:600}
-.panel-body{padding:22px}
-.panel ul{margin:8px 0 16px;padding-left:20px}
-.panel li{margin:4px 0}
-code,pre{font-family:JetBrains Mono,monospace;font-size:.85rem}
-pre{background:#0d1f33;color:#d7f3ef;padding:14px 16px;border-radius:10px;overflow-x:auto;margin:0}
-.alt{background:#f2f7fa;border-left:3px solid var(--sea);padding:10px 14px;border-radius:6px;font-size:.95rem}
-.checks{list-style:none;padding:0;margin:26px 0 0}
-.checks li{padding-left:30px;position:relative;margin:12px 0}
-.checks li::before{content:"";position:absolute;left:0;top:5px;width:18px;height:18px;border-radius:50%;background:var(--teal) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M4 8.5l2.5 2.5L12 5.5' stroke='white' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") center/14px no-repeat}
-
-/* rigor */
-.rigor{background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:44px}
-@media(max-width:900px){.stats{grid-template-columns:1fr 1fr}}
-.stats div{padding:22px;border-radius:12px;background:var(--sand)}
-.stats b{display:block;font-family:Fraunces,serif;font-size:2.2rem;color:var(--ink);line-height:1.1}
-.stats span{color:var(--muted);font-size:.95rem}
-.methods{margin-top:34px;columns:2;column-gap:40px;color:var(--muted);font-size:.97rem}
-@media(max-width:700px){.methods{columns:1}}
-.methods p{margin:0 0 10px;break-inside:avoid}
-.methods b{color:var(--text)}
-
-/* finder */
-#finder{background:var(--ink);color:#fff}
-#finder .lead{color:rgba(255,255,255,.72)}
-#finder .eyebrow{color:var(--foam)}
-.finder{margin-top:40px;background:#fff;color:var(--text);border-radius:18px;padding:34px;max-width:820px}
-@media(max-width:600px){.finder{padding:22px}}
-.progress{height:4px;background:#eef1f3;border-radius:4px;margin-bottom:26px;overflow:hidden}
-.progress i{display:block;height:100%;background:var(--teal);width:0;transition:width .3s}
-.q h3{font-size:1.45rem;margin-bottom:6px}
-.q .hint{color:var(--muted);margin:0 0 20px;font-size:.95rem}
-.opts{display:grid;gap:10px}
-.opt{text-align:left;padding:15px 18px;border:1.5px solid var(--line);border-radius:12px;background:#fff;cursor:pointer;font:inherit;transition:border-color .15s,background .15s}
-.opt:hover{border-color:var(--teal);background:#f3fbfa}
-.opt b{display:block;font-weight:600}
-.opt small{color:var(--muted)}
-.finder-foot{display:flex;justify-content:space-between;margin-top:22px}
-.link{background:none;border:0;color:var(--sea);font:inherit;cursor:pointer;padding:0;font-weight:500}
-.result h3{font-size:2rem;margin:6px 0 18px;color:var(--ink)}
-.result h4{margin:22px 0 6px;font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--sea)}
-.result ul{margin:0;padding-left:20px}
-.warn{background:var(--warn-bg);color:var(--warn);padding:12px 16px;border-radius:10px;margin-top:18px;font-size:.95rem}
-.upsell{margin-top:26px;padding:20px;border-radius:12px;background:var(--sand);display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-
-/* audiences */
-.modes{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:48px}
-@media(max-width:860px){.modes{grid-template-columns:1fr}}
-.mode{border-radius:var(--radius);padding:30px;background:var(--paper);border:1px solid var(--line)}
-.mode .who{font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--sea)}
-.mode blockquote{margin:12px 0 14px;font-family:Fraunces,serif;font-size:1.3rem;line-height:1.3;color:var(--ink)}
-.mode p{margin:0;color:var(--muted)}
-
-/* story */
-.story{background:var(--night);color:#fff}
-.story-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:56px;align-items:center}
-@media(max-width:900px){.story-grid{grid-template-columns:1fr;gap:32px}}
-.story-map{margin:0}
-.story-map img{width:100%;height:auto;border-radius:14px;box-shadow:0 30px 70px -30px rgba(0,0,0,.8)}
-.story-map figcaption{margin-top:10px;font-size:.82rem;color:rgba(255,255,255,.55)}
-.story-map figcaption span{white-space:nowrap}
-.story .eyebrow{color:var(--foam)}
-.story h2{margin:10px 0 18px}
-.story p{color:rgba(255,255,255,.8);margin:0 0 16px;font-size:1.08rem}
-.story p strong{color:#fff}
-.story-claim{font-family:Fraunces,serif;font-size:1.3rem!important;color:var(--foam)!important;line-height:1.35}
-.story-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}
-.story-facts div{border-top:1px solid rgba(143,224,220,.35);padding-top:10px}
-.story-facts b{display:block;font-family:JetBrains Mono,monospace;font-weight:500;color:var(--foam)}
-.story-facts span{font-size:.88rem;color:rgba(255,255,255,.7)}
-@media(max-width:520px){.story-facts{grid-template-columns:1fr}}
-.steps-n{display:inline-block;margin-left:8px;font-family:Inter,sans-serif;font-size:.78rem;font-weight:600;padding:3px 10px;border-radius:999px;vertical-align:middle;background:#f1ede4;color:var(--muted)}
-.with .steps-n{background:rgba(143,224,220,.16);color:var(--foam)}
-
-/* privacy */
-.privacy{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:44px}
-@media(max-width:900px){.privacy{grid-template-columns:1fr 1fr}}
-@media(max-width:520px){.privacy{grid-template-columns:1fr}}
-.privacy div{padding:22px;border-top:2px solid var(--teal);background:var(--paper);border-radius:0 0 12px 12px}
-.privacy b{display:block;margin-bottom:6px}
-.privacy p{margin:0;color:var(--muted);font-size:.95rem}
-
-/* faq */
-.faq{max-width:820px;margin-top:36px}
-.faq details{background:var(--paper);border:1px solid var(--line);border-radius:12px;margin-bottom:10px;padding:0 22px}
-.faq summary{cursor:pointer;padding:18px 0;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
-.faq summary::-webkit-details-marker{display:none}
-.faq summary::after{content:"+";color:var(--sea);font-size:1.3rem;line-height:1}
-.faq details[open] summary::after{content:"−"}
-.faq details p{margin:0 0 18px;color:var(--muted)}
-
-/* pilot */
-.pilot{background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:56px;text-align:center}
-@media(max-width:600px){.pilot{padding:32px 22px}}
-.pilot h2{max-width:760px;margin:12px auto 16px}
-.pilot .lead{margin:0 auto 30px}
-footer{padding:40px 0 60px;color:var(--muted);font-size:.9rem}
-footer .wrap{display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:28px}
-footer a{text-decoration:none}
-footer a:hover{text-decoration:underline}
-</style>
+<link rel="stylesheet" href="tharp.css">
 </head>
 <body>
 
-<nav>
+<div class="dark">
+<nav aria-label="Principal">
   <div class="wrap">
-    <a href="./" class="logo" aria-label="Tharp, inicio"><img src="img/logo-144.png" alt="" width="36" height="36">Tharp</a>
+    <a href="./" class="brand" aria-label="Tharp, inicio"><img src="img/logo-144.png" alt="" width="32" height="32">Tharp</a>
     <div class="navlinks">
       <a href="#como">Cómo funciona</a>
       <a href="#rigor">Rigor</a>
       <a href="#finder">¿Qué prueba uso?</a>
-      <a href="#marie-tharp">Marie Tharp</a>
-      <a href="app.html" class="btn btn-primary" style="padding:9px 18px">Analizar mis datos</a>
+      <a href="validacion.html" data-umami-event="nav_validacion">Validación</a>
+      <a href="app.html" class="btn btn-ping" data-umami-event="nav_analizar">Analizar mis datos</a>
     </div>
   </div>
 </nav>
 
 <header class="hero">
-  <svg class="contours" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <g fill="none" stroke="#8fe0dc" stroke-width="1.2">
-      <path d="M-50 520 C 150 420, 300 600, 520 480 S 860 330, 1250 460"/>
-      <path d="M-50 560 C 160 460, 320 640, 540 520 S 880 370, 1250 500"/>
-      <path d="M-50 600 C 170 500, 340 680, 560 560 S 900 410, 1250 540"/>
-      <path d="M-50 640 C 180 540, 360 720, 580 600 S 920 450, 1250 580"/>
-      <path d="M-50 300 C 200 220, 380 360, 620 260 S 960 120, 1250 220" stroke="#fff" stroke-opacity=".5"/>
-      <path d="M-50 340 C 210 260, 400 400, 640 300 S 980 160, 1250 260" stroke="#fff" stroke-opacity=".5"/>
-      <path d="M-50 380 C 220 300, 420 440, 660 340 S 1000 200, 1250 300" stroke="#fff" stroke-opacity=".5"/>
-    </g>
-  </svg>
   <div class="wrap">
-    <div>
-      <span class="badge">Nuevo · Gratis durante el lanzamiento</span>
+    <div class="txt">
+      <span class="badge">Gratis durante el lanzamiento</span>
       <h1 lang="en">From question <em>to evidence.</em></h1>
-      <p class="sub">Análisis estadístico para tu TFM, tu tesis o tu artículo, hecho en minutos.</p>
-      <p class="desc">Sube tus datos y Tharp hace el trabajo mecánico: comprueba los supuestos, elige la prueba adecuada y te entrega las tablas APA, los gráficos y el apartado de resultados redactado. Con el porqué de cada decisión y el código R para reproducirlo.</p>
-      <div class="ctas">
-        <a href="app.html" class="btn btn-primary">Analizar mis datos gratis →</a>
-        <a href="#como" class="btn btn-ghost">Ver cómo funciona</a>
-      </div>
-      <div class="trust"><span>Tus datos no salen de tu navegador</span><span>Validado contra R</span><span>Excel, CSV, SPSS y JASP</span></div>
+      <p class="sub">De tus datos al apartado de resultados, en&nbsp;minutos.</p>
+      <p class="desc">Para tu artículo, tu tesis o tu proyecto. Tharp comprueba los supuestos, elige la prueba adecuada y te entrega las tablas APA, los gráficos y los resultados redactados, con el registro de cada decisión y el código R que lo reproduce.</p>
+      <div class="ctas"><a class="btn btn-ping" href="app.html" data-umami-event="portada_analizar">Analizar mis datos gratis →</a><a class="lnk" href="app.html#ejemplo" data-umami-event="portada_ejemplo">Ver un análisis de ejemplo</a></div>
+      <div class="trust"><span>Validado contra R</span><span>Los datos no salen de tu equipo</span><span>Excel, CSV, SPSS y JASP</span></div>
     </div>
-    <div class="hero-card" aria-label="Ejemplo de resultado generado por Tharp">
-      <div class="hd"><b>ansiedad_post según grupo</b><span class="tag">Resultado real con datos de ejemplo</span></div>
-      <div class="bd">
-        <table class="mini">
-          <caption><b>Tabla 3</b><i>Resultado del ANOVA de un factor</i></caption>
+    <div class="inst" role="img" aria-label="Ejemplo con los datos de prueba: Tharp comprueba la normalidad y las varianzas, elige un ANOVA con post hoc de Tukey y entrega la tabla y el resultado en formato APA">
+      <div class="inst-hd"><span>ansiedad_post según grupo · 324 casos</span><b id="dState">Analizando…</b></div>
+      <div class="sonar"><canvas id="cvD" aria-hidden="true"></canvas></div>
+      <div class="checks" id="dChecks">
+        <div data-at=".24"><span>1 · Normalidad</span><b class="ok" data-wait="comprobando…" data-done="Shapiro-Wilk ✓"></b></div>
+        <div data-at=".48"><span>2 · Varianzas</span><b class="ok" data-wait="comprobando…" data-done="Levene ✓"></b></div>
+        <div data-at=".72"><span>3 · Prueba</span><b data-wait="eligiendo…" data-done="ANOVA + Tukey"></b></div>
+        <div data-at=".95"><span>4 · Efecto</span><b data-wait="calculando…" data-done="η² = .050"></b></div>
+      </div>
+      <div class="sheet" id="dSheet">
+        <div class="tn">Tabla 3</div><div class="tt">ANOVA de un factor para ansiedad_post según el grupo</div>
+        <div class="tw"><table class="apa">
           <thead><tr><th>Fuente</th><th><i>gl</i></th><th><i>F</i></th><th><i>p</i></th><th>η²</th></tr></thead>
-          <tbody><tr><td>grupo</td><td>2</td><td>8.45</td><td>&lt; .001</td><td>.050</td></tr><tr><td>Error</td><td>321</td><td></td><td></td><td></td></tr></tbody>
-        </table>
-        <div class="apa-text">Se encontraron diferencias estadísticamente significativas entre los grupos, <i>F</i>(2, 321) = 8.45, <i>p</i> &lt; .001, η² = .050. Las comparaciones post hoc (Tukey HSD) mostraron diferencias entre Control (<i>M</i> = 25.58, <i>DT</i> = 6.77) y Mindfulness (<i>M</i> = 21.56, <i>DT</i> = 7.38), <i>p</i> &lt; .001.</div>
-        <div class="chk"><span>✓ Normalidad</span><span>✓ Homogeneidad (Levene)</span><span>✓ Post hoc de Tukey</span><span>✓ Código R</span></div>
+          <tbody><tr><td>Grupo</td><td>2</td><td>8.45</td><td>&lt; .001</td><td>.050</td></tr><tr><td>Error</td><td>321</td><td></td><td></td><td></td></tr></tbody>
+        </table></div>
+        <p class="res">Se encontraron diferencias estadísticamente significativas entre los grupos, <mark><i>F</i>(2, 321) = 8.45, <i>p</i> &lt; .001, η² = .050</mark>. Las comparaciones post hoc (Tukey) mostraron diferencias entre Control y Mindfulness, <i>p</i> &lt; .001.</p>
+        <div class="files"><span>resultados.docx</span><span>analisis.R</span><span>registro de decisiones</span></div>
       </div>
     </div>
   </div>
 </header>
 
-<section id="ahorro">
+<div class="proof">
   <div class="wrap">
-    <div class="eyebrow">Flujo de trabajo</div>
-    <h2 style="margin-top:10px">Menos tareas mecánicas,<br>más tiempo para interpretar.</h2>
-    <div class="ba">
-      <div class="without">
-        <h3>El proceso habitual</h3>
-        <ol>
-          <li>Comprobar la normalidad de cada grupo</li>
-          <li>Comprobar la homogeneidad de varianzas</li>
-          <li>Decidir la prueba y, si fallan los supuestos, repetir con la alternativa</li>
-          <li>Pedir el post hoc y el tamaño del efecto</li>
-          <li>Copiar cada tabla a Word y darle formato APA a mano</li>
-          <li>Exportar y pegar los gráficos</li>
-          <li>Redactar los resultados con cada estadístico bien escrito</li>
-        </ol>
+    <div><h3>Rápido</h3><p>Subes el archivo y marcas qué quieres analizar. Supuestos, prueba, tablas APA, gráficos y redacción salen en una sola pasada.</p></div>
+    <div><h3>Comprobable</h3><p>30 análisis validados contra R, con más de 46&nbsp;000 comprobaciones. Cada resultado trae el código R para que cualquier revisor lo reproduzca. <a class="lnk" href="validacion.html" data-umami-event="franja_validacion">Cómo lo validamos</a></p></div>
+    <div><h3>Trazable</h3><p>Por qué esa prueba, qué supuestos se comprobaron y qué casos se excluyeron: listo para el apartado de método y para responder a los revisores.</p></div>
+  </div>
+</div>
+</div>
+
+<section id="preguntas">
+  <div class="wrap">
+    <div class="k">Pregúntale a tus datos</div>
+    <h2 style="margin-top:14px">¿Qué quieres saber <em>de tus datos?</em></h2>
+    <p class="lead">Elige una pregunta. Tharp decide la prueba adecuada, comprueba sus supuestos y escribe el resultado en APA. Son resultados reales, calculados con los datos de ejemplo de la aplicación.</p>
+    <div class="ask">
+      <div class="qs" role="group" aria-label="Preguntas de ejemplo">
+        <button type="button" aria-pressed="true">¿Hay diferencias entre grupos?</button>
+        <button type="button" aria-pressed="false">¿Se relacionan dos variables?</button>
+        <button type="button" aria-pressed="false">¿Qué predice el rendimiento?</button>
+        <button type="button" aria-pressed="false">¿Cambió algo con el tiempo?</button>
       </div>
-      <div class="with">
-        <h3>Con Tharp</h3>
-        <ol>
-          <li>Subes tu archivo</li>
-          <li>Marcas qué quieres analizar</li>
-          <li>Descargas el Word con tablas APA, gráficos y resultados redactados</li>
-        </ol>
-        <p class="note">Y en cada análisis puedes ver por qué se eligió esa prueba, qué supuestos se comprobaron y el código R equivalente.</p>
+      <div class="answer" aria-live="polite">
+        <div class="lbl">Prueba elegida</div>
+        <h3 id="fTest"></h3>
+        <p class="why" id="fWhy"></p>
+        <div class="lbl">Resultado en APA, listo para el manuscrito</div>
+        <p class="apa-text" id="fRes"></p>
+        <p class="foot">Con la tabla APA, el gráfico, los supuestos comprobados y el código R. <a href="app.html#ejemplo" class="lnk" data-umami-event="preguntas_ejemplo">Ver el análisis completo →</a></p>
       </div>
     </div>
   </div>
@@ -316,12 +121,12 @@ footer a:hover{text-decoration:underline}
 
 <section id="como" style="padding-top:0">
   <div class="wrap">
-    <div class="eyebrow">Cómo funciona</div>
-    <h2 style="margin-top:10px">De tu archivo a los resultados, en tres pasos.</h2>
-    <div class="grid3">
-      <div class="card"><span class="num">01</span><h3>Sube tus datos</h3><p>Excel, CSV o archivos de SPSS (.sav) y JASP (.jasp), con sus etiquetas y valores perdidos. Tharp detecta las variables, sus tipos y los participantes.</p></div>
-      <div class="card"><span class="num">02</span><h3>Elige qué necesitas</h3><p>Descriptivos, correlaciones, comparación de grupos, medidas pre/post o de varios momentos, chi-cuadrado, McNemar, regresión lineal y logística, ANOVA factorial, ANCOVA, moderación, mediación, modelos mixtos, análisis factorial exploratorio y confirmatorio o fiabilidad (alfa y omega).</p></div>
-      <div class="card"><span class="num">03</span><h3>Descarga los resultados</h3><p>Tablas APA, gráficos y un borrador del apartado de resultados en Word, y el script de R que reproduce cada análisis.</p></div>
+    <div class="k">Cómo funciona</div>
+    <h2 style="margin-top:14px">De tu archivo a los resultados, <em>en tres pasos.</em></h2>
+    <div class="steps">
+      <div><span class="n">01</span><h3>Sube tus datos</h3><p>Excel, CSV o archivos de SPSS (.sav) y JASP (.jasp), con sus etiquetas y valores perdidos. Tharp reconoce las variables, sus tipos y los participantes.</p></div>
+      <div><span class="n">02</span><h3>Elige qué necesitas</h3><p>Marca los análisis y las variables. Tharp comprueba los supuestos y, si no se cumplen, aplica la alternativa adecuada y te lo explica.</p></div>
+      <div><span class="n">03</span><h3>Descarga los resultados</h3><p>Tablas APA, gráficos y el apartado de resultados redactado en Word, con la cita del software y el script de R que reproduce cada número.</p></div>
     </div>
   </div>
 </section>
@@ -329,10 +134,10 @@ footer a:hover{text-decoration:underline}
 <section style="padding-top:0">
   <div class="wrap split">
     <div>
-      <div class="eyebrow">Trazabilidad</div>
-      <h2 style="margin-top:10px">Automático, pero siempre transparente.</h2>
-      <p class="lead" style="margin-top:16px">Cada decisión queda documentada: qué prueba se eligió y por qué, qué supuestos se comprobaron, qué casos se excluyeron y con qué código se reproduce. Tú entiendes lo que has hecho, y tu tutor, tu tribunal o un revisor pueden comprobarlo paso a paso.</p>
-      <ul class="checks">
+      <div class="k">Trazabilidad</div>
+      <h2 style="margin-top:14px">Automático, pero <em>siempre transparente.</em></h2>
+      <p class="lead">Cada decisión queda documentada: qué prueba se eligió y por qué, qué supuestos se comprobaron, qué casos se excluyeron y con qué código se reproduce. Tú entiendes lo que has hecho, y tu director, tu tribunal o un revisor pueden comprobarlo paso a paso.</p>
+      <ul class="ticks">
         <li>Por qué se eligió esa prueba, y su alternativa</li>
         <li>Supuestos comprobados, con su resultado</li>
         <li>Registro de cada decisión: casos excluidos, valores perdidos, recodificaciones</li>
@@ -341,69 +146,89 @@ footer a:hover{text-decoration:underline}
         <li>Avisos claros cuando un resultado no es fiable</li>
       </ul>
     </div>
-    <div class="panel" aria-label="Ejemplo de explicación de un análisis">
-      <div class="panel-head"><b>¿Por qué este análisis?</b><span class="tag">Ejemplo</span></div>
-      <div class="panel-body">
-        <div>Se eligió la <strong>prueba t de Welch para muestras independientes</strong> porque:</div>
+    <div class="doc" aria-label="Ejemplo de explicación de un análisis">
+      <div class="doc-hd"><span>¿Por qué este análisis?</span><span>Datos de ejemplo</span></div>
+      <div class="doc-bd">
+        <h4>Prueba t de Student para muestras independientes</h4>
         <ul>
-          <li>Variable dependiente: <em>ansiedad</em> → cuantitativa</li>
+          <li>Variable dependiente: <em>ansiedad_pre</em> → cuantitativa</li>
           <li>Variable de agrupación: <em>sexo</em> → 2 grupos independientes</li>
-          <li>Normalidad aceptable (Shapiro-Wilk, <i>p</i> = .21 y <i>p</i> = .34)</li>
-          <li>Varianzas distintas (Levene, <i>p</i> = .03): corrección de Welch</li>
+          <li>Normalidad aceptable (Shapiro-Wilk, <i>p</i> = .582 y <i>p</i> = .399)</li>
+          <li>Varianzas homogéneas (Levene, <i>p</i> = .396): prueba t clásica</li>
+          <li>Sensibilidad: la U de Mann-Whitney da <i>p</i> = .006, la misma conclusión</li>
         </ul>
         <div class="alt"><strong>Alternativa:</strong> U de Mann-Whitney si no se cumpliera la normalidad con muestras pequeñas.</div>
-        <div style="margin-top:16px"><pre>t.test(ansiedad ~ sexo, data = datos, var.equal = FALSE)</pre></div>
+        <pre>t.test(ansiedad_pre ~ sexo, data = datos, var.equal = TRUE)</pre>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="word" style="padding-top:0">
+  <div class="wrap split">
+    <figure class="sheetimg">
+      <img src="img/ejemplo-word.jpg" alt="Página del Word de resultados generado por Tharp con los datos de ejemplo: tablas APA de descriptivos, ANOVA de un factor y comparaciones post hoc de Tukey, seguidas de la redacción de resultados" width="1042" height="1037" loading="lazy">
+      <figcaption>Una página del Word real que genera Tharp con los datos de ejemplo.</figcaption>
+    </figure>
+    <div>
+      <div class="k">Lo que descargas</div>
+      <h2 style="margin-top:14px">Un Word que puedes <em>pegar en tu manuscrito.</em></h2>
+      <p class="lead">Tablas con formato APA 7 numeradas, figuras con su título, el apartado de resultados redactado y el registro de decisiones para el método. Editable, para que lo adaptes a tu revista o a tu universidad.</p>
+      <ul class="ticks">
+        <li>Tablas APA con notas, tamaños del efecto e intervalos de confianza</li>
+        <li>Resultados redactados con cada estadístico bien escrito</li>
+        <li>Justificación y supuestos de cada análisis</li>
+        <li>La cita del software y el script de R que lo reproduce</li>
+      </ul>
+      <div class="ctas" style="margin-top:28px"><a class="btn btn-ink" href="ejemplo/tharp-resultados-ejemplo.docx" download data-umami-event="word_ejemplo">Descargar un Word de ejemplo</a><a class="lnk" href="app.html#ejemplo" data-umami-event="word_app">Verlo en la aplicación</a></div>
     </div>
   </div>
 </section>
 
 <section id="rigor" class="rigor">
   <div class="wrap">
-    <div class="eyebrow">Rigor</div>
-    <h2 style="margin-top:10px">Un resultado solo vale si puedes confiar en él.</h2>
-    <p class="lead" style="margin-top:14px">Cada prueba de Tharp se compara automáticamente con R y con las librerías estadísticas de referencia de Python antes de cada versión. Si un número no coincide, no se publica.</p>
-    <div class="stats">
-      <div><b>269</b><span>comprobaciones automáticas frente a R, scipy, statsmodels, pingouin y scikit-posthocs</span></div>
-      <div><b>4</b><span>tipos de archivo cuyo script R se ejecuta en R para comprobar que da los mismos resultados</span></div>
+    <div class="k">Rigor</div>
+    <h2 style="margin-top:14px">Un resultado solo vale <em>si puedes confiar en él.</em></h2>
+    <p class="lead">Cada análisis de Tharp se compara automáticamente con R antes de cada versión, número a número. Si un número no coincide, no se publica. <a class="lnk" href="validacion.html" data-umami-event="rigor_validacion" style="color:var(--teal)">Ver cómo lo validamos, análisis por análisis →</a></p>
+    <div class="nums">
+      <div><b>30</b><span>análisis validados contra R, con más de 46&nbsp;000 comprobaciones automáticas</span></div>
+      <div><b>R</b><span>cada número que muestra Tharp aparece en la salida de su script de R</span></div>
       <div><b>0</b><span>datos enviados a servidores: todo se calcula en tu navegador</span></div>
-      <div><b>100 %</b><span>de los análisis con su código R para reproducirlos</span></div>
+      <div><b>APA 7</b><span>tablas, gráficos, redacción y cita del software</span></div>
     </div>
     <div class="methods">
-      <p><b>Comparación de grupos:</b> t de Student y de Welch, U de Mann-Whitney, ANOVA de un factor y de Welch, Kruskal-Wallis, con post hoc de Tukey, Games-Howell o Dunn-Holm.</p>
-      <p><b>Supuestos:</b> Shapiro-Wilk (algoritmo de Royston, como R), Levene centrado en la media (como SPSS), Breusch-Pagan, Durbin-Watson, VIF y distancia de Cook.</p>
-      <p><b>Medidas relacionadas:</b> t para muestras relacionadas y Wilcoxon (2 momentos); ANOVA de medidas repetidas con prueba de esfericidad de Mauchly y corrección de Greenhouse-Geisser, o Friedman (3 o más), con comparaciones por pares de Holm.</p>
-      <p><b>Asociación:</b> Pearson y Spearman, chi-cuadrado con residuos tipificados corregidos, prueba exacta de Fisher y V de Cramér; McNemar y Q de Cochran para respuestas sí/no relacionadas.</p>
-      <p><b>Modelos:</b> regresión lineal (con errores robustos HC3 si hay heterocedasticidad), regresión logística binaria, ANOVA factorial y ANCOVA con sumas de cuadrados de tipo III, homogeneidad de pendientes y medias ajustadas.</p>
-      <p><b>Datos longitudinales y anidados:</b> modelos lineales mixtos (REML) con intercepto y pendiente aleatorios, interacciones, grados de libertad de Satterthwaite, correlación intraclase y <i>R</i>² de Nakagawa.</p>
-      <p><b>Moderación y mediación:</b> interacción con pendientes simples y región de Johnson-Neyman (modelo 1 de PROCESS) y efecto indirecto con intervalo bootstrap (modelo 4).</p>
-      <p><b>Cuestionarios y escalas:</b> análisis factorial exploratorio (KMO, Bartlett, análisis paralelo, ejes principales con rotación oblimin o varimax), análisis factorial confirmatorio (máxima verosimilitud, CFI, TLI, RMSEA, SRMR, fiabilidad compuesta y AVE), alfa de Cronbach y omega de McDonald.</p>
+      <p><b>Comparación de grupos</b>t de Student, de Welch y para una muestra (también unilaterales, con <i>d</i> e IC), U de Mann-Whitney, ANOVA de un factor, de Welch y de Brown-Forsythe, Kruskal-Wallis, Jonckheere-Terpstra y equivalencia (TOST). Post hoc de Tukey, Games-Howell, Bonferroni, Holm, Šidák, Scheffé, Dunnett, Tamhane, S-N-K, Duncan, REGW-Q, GT2, Gabriel y Dunn, y contrastes planificados.</p>
+      <p><b>Medidas relacionadas</b>t relacionada, Wilcoxon y prueba de los signos; ANOVA de medidas repetidas con uno o dos factores intrasujeto y ANOVA mixta, con Mauchly, Greenhouse-Geisser y Huynh-Feldt; Friedman, McNemar y Q de Cochran.</p>
+      <p><b>Asociación</b>Pearson, Spearman y Kendall con IC, correlación parcial; chi-cuadrado con residuos, Fisher, OR y RR, Mantel-Haenszel, medidas ordinales (γ, τ, <i>d</i> de Somers), binomial y bondad de ajuste.</p>
+      <p><b>Modelos</b>Regresión lineal (por bloques y por pasos, errores robustos HC3), logística binaria, multinomial y ordinal, Poisson y binomial negativa; ANOVA factorial, ANCOVA y MANOVA; modelos lineales mixtos; moderación y mediación (modelos 1, 4, 6, 7 y 14 de PROCESS).</p>
+      <p><b>Cuestionarios y escalas</b>Análisis factorial exploratorio y componentes principales (siete rotaciones, análisis paralelo), confirmatorio con invarianza de medida entre grupos, alfa de Cronbach y omega de McDonald; CCI, kappa de Cohen y de Fleiss, alfa de Krippendorff y Bland-Altman.</p>
+      <p><b>Y además</b>Supervivencia (Kaplan-Meier, log-rank y Cox), metaanálisis (REML, heterogeneidad, Egger, gráficos de bosque y embudo), curva ROC, valores perdidos (MCAR de Little) y potencia y tamaño muestral.</p>
     </div>
   </div>
 </section>
 
-<section id="finder">
+<section id="finder" class="dark">
   <div class="wrap">
-    <div class="eyebrow">Herramienta gratuita</div>
-    <h2 style="margin-top:10px">¿Qué prueba estadística tengo que usar?</h2>
-    <p class="lead" style="margin-top:14px">Responde unas pocas preguntas sobre tu diseño y te decimos qué análisis encaja, por qué y qué supuestos debes comprobar.</p>
+    <div class="k">Herramienta gratuita</div>
+    <h2 style="margin-top:14px;color:#fff">¿Qué prueba estadística <em>tengo que usar?</em></h2>
+    <p class="lead">Responde unas pocas preguntas sobre tu diseño y te decimos qué análisis encaja, por qué y qué supuestos debes comprobar.</p>
     <div class="finder" id="finderBox" aria-live="polite"></div>
   </div>
 </section>
 
 <section>
   <div class="wrap">
-    <div class="eyebrow">Para quién</div>
-    <h2 style="margin-top:10px">Pensado para quien investiga, aprende o enseña.</h2>
+    <div class="k">Para quién</div>
+    <h2 style="margin-top:14px">Pensado para quien investiga, <em>enseña o aprende.</em></h2>
     <div class="modes">
-      <div class="mode"><div class="who">Investigadores y doctorandos</div><blockquote>«Sé lo que tengo que hacer, pero quiero hacerlo más rápido.»</blockquote><p>Ve directo al análisis: tablas APA, gráficos, resultados redactados y código R, sin horas de tareas mecánicas.</p></div>
-      <div class="mode"><div class="who">Estudiantes de grado y máster</div><blockquote>«No sé qué análisis tengo que hacer.»</blockquote><p>Empieza por el buscador de pruebas y lee en cada resultado por qué se eligió y qué supuestos se comprobaron, para entender lo que haces y aprender el razonamiento estadístico.</p></div>
-      <div class="mode"><div class="who">Docentes de metodología</div><blockquote>«Quiero enseñar el razonamiento, no los menús.»</blockquote><p>Cada análisis muestra la cadena de decisiones: tipo de variable, supuestos, prueba elegida y alternativa. Un buen punto de partida para explicarlo en clase.</p></div>
+      <div class="mode"><div class="who">Investigadores y doctorandos</div><blockquote>«Sé lo que tengo que hacer, pero quiero hacerlo más rápido.»</blockquote><p>Ve directo al análisis: tablas APA, gráficos, resultados redactados y código R, con cada decisión documentada para el método y los revisores.</p></div>
+      <div class="mode"><div class="who">Docentes y directores</div><blockquote>«Quiero enseñar el razonamiento, no los menús.»</blockquote><p>Cada análisis muestra la cadena de decisiones: tipo de variable, supuestos, prueba elegida y alternativa. Resultados que puedes revisar en minutos.</p></div>
+      <div class="mode"><div class="who">Estudiantes de grado y máster</div><blockquote>«No sé qué análisis tengo que hacer.»</blockquote><p>Empieza por el buscador de pruebas y lee en cada resultado por qué se eligió y qué supuestos se comprobaron, para entender lo que haces.</p></div>
     </div>
   </div>
 </section>
 
-<section id="marie-tharp" class="story">
+<section id="marie-tharp" class="dark story">
   <div class="wrap">
     <div class="story-grid">
       <figure class="story-map">
@@ -411,11 +236,11 @@ footer a:hover{text-decoration:underline}
         <figcaption>Diagrama fisiográfico del Atlántico Norte, Heezen y Tharp, 1957. A la derecha, la península ibérica. <span>Dominio público.</span></figcaption>
       </figure>
       <div>
-        <div class="eyebrow">Por qué nos llamamos Tharp</div>
-        <h2>Ella vio en los datos lo que nadie quería ver.</h2>
+        <div class="k">Por qué nos llamamos Tharp</div>
+        <h2>Frente al escepticismo, <em>la evidencia.</em></h2>
         <p>Con miles de mediciones de sonar, <strong>Marie Tharp</strong> dibujó el primer mapa del fondo del Atlántico y descubrió el valle que recorre la dorsal mesoatlántica. Su hallazgo fue recibido con escepticismo, pero los datos lo confirmaron y contribuyó a la aceptación de la tectónica de placas.</p>
-        <p class="story-claim">Tharp lleva su nombre: del dato a la evidencia, con rigor y transparencia.</p>
-        <div class="story-facts">
+        <p class="claim">Tharp lleva su nombre: del dato a la evidencia, con rigor y transparencia.</p>
+        <div class="facts">
           <div><b>1952</b><span>Descubre el valle del rift atlántico</span></div>
           <div><b>1957</b><span>Publica este mapa</span></div>
           <div><b>1997</b><span>Reconocida entre los grandes cartógrafos del siglo XX</span></div>
@@ -427,55 +252,103 @@ footer a:hover{text-decoration:underline}
 
 <section id="privacidad">
   <div class="wrap">
-    <div class="eyebrow">Privacidad desde el diseño</div>
-    <h2 style="margin-top:10px">Tus datos de investigación no salen de tu ordenador.</h2>
-    <p class="lead" style="margin-top:14px">Sabemos que trabajas con datos sensibles: participantes, pacientes, alumnos. Por eso Tharp está construido para no necesitarlos.</p>
+    <div class="k">Privacidad desde el diseño</div>
+    <h2 style="margin-top:14px">Tus datos de investigación <em>no salen de tu ordenador.</em></h2>
+    <p class="lead">Trabajas con datos sensibles: participantes, pacientes, alumnos. Por eso Tharp está construido para no necesitarlos.</p>
     <div class="privacy">
       <div><b>Cálculo en tu navegador</b><p>El archivo se procesa en tu propio equipo. No se sube a ningún servidor.</p></div>
       <div><b>Nada se guarda</b><p>Al cerrar la pestaña, los datos desaparecen. No hay cuentas ni archivos almacenados.</p></div>
       <div><b>Sin cookies</b><p>Solo contamos visitas de forma anónima y agregada, sin cookies ni datos personales. Tus archivos nunca se envían.</p></div>
-      <div><b>Pensado para el RGPD</b><p>Si los datos no se transmiten, no hay cesión a terceros ni transferencias internacionales.</p></div>
+      <div><b>Pensado para el RGPD</b><p>Si los datos no se transmiten, no hay cesión a terceros ni transferencias internacionales: más sencillo ante el comité de ética.</p></div>
     </div>
   </div>
 </section>
 
 <section style="padding-top:0">
   <div class="wrap">
-    <div class="eyebrow">Preguntas frecuentes</div>
-    <h2 style="margin-top:10px">Lo que nos suelen preguntar.</h2>
+    <div class="k">Preguntas frecuentes</div>
+    <h2 style="margin-top:14px">Lo que nos suelen <em>preguntar.</em></h2>
     <div class="faq">
       <details><summary>¿Tharp es gratis?</summary><p>Durante el lanzamiento, sí, y sin registro: entras, subes tu archivo y analizas. Más adelante habrá planes de pago; te avisaremos con antelación.</p></details>
       <details><summary>¿Mis datos se suben a algún servidor?</summary><p>No. Todo el cálculo se hace en tu navegador, con el código de la página. El archivo no sale de tu ordenador y nada se guarda cuando cierras la pestaña.</p></details>
-      <details><summary>¿Qué archivos puedo usar?</summary><p>Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp). De SPSS y JASP se respetan las etiquetas de valor, los tipos de medida y los valores perdidos definidos por el usuario. La primera fila debe tener los nombres de las variables y cada fila, un participante.</p></details>
-      <details><summary>¿Los resultados son fiables?</summary><p>Cada prueba está validada automáticamente contra R y las librerías estadísticas de Python, y cada análisis incluye el script de R para que cualquiera (tú, tu tutor o un revisor) pueda reproducirlo. Aun así, revisa siempre los resultados: Tharp automatiza el cálculo, pero la interpretación es tuya.</p></details>
-      <details><summary>¿Sustituye a SPSS, JASP o R?</summary><p>Para la gran mayoría de análisis de un TFG, TFM, tesis o artículo, sí. Tharp incluye: estadísticos descriptivos; correlaciones de Pearson y Spearman; pruebas t (independientes y relacionadas) y sus alternativas no paramétricas (Mann-Whitney y Wilcoxon); ANOVA de un factor, de Welch, factorial y de medidas repetidas, con sus post hoc; ANCOVA; Kruskal-Wallis y Friedman; chi-cuadrado, prueba exacta de Fisher, McNemar y Q de Cochran; regresión lineal y logística binaria; modelos lineales mixtos para datos longitudinales o anidados; moderación y mediación; análisis factorial exploratorio y confirmatorio; y fiabilidad con alfa de Cronbach y omega de McDonald.</p><p>Si necesitas un análisis que aún no está, el buscador de pruebas te lo indica y puedes escribirnos: priorizamos lo que más nos pedís.</p></details>
-      <details><summary>¿Puedo usarlo en mi TFM o mi tesis?</summary><p>Sí. Tharp genera tablas y texto en formato APA y un documento de Word editable. Si tu centro lo pide, puedes citar el software e incluir el script de R como anexo.</p></details>
+      <details><summary>¿Qué archivos puedo usar?</summary><p>Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp). Se respetan las etiquetas de valor, los tipos de medida y los valores perdidos definidos por el usuario. La primera fila debe tener los nombres de las variables y cada fila, un participante.</p></details>
+      <details><summary>¿Los resultados son fiables?</summary><p>Cada análisis se valida automáticamente contra R, número a número, antes de cada versión (<a href="validacion.html" style="color:var(--teal)">cómo lo validamos</a>), y cada resultado incluye el script de R para que cualquiera (tú, tu director o un revisor) pueda reproducirlo. Aun así, revisa siempre los resultados: Tharp automatiza el cálculo, pero la interpretación es tuya.</p></details>
+      <details><summary>¿Qué análisis incluye?</summary><p>Desde descriptivos y pruebas t hasta modelos mixtos, análisis factorial confirmatorio con invarianza de medida, supervivencia o metaanálisis: tienes la lista completa en <a href="#rigor">Rigor</a>. Si necesitas un análisis que aún no está, el buscador de pruebas te lo indica y puedes escribirnos: priorizamos lo que más nos pedís.</p></details>
+      <details><summary>¿Puedo usarlo en mi artículo o mi tesis? ¿Cómo lo cito?</summary><p>Sí. Tharp genera tablas y texto en formato APA y un documento de Word editable. Las normas APA piden mencionar el software en el método y citarlo en las referencias; Tharp te da la cita al final de cada análisis:</p><p class="cite">Agüí Ruiz, B. (<span data-tharp="year">2026</span>). <i>Tharp</i> (Versión <span data-tharp="version">1.2.0</span>) [Software]. https://tharp.es</p></details>
     </div>
   </div>
 </section>
 
-<section id="piloto" style="padding-top:0">
-  <div class="wrap">
-    <div class="pilot">
-      <div class="eyebrow">Programa piloto · Gratuito</div>
-      <h2>¿Investigas o enseñas metodología? Ayúdanos a hacer Tharp.</h2>
+<section id="piloto" class="dark">
+  <div class="wrap pilot">
+    <div>
+      <div class="k">Programa piloto · Gratuito</div>
+      <h2 style="margin-top:14px">¿Investigas o enseñas metodología? <em>Ayúdanos a hacer Tharp.</em></h2>
       <p class="lead">Buscamos investigadores, doctorandos y docentes que lo prueben con sus propios datos y nos cuenten qué les falta. Te enseñamos la herramienta en 10 minutos y tu opinión decide qué construimos después.</p>
-      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
-        <a class="btn btn-dark" href="mailto:info@tharp.es?subject=Programa%20piloto%20Tharp&body=Hola%2C%20me%20interesa%20probar%20Tharp.%0A%0ASoy%20(investigador%2Fa%20%2F%20doctorando%2Fa%20%2F%20docente)%3A%0AUniversidad%20o%20centro%3A%0A">Quiero participar</a>
-        <a class="btn btn-line" href="app.html">Probarlo ahora</a>
+    </div>
+    <div>
+      <div class="acts">
+        <a class="btn btn-ping" data-umami-event="piloto_participar" href="mailto:info@tharp.es?subject=Programa%20piloto%20Tharp&body=Hola%2C%20me%20interesa%20probar%20Tharp.%0A%0ASoy%20(investigador%2Fa%20%2F%20doctorando%2Fa%20%2F%20docente)%3A%0AUniversidad%20o%20centro%3A%0A">Quiero participar</a>
+        <a class="btn btn-line" href="app.html#ejemplo" data-umami-event="piloto_ejemplo">Ver un análisis de ejemplo</a>
       </div>
-      <p style="margin:22px 0 0;color:var(--muted);font-size:.92rem">O escríbenos a <a href="mailto:info@tharp.es">info@tharp.es</a> · Síguenos en Instagram: <a href="https://www.instagram.com/tharpstats/" rel="noopener">@tharpstats</a></p>
+      <p style="margin:20px 0 0"><a class="lnk" href="docentes/tharp-ficha-docentes.pdf" data-umami-event="ficha_docentes" style="color:var(--ping)">Descargar la ficha para docentes (PDF, una página)</a></p>
+      <small>O escríbenos a <a href="mailto:info@tharp.es">info@tharp.es</a> · Instagram: <a href="https://www.instagram.com/tharpstats/" rel="noopener">@tharpstats</a></small>
     </div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <div><strong style="color:var(--ink)">Tharp</strong> · <span lang="en">From question to evidence</span> · © 2026 Blanca Agüí Ruiz (<a href="https://orcid.org/0009-0002-3982-2565" rel="noopener">ORCID</a>). Todos los derechos reservados.</div>
+    <div><i lang="en">From question to evidence.</i> · © 2026 Blanca Agüí Ruiz (<a href="https://orcid.org/0009-0002-3982-2565" rel="noopener">ORCID</a>). Todos los derechos reservados.</div>
     <div><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/" rel="noopener">Instagram</a> · <a href="privacidad.html">Privacidad</a> · Sin cookies</div>
   </div>
 </footer>
 
+<script src="js/version.js"></script>
+<script>try{document.querySelectorAll("[data-tharp]").forEach(function(e){var v=window.TharpVersion;if(v&&v[e.dataset.tharp])e.textContent=v[e.dataset.tharp];});}catch(e){}</script>
+<script>
+(function(){
+  // sonda: avanza sobre el relieve de una dorsal; al pasar cada umbral se enciende una comprobación y al final se marca el resultado
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const fit = cv => { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); return [c, r.width, r.height]; };
+  const rnd = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+  const noise = Array.from({ length: 400 }, () => rnd() - .5);
+  const nz = x => { const i = Math.floor(x) % 399, f = x - Math.floor(x); return noise[i] * (1 - f) + noise[i + 1] * f; };
+  const relief = (u, row) => { const c = .5 + .04 * Math.sin(row * .7), d = u - c, ridge = Math.exp(-(d * d) / .018), rift = Math.exp(-(d * d) / .0009);
+    return ridge * .9 - rift * .55 + .22 * nz(u * 40 + row * 13) * (.4 + ridge) + .12 * nz(u * 9 + row * 3); };
+  const cv = document.getElementById('cvD'), cells = [...document.querySelectorAll('#dChecks > div')], sheet = document.getElementById('dSheet'), state = document.getElementById('dState');
+  const C = { grid: '#1f4a5e', ping: '#f2b33d', foam: '#dcedf0', dim: '#8fb0bd' };
+  let dims = null, t0 = performance.now(), visible = true;
+  function draw(now) {
+    if (!dims) dims = fit(cv); const [c, W, H] = dims;
+    const SWEEP = 6500, HOLD = 4000, el = reduce ? SWEEP : (now - t0) % (SWEEP + HOLD), prog = Math.min(1, el / SWEEP), xe = W * prog, base = H * .62, depth = x => base - 44 * relief(x / W, 5);
+    c.clearRect(0, 0, W, H); c.strokeStyle = C.grid; c.lineWidth = 1;
+    for (let y = 12; y < H; y += 22) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+    cells.forEach((d, i) => { const at = +d.dataset.at, x = W * at, on = prog >= at; c.setLineDash([2, 4]); c.strokeStyle = on ? C.ping : C.dim; c.globalAlpha = .7; c.beginPath(); c.moveTo(x, 4); c.lineTo(x, H); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
+      c.fillStyle = on ? C.ping : C.dim; c.font = '500 10px "Spline Sans Mono", monospace'; c.fillText(String(i + 1), x + 4, 14); d.classList.toggle('on', on); });
+    c.beginPath(); for (let x = 0; x <= xe; x += 3) { const y = depth(x); x ? c.lineTo(x, y) : c.moveTo(x, y); } c.lineTo(xe, H); c.lineTo(0, H); c.closePath(); c.fillStyle = 'rgba(242,179,61,.08)'; c.fill();
+    c.fillStyle = C.foam; c.globalAlpha = .5; for (let x = 0; x <= xe; x += 8) c.fillRect(x, depth(x) - 1, 2, 2); c.globalAlpha = 1;
+    c.beginPath(); for (let x = 0; x <= xe; x += 3) { const y = depth(x); x ? c.lineTo(x, y) : c.moveTo(x, y); } c.strokeStyle = C.ping; c.lineWidth = 1.6; c.stroke();
+    if (prog < 1) { const yd = depth(xe), rr = (now / 6) % 26; c.globalAlpha = 1 - rr / 26; c.beginPath(); c.arc(xe, yd, rr, 0, Math.PI * 2); c.strokeStyle = C.ping; c.stroke(); c.globalAlpha = 1; c.fillStyle = C.ping; c.beginPath(); c.arc(xe, yd, 3, 0, Math.PI * 2); c.fill(); }
+    sheet.classList.toggle('lit', prog >= 1); state.textContent = prog >= 1 ? 'Resultados listos ✓' : 'Analizando…';
+    if (!reduce && visible) requestAnimationFrame(draw);
+  }
+  addEventListener('resize', () => { dims = null; if (reduce) draw(performance.now()); });
+  if ('IntersectionObserver' in window) new IntersectionObserver(es => { const v = es[0].isIntersecting; if (v && !visible && !reduce) { visible = true; requestAnimationFrame(draw); } visible = v; }).observe(cv);
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(draw));
+
+  // pregúntale a tus datos: resultados reales de los datos de ejemplo de la aplicación
+  const FQ = [
+    { t: 'ANOVA de un factor', w: 'Comparas 3 grupos independientes en una variable cuantitativa. La normalidad es aceptable y las varianzas son homogéneas (Levene), así que no hace falta la alternativa no paramétrica.', r: 'Se aplicó un ANOVA de un factor para comparar ansiedad_post según grupo (Control: <i>M</i> = 25.58, <i>DT</i> = 6.77; Ejercicio: <i>M</i> = 23.84, <i>DT</i> = 7.44; Mindfulness: <i>M</i> = 21.56, <i>DT</i> = 7.38). Se encontraron diferencias estadísticamente significativas, <i>F</i>(2, 321) = 8.45, <i>p</i> &lt; .001, η² = .050, con un tamaño del efecto pequeño.' },
+    { t: 'Correlación de Spearman', w: 'Relacionas variables cuantitativas y alguna presenta una asimetría marcada, por lo que se usa Spearman en lugar de Pearson.', r: 'ansiedad_post y ansiedad_pre mostraron una correlación positiva fuerte, <i>r</i><sub>s</sub>(322) = .78, <i>p</i> &lt; .001; autoestima y ansiedad_post mostraron una correlación negativa fuerte, <i>r</i><sub>s</sub>(313) = -.53, <i>p</i> &lt; .001.' },
+    { t: 'Regresión lineal múltiple', w: 'Quieres explicar una variable cuantitativa a partir de varias. Tharp comprueba la normalidad de los residuos, la homocedasticidad (Breusch-Pagan), la colinealidad (VIF) y los casos influyentes.', r: 'El modelo fue estadísticamente significativo, <i>F</i>(3, 308) = 31.64, <i>p</i> &lt; .001, y explicó el 23.6 % de la varianza (<i>R</i>² ajustado = .23). horas_sueno se asoció positivamente con rendimiento (<i>B</i> = 0.37, β = .28, <i>p</i> &lt; .001) y estres se asoció negativamente (<i>B</i> = -0.09, β = -.35, <i>p</i> &lt; .001).' },
+    { t: 'ANOVA de medidas repetidas', w: 'Comparas 3 medidas de las mismas personas. No se cumple la esfericidad (Mauchly), así que se corrigen los grados de libertad con Greenhouse-Geisser.', r: 'Se encontraron diferencias estadísticamente significativas entre los momentos, <i>F</i>(1.52, 460.44) = 60.50, <i>p</i> &lt; .001, η²<sub>p</sub> = .166. Las comparaciones por pares (Holm) mostraron puntuaciones más bajas en ansiedad_post y en ansiedad_seguimiento que en ansiedad_pre (<i>p</i> &lt; .001).' } ];
+  const fb = [...document.querySelectorAll('.qs button')];
+  const show = i => { fb.forEach((b, j) => b.setAttribute('aria-pressed', String(i === j))); document.getElementById('fTest').textContent = FQ[i].t; document.getElementById('fWhy').textContent = FQ[i].w; document.getElementById('fRes').innerHTML = FQ[i].r; };
+  fb.forEach((b, i) => b.addEventListener('click', () => { show(i); try { window.umami && window.umami.track('portada_pregunta', { prueba: FQ[i].t }); } catch (e) { /* estadística opcional */ } }));
+  show(0);
+})();
+</script>
 <script>
 (function(){
   const box = document.getElementById('finderBox');
@@ -596,7 +469,7 @@ footer a:hover{text-decoration:underline}
       const r = result();
       try { window.umami && window.umami.track('buscador_resultado', { prueba: r.name }); } catch (e) { /* estadística opcional */ }
       // análisis que la app ya realiza (el resto se recomienda, pero se avisa de que aún no está disponible)
-      r.inApp = ['Estadísticos descriptivos','Prueba t de muestras independientes','Prueba t de muestras relacionadas','ANOVA de un factor','U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis','Chi-cuadrado de independencia','Correlación de Pearson','Correlación de Spearman','Chi-cuadrado + V de Cramér','Regresión lineal','Regresión logística binaria','ANOVA de medidas repetidas','Prueba de Friedman','Prueba de McNemar','Q de Cochran'].includes(r.name);
+      r.inApp = ['Estadísticos descriptivos','Prueba t de muestras independientes','Prueba t de muestras relacionadas','ANOVA de un factor','U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis','Chi-cuadrado de independencia','Correlación de Pearson','Correlación de Spearman','Chi-cuadrado + V de Cramér','Regresión lineal','Regresión logística binaria','ANOVA de medidas repetidas','Prueba de Friedman','Prueba de McNemar','Q de Cochran','Regresión logística ordinal'].includes(r.name);
       html += '<div class="result"><div class="eyebrow">Tu análisis recomendado</div><h3>'+r.name+'</h3>';
       html += '<h4>Por qué</h4><ul>'+r.why.map(w=>'<li>'+w+'</li>').join('')+'</ul>';
       html += '<h4>Supuestos que debes comprobar</h4><ul>'+r.assum.map(w=>'<li>'+w+'</li>').join('')+'</ul>';

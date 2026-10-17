@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cómo validamos Tharp · 30 análisis comparados con R</title>
+<meta name="description" content="Cada número que calcula Tharp se compara con R antes de publicar una versión: 30 grupos de análisis y 46,633 valores, todos coincidentes. Paquetes de referencia, criterio de coincidencia y diferencias estudiadas.">
+<link rel="canonical" href="https://tharp.es/validacion.html">
+<meta name="theme-color" content="#0b2230">
+<link rel="icon" href="img/favicon-32.png" sizes="32x32" type="image/png"><link rel="icon" href="img/favicon-64.png" sizes="64x64" type="image/png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<script>/* ?no-contar excluye este navegador de las estadísticas (Umami); ?contar lo vuelve a incluir */try{var q=location.search;if(/[?&]no-contar(&|=|$)/.test(q)){localStorage.setItem("umami.disabled","1");alert("Listo: las visitas desde este navegador ya no se cuentan en las estadísticas.")}else if(/[?&]contar(&|=|$)/.test(q)){localStorage.removeItem("umami.disabled");alert("Las visitas desde este navegador vuelven a contarse.")}}catch(e){}</script>
+<script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
+<link rel="stylesheet" href="fuentes.css">
+<link rel="stylesheet" href="tharp.css">
+</head>
+<body>
+<!-- Generada por scripts/validacion_web.py: no editar a mano -->
+<div class="dark">
+<nav aria-label="Principal">
+  <div class="wrap">
+    <a href="./" class="brand" aria-label="Tharp, inicio"><img src="img/logo-144.png" alt="" width="32" height="32">Tharp</a>
+    <div class="navlinks">
+      <a href="./#como">Cómo funciona</a>
+      <a href="./#rigor">Rigor</a>
+      <a href="./#finder">¿Qué prueba uso?</a>
+      <a href="app.html" class="btn btn-ping" data-umami-event="validacion_analizar">Analizar mis datos</a>
+    </div>
+  </div>
+</nav>
+<header class="page-hd">
+  <div class="wrap">
+    <div class="k">Rigor · Tharp 1.2.0</div>
+    <h1>Cómo validamos <em>Tharp.</em></h1>
+    <p>Tharp calcula todo en tu navegador con un motor estadístico propio. Para que sus resultados sirvan en una tesis o un artículo, cada análisis se compara automáticamente con los paquetes de R que usa la comunidad científica antes de publicar cada versión. Si un solo número deja de coincidir, la versión no se publica.</p>
+  </div>
+</header>
+</div>
+
+<section class="rigor" style="padding-block:clamp(40px,6vw,64px)">
+  <div class="wrap">
+    <div class="nums" style="margin-top:0">
+      <div><b>30</b><span>grupos de análisis comparados con R</span></div>
+      <div><b>46&nbsp;633</b><span>valores comparados: estadísticos, <i>p</i>, IC, tamaños del efecto, cargas, errores típicos…</span></div>
+      <div><b>100 %</b><span>coinciden con R (46&nbsp;633 de 46&nbsp;633)</span></div>
+      <div><b>10⁻⁶</b><span>tolerancia relativa: al menos seis cifras iguales, salvo las excepciones justificadas</span></div>
+    </div>
+  </div>
+</section>
+
+<div class="wrap prose">
+  <h2>Cinco comprobaciones antes de cada versión</h2>
+  <ol class="layers">
+    <li><b>Batería contra R.</b> Para cada grupo de análisis, un script de R simula varios conjuntos de datos con semilla fija (muestras de 4 a 600 casos, empates, asimetría, grupos desiguales, hipótesis unilaterales) y calcula los resultados con los paquetes de referencia. Otro script ejecuta las mismas funciones de Tharp y compara cada valor.</li>
+    <li><b>Comprobación cruzada con Python</b> (SciPy, statsmodels y pingouin), una segunda referencia independiente de R.</li>
+    <li><b>Resultados de referencia de la aplicación completa.</b> Se ejecutan los análisis desde la interfaz, como lo haría una persona, en 18 escenarios (datos de ejemplo, archivos de SPSS, formato largo, muestras pequeñas, jueces, medidas repetidas…) y se compara el texto completo: tablas, redacción APA y registro de decisiones. Cualquier cambio, aunque sea de un decimal, detiene la publicación. La prueba se repite contra la web ya publicada.</li>
+    <li><b>El script de R de cada análisis.</b> En 39 escenarios se ejecuta el script de R que genera Tharp y se comprueba que cada número que muestra Tharp aparece en la salida de R con el mismo redondeo.</li>
+    <li><b>Lectura de datos.</b> R lee los mismos casos, valores perdidos y categorías que Tharp. La importación de SPSS se compara con pyreadstat, incluidos archivos reales de SPSS 23 y 25, y la de JASP con los 1052 archivos de ejemplo oficiales.</li>
+  </ol>
+
+  <h2>Criterio de coincidencia</h2>
+  <p>Un valor de Tharp (<i>a</i>) coincide con el de R (<i>b</i>) si |<i>a</i> − <i>b</i>| ≤ 10⁻⁶ · máx(1, |<i>b</i>|): coinciden al menos seis cifras significativas, muchas más de las dos o tres que se publican. Solo se admite una tolerancia mayor cuando R o Tharp resuelven el problema con un algoritmo iterativo o numérico cuya precisión no llega a 10⁻⁶:</p>
+  <div class="tw"><table class="vtable tol"><thead><tr><th>Análisis</th><th>Tolerancia</th><th>Motivo</th></tr></thead><tbody><tr><td>Modelos mixtos (lmerTest)</td><td>10⁻⁶ a 10⁻³</td><td>El optimizador de lme4 se detiene antes; los gl de Satterthwaite se obtienen por derivación numérica</td></tr><tr><td>AFC (lavaan)</td><td>10⁻⁵ a 10⁻⁴</td><td>Optimización iterativa en ambos programas</td></tr><tr><td>Prueba de Dunnett</td><td>2 · 10⁻³</td><td>La probabilidad multivariante de multcomp se calcula por integración aleatoria (Genz)</td></tr><tr><td>Tamhane T2</td><td>10⁻⁴</td><td>Integración numérica</td></tr><tr><td>ω de McDonald</td><td>10⁻⁵</td><td>Ejes principales iterados</td></tr><tr><td>AFE con MinRes o ML, o con rotaciones iterativas (oblimin, promax, quartimax, equamax, geomin)</td><td>10⁻⁴</td><td>psych y GPArotation se detienen con una tolerancia de 10⁻⁵ (Tharp usa la misma, como JASP); el ACP y los ejes principales sin rotar o con varimax se exigen a 10⁻⁶</td></tr></tbody></table></div>
+</div>
+
+<div class="wrap prose wide" style="padding-top:0">
+  <h2>Resultados por análisis</h2>
+  <div class="tw"><table class="vtable">
+    <caption><b>Tabla 1</b><i>Valores de Tharp que coinciden con R, por grupo de análisis</i></caption>
+    <thead><tr><th>Análisis</th><th>Referencia en R</th><th>Coinciden</th></tr></thead>
+    <tbody><tr><td>AFE (ejes principales, MinRes, ML) y ACP con 7 rotaciones, KMO, Bartlett, autovalores y ajuste por ML, en 12 conjuntos de datos (psych, GPArotation)</td><td class="pk">GPArotation, psych</td><td>2&nbsp;277 / 2&nbsp;277</td></tr><tr><td>ANOVA mixta: F, η², Mauchly, Greenhouse-Geisser, Huynh-Feldt y comparaciones (afex, emmeans)</td><td class="pk">afex, emmeans</td><td>104 / 104</td></tr><tr><td>Acuerdo entre jueces: CCI (6 formas), kappa de Cohen (ponderada) y kappa de Fleiss</td><td class="pk">irr, psych</td><td>348 / 348</td></tr><tr><td>Análisis factorial confirmatorio por máxima verosimilitud: ajuste, cargas, EE, solución estandarizada (lavaan)</td><td class="pk">lavaan</td><td>1&nbsp;577 / 1&nbsp;577</td></tr><tr><td>Correlaciones de Pearson, Spearman y Kendall (p exactas), IC y correlación parcial</td><td class="pk">stats (R base)</td><td>226 / 226</td></tr><tr><td>Curva ROC: AUC con EE e IC de DeLong y punto de corte de Youden (pROC)</td><td class="pk">pROC</td><td>4&nbsp;382 / 4&nbsp;382</td></tr><tr><td>Densidad de los gráficos de violín y nube de lluvia: ancho de banda de Silverman y densidad gaussiana (bw.nrd0)</td><td class="pk">stats (R base)</td><td>6&nbsp;948 / 6&nbsp;948</td></tr><tr><td>Descriptivos (asimetría y curtosis como SPSS), Shapiro-Wilk, Lilliefors, Levene, ANOVA, Welch, Kruskal-Wallis y Dunn</td><td class="pk">car, nortest, PMCMRplus, psych</td><td>654 / 654</td></tr><tr><td>Equivalencia (TOST): t independiente (Student y Welch), relacionada y una muestra, límites brutos y en d, IC del 90 % (TOSTER)</td><td class="pk">TOSTER</td><td>432 / 432</td></tr><tr><td>Fiabilidad y acuerdo: IC de Feldt del α, W de Kendall, α de Krippendorff (intervalo, nominal, ordinal) y Bland-Altman</td><td class="pk">irr, psych</td><td>126 / 126</td></tr><tr><td>Invarianza de medida (AFC multigrupo con medias): configural, métrica, escalar y estricta; ajuste, cargas, interceptos, medias latentes y EE (lavaan)</td><td class="pk">lavaan</td><td>7&nbsp;192 / 7&nbsp;192</td></tr><tr><td>MANOVA: Pillai, Wilks, Hotelling-Lawley y Roy con sus F, y M de Box</td><td class="pk">car</td><td>203 / 203</td></tr><tr><td>MLG factorial tipo III con covariables, medias marginales estimadas y comparaciones de Tukey (car, emmeans)</td><td class="pk">car, emmeans</td><td>117 / 117</td></tr><tr><td>MR de un factor (Mauchly, Greenhouse-Geisser), Friedman, ANCOVA con medias ajustadas, McNemar, Q de Cochran, α y ω (afex, car, emmeans, psych)</td><td class="pk">afex, car, DescTools, emmeans, psych</td><td>492 / 492</td></tr><tr><td>Medidas ordinales (γ, τ-b, τ-c, d de Somers) con IC, Fisher-Freeman-Halton y Mantel-Haenszel con Breslow-Day</td><td class="pk">DescTools</td><td>576 / 576</td></tr><tr><td>Medidas repetidas con dos factores intrasujeto y factor entre sujetos (afex, emmeans)</td><td class="pk">afex, emmeans</td><td>83 / 83</td></tr><tr><td>Metaanálisis: tamaños del efecto (SMD, MD, OR, COR), REML, DL y efectos fijos, Q, I², H², τ² con IC por perfil de Q, predicción y Egger (metafor)</td><td class="pk">metafor</td><td>2&nbsp;071 / 2&nbsp;071</td></tr><tr><td>Modelos lineales mixtos REML con gl de Satterthwaite y R² de Nakagawa (lmerTest, performance)</td><td class="pk">lmerTest, performance</td><td>175 / 175</td></tr><tr><td>No paramétricas: post hoc de Friedman, signos, mediana, KS de dos muestras, Jonckheere-Terpstra y rachas</td><td class="pk">clinfun, DescTools, PMCMRplus</td><td>792 / 792</td></tr><tr><td>PROCESS: moderación (1) con pendientes simples y Johnson-Neyman, mediación (4), en serie (6) y mediación moderada (7, 14)</td><td class="pk">stats (R base)</td><td>592 / 592</td></tr><tr><td>Post hoc (Tukey, Games-Howell, Bonferroni, Holm, Šidák, Scheffé, Tamhane, Dunnett), contrastes y Brown-Forsythe</td><td class="pk">DescTools, emmeans, multcomp, onewaytests, PMCMRplus</td><td>149 / 149</td></tr><tr><td>Post hoc SNK y Duncan (PMCMRplus), REGWQ (ptukey con los niveles de Ryan-Einot-Gabriel-Welsch), GT2 de Hochberg y Gabriel (módulo máximo estudentizado)</td><td class="pk">PMCMRplus</td><td>2&nbsp;208 / 2&nbsp;208</td></tr><tr><td>Potencia y tamaño muestral: t, ANOVA, regresión, χ², correlación y proporciones (pwr)</td><td class="pk">pwr</td><td>588 / 588</td></tr><tr><td>Pruebas t (independiente, Welch, relacionada, una muestra), unilaterales, d de Cohen con IC, Mann-Whitney y Wilcoxon (p exactas)</td><td class="pk">stats (R base)</td><td>600 / 600</td></tr><tr><td>Regresión de Poisson y binomial negativa: coeficientes, IRR, desvianza, AIC, χ² de Pearson, θ y offset (glm, MASS::glm.nb)</td><td class="pk">MASS</td><td>740 / 740</td></tr><tr><td>Regresión lineal (EE clásicos y HC3, Breusch-Pagan, Durbin-Watson, VIF, Cook) y logística binaria con Hosmer-Lemeshow (lm, sandwich, lmtest, car, glm, performance)</td><td class="pk">car, lmtest, performance, sandwich</td><td>897 / 897</td></tr><tr><td>Regresión logística multinomial (nnet) y ordinal de odds proporcionales (MASS::polr)</td><td class="pk">MASS, nnet</td><td>132 / 132</td></tr><tr><td>Supervivencia: Kaplan-Meier (Greenwood, IC log, mediana), log-rank y Cox con empates de Efron (survival)</td><td class="pk">survival</td><td>10&nbsp;347 / 10&nbsp;347</td></tr><tr><td>Tablas de contingencia: χ², G², Yates, Fisher, OR/RR, residuos, binomial y bondad de ajuste</td><td class="pk">DescTools</td><td>600 / 600</td></tr><tr><td>Valores perdidos: medias y covarianzas por EM (norm::em.norm) y prueba MCAR de Little (naniar::mcar_test), con pérdida MCAR y MAR</td><td class="pk">naniar, norm</td><td>1&nbsp;005 / 1&nbsp;005</td></tr></tbody>
+    <tfoot><tr><td>Total (30 grupos)</td><td class="pk">R 4.5.3 (2026-03-11)</td><td>46&nbsp;633 / 46&nbsp;633</td></tr></tfoot>
+  </table></div>
+</div>
+
+<div class="wrap prose" style="padding-top:0">
+  <h2>Diferencias estudiadas</h2>
+  <p>Cuando un resultado no coincide, se reproduce el cálculo paso a paso hasta saber por qué. En algunos casos el error estaba en el paquete de R y Tharp usa la fórmula correcta; la batería compara entonces con la fórmula calculada directamente en R.</p>
+  <ul><li><b>Prueba de esfericidad de Mauchly con 4 o más medidas.</b> La función <code>mauchly.test</code> de R escribe <code>3 * p</code> (con <i>p</i> = número de medidas) en el término de segundo orden de la aproximación de Anderson, cuando la fórmula usa la dimensión de los contrastes (<i>p</i> − 1). car y afex heredan ese término. Con 3 medidas vale cero y los resultados coinciden. Con 4 o más, la <i>p</i> de Mauchly difiere en la cuarta cifra. Tharp usa la fórmula de Anderson. El estadístico <i>W</i>, la corrección de Greenhouse-Geisser y las <i>F</i> coinciden exactamente.</li><li><b>α de Krippendorff con datos completos.</b> <code>irr::kripp.alpha</code> coincide con la definición de Krippendorff cuando hay valoraciones que faltan, pero se desvía cuando no falta ninguna (por ejemplo, 0.7869 frente a 0.7878). El valor de Tharp coincide con la definición calculada directamente en R y con el paquete <code>krippendorff</code> de Python. La batería compara los casos completos con la definición.</li><li><b>Hosmer-Lemeshow.</b> La prueba depende de cómo se formen los grupos de riesgo. Tharp usa los deciles de la probabilidad predicha, como ResourceSelection, performance y Stata, con los cortes calculados de forma que los casos empatados en un corte caigan siempre en el mismo grupo.</li><li><b>Prueba de Brant (regresión ordinal) con varios predictores.</b> El paquete <code>brant</code> copia los bloques de covarianza entre umbrales sin trasponerlos, y su χ² difiere en la tercera cifra. Con un solo predictor coinciden.</li><li><b><i>d</i> de Somers con la fila como variable dependiente.</b> <code>DescTools::SomersDelta(direction = "row")</code> usa mal los totales de columna en el error típico. Tharp usa la fórmula correcta. El error típico asintótico de la τ-b es el de SPSS, que difiere del de DescTools en la quinta cifra.</li><li><b>AFC con modelo saturado</b> (por ejemplo, un factor con 3 ítems, 0 grados de libertad). lavaan da TLI = 1 y RMSEA = 0 por convenio. Tharp los deja sin definir y explica que el ajuste de un modelo saturado no puede contrastarse. Las cargas, los errores típicos y la fiabilidad coinciden.</li><li><b>Percentiles.</b> Tharp usa el método por defecto de R (tipo 7) y lo indica en la nota de la tabla. SPSS usa por defecto el tipo 6, por lo que los cuartiles pueden diferir ligeramente de los suyos.</li><li><b>Intervalos bootstrap</b> (mediación y modelos de PROCESS). Dependen del generador de números aleatorios, así que no pueden coincidir cifra a cifra con R. Tharp usa una semilla fija para que el resultado sea reproducible. El intervalo se contrasta con un bootstrap independiente (diferencia &lt; 0,01). Los efectos puntuales y todas las ecuaciones de regresión coinciden con R a 10⁻⁶.</li></ul>
+  <p class="muted">Entorno de referencia: R 4.5.3 (2026-03-11). Página generada a partir del informe técnico de validación de Tharp 1.2.0.</p>
+</div>
+
+<footer class="dark" style="padding-top:0">
+  <div class="wrap">
+    <div><i lang="en">From question to evidence.</i> · © 2026 Blanca Agüí Ruiz (<a href="https://orcid.org/0009-0002-3982-2565" rel="noopener">ORCID</a>). Todos los derechos reservados.</div>
+    <div><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/" rel="noopener">Instagram</a> · <a href="privacidad.html">Privacidad</a> · Sin cookies</div>
+  </div>
+</footer>
+</body>
+</html>

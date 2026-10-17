@@ -236,8 +236,36 @@
     else if (method === 'holm') { const a = holm(out.map(c => c.p)); out.forEach((c, q) => { c.padj = a[q]; }); }
     else if (method === 'sidak' || method === 'tamhane') out.forEach(c => { c.padj = 1 - Math.pow(1 - c.p, m); });
     else if (method === 'scheffe') out.forEach(c => { c.padj = pF(c.F, k - 1, dfw); });
+    // GT2 de Hochberg y Gabriel: módulo máximo estudentizado con m comparaciones (Gabriel cambia el error típico para tamaños distintos)
+    else if (method === 'gt2' || method === 'gabriel') out.forEach(c => { const a = groups[c.i].length, b = groups[c.j].length;
+      c.stat = method === 'gt2' ? Math.abs(c.t) : Math.abs(c.diff) / (Math.sqrt(msw) * (1 / Math.sqrt(2 * a) + 1 / Math.sqrt(2 * b)));
+      c.padj = Math.min(1, Math.max(0, 1 - smmCdf(c.stat, m, dfw))); });
     else out.forEach(c => { c.padj = c.p; }); // lsd: sin corrección
     return out;
+  }
+  // módulo máximo estudentizado: P(max |Ti| ≤ c) para m t independientes con gl comunes (Dunnett con correlaciones nulas)
+  const smmCdf = (c, m, nu) => dunnettProb(c, new Array(m).fill(0), nu);
+  // pruebas de rango por pasos (como PMCMRplus::snkTest y duncanTest; REGWQ con los niveles de Ryan-Einot-Gabriel-Welsch):
+  // q de rango estudentizado con r = medias abarcadas; SNK con el error de Tukey-Kramer y Duncan y REGWQ con la media armónica de los n (como SPSS)
+  function stepwisePH(groups, msw, dfw, method, alpha = .05) {
+    const k = groups.length, n = groups.map(g => g.length), m = groups.map(mean), nh = k / sum(n.map(x => 1 / x));
+    const ord = m.map((_, i) => i).sort((a, b) => m[b] - m[a] || a - b), pos = []; ord.forEach((g, q) => { pos[g] = q; });
+    const out = [];
+    for (let i = 0; i < k; i++) for (let j = i + 1; j < k; j++) {
+      const r = Math.abs(pos[i] - pos[j]) + 1, diff = m[i] - m[j], se = method === 'snk' ? Math.sqrt(msw / 2 * (1 / n[i] + 1 / n[j])) : Math.sqrt(msw / nh);
+      const q = Math.abs(diff) / se, raw = Math.min(1, Math.max(0, 1 - J.tukey.cdf(q, r, dfw)));
+      const p = method === 'duncan' ? Math.min(1, 1 - Math.pow(1 - raw, 1 / (r - 1))) : method === 'regwq' && r < k - 1 ? Math.min(1, 1 - Math.pow(1 - raw, k / r)) : raw;
+      out.push({ i, j, diff, q, r, p, df: dfw });
+    }
+    const pOf = (a, b) => out.find(c => (c.i === a && c.j === b) || (c.i === b && c.j === a));
+    // regla paso a paso: un par solo difiere si difieren todos los rangos que lo contienen, así que su p es la mayor de esas p
+    out.forEach(c => { const lo = Math.min(pos[c.i], pos[c.j]), hi = Math.max(pos[c.i], pos[c.j]); let mx = c.p;
+      for (let a = 0; a <= lo; a++) for (let b = hi; b < k; b++) mx = Math.max(mx, pOf(ord[a], ord[b]).p); c.padj = mx; });
+    // subconjuntos homogéneos (como SPSS): rachas máximas de medias consecutivas, en orden creciente, cuyo rango no es significativo
+    const asc = ord.slice().reverse(), subsets = []; let last = -1;
+    for (let a = 0; a < k; a++) { let b = a; while (b + 1 < k && pOf(asc[a], asc[b + 1]).padj >= alpha) b++;
+      if (b > last) { subsets.push({ members: asc.slice(a, b + 1), p: b > a ? pOf(asc[a], asc[b]).p : 1 }); last = b; } }
+    return { pairs: out, subsets, order: asc, nh };
   }
   // Dunnett: cada grupo frente a un grupo control, con la t multivariante exacta (correlaciones λi·λj)
   function dunnettProb(c, lam, nu) { // P(max |Tj| < c)
@@ -1561,6 +1589,225 @@
       icc: q === 1 ? Tau[0][0] / (Tau[0][0] + s2) : null, resid };
   }
 
+  // densidad suavizada con núcleo gaussiano y ancho de banda de Silverman (como bw.nrd0 de R), evaluada entre el mínimo y el máximo (como un violín recortado)
+  function kde(x, npts = 96) {
+    const s = x.slice().sort((a, b) => a - b), n = s.length, q = p => { const h = (n - 1) * p, lo = Math.floor(h), hi = Math.min(lo + 1, n - 1); return s[lo] + (h - lo) * (s[hi] - s[lo]); };
+    const m = s.reduce((a, b) => a + b, 0) / n, sd = Math.sqrt(s.reduce((a, b) => a + (b - m) ** 2, 0) / (n - 1)), iqr = q(.75) - q(.25);
+    let lo = Math.min(sd, iqr / 1.34); if (!(lo > 0)) lo = sd || Math.abs(x[0]) || 1;   // como bw.nrd0: x[1] en el orden original
+    const bw = .9 * lo * Math.pow(n, -.2), a = s[0], b = s[n - 1], c = 1 / (n * bw * Math.sqrt(2 * Math.PI));
+    const pts = Array.from({ length: npts }, (_, i) => { const y = b > a ? a + (b - a) * i / (npts - 1) : a; let d = 0; for (const v of s) { const z = (y - v) / bw; if (z > -8 && z < 8) d += Math.exp(-.5 * z * z); } return [y, d * c]; });
+    return { bw, pts, q1: q(.25), md: q(.5), q3: q(.75), n };
+  }
+
+  // ---------- valores perdidos: medias y covarianzas por EM (como norm::em.norm) y prueba MCAR de Little (como naniar::mcar_test) ----------
+  // X: filas con null en los perdidos. El EM trabaja con las variables tipificadas (como norm) y devuelve μ y Σ de máxima verosimilitud en la escala original
+  function emNorm(X, maxit = 20000, tol = 1e-13) {
+    const n = X.length, p = X[0].length, m0 = [], s0 = [];
+    for (let j = 0; j < p; j++) { const o = X.map(r => r[j]).filter(v => v !== null); if (o.length < 2) return null; const mm = mean(o); m0.push(mm); s0.push(Math.sqrt(sum(o.map(v => (v - mm) ** 2)) / o.length) || 1); }
+    const Z = X.map(r => r.map((v, j) => (v === null ? null : (v - m0[j]) / s0[j])));
+    const pats = new Map(); Z.forEach(r => { const k = r.map(v => (v === null ? 1 : 0)).join(''); if (!pats.has(k)) pats.set(k, []); pats.get(k).push(r); });
+    const groups = [...pats.entries()].map(([k, rows]) => { const o = [], mi = []; [...k].forEach((c, j) => (c === '0' ? o : mi).push(j)); return { key: k, o, m: mi, rows }; });
+    let mu = new Array(p).fill(0), S = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => (a === b ? 1 : 0))), it = 0, conv = false;
+    for (; it < maxit; it++) {
+      const T1 = new Array(p).fill(0), T2 = Array.from({ length: p }, () => new Array(p).fill(0));
+      for (const g of groups) {
+        const { o, m: mi } = g; let B = null, C = null;
+        if (mi.length && o.length) { const Soo = inv(o.map(a => o.map(b => S[a][b]))); if (!Soo) return null;
+          B = mi.map(a => o.map((_, q) => sum(o.map((b, r) => S[a][b] * Soo[r][q]))));                  // Σmo Σoo⁻¹
+          C = mi.map((a, u) => mi.map(c => S[a][c] - sum(o.map((b, q) => B[u][q] * S[b][c])))); }        // Σmm − Σmo Σoo⁻¹ Σom
+        else if (mi.length) C = mi.map(a => mi.map(c => S[a][c]));
+        for (const r of g.rows) {
+          const x = r.slice(); mi.forEach((a, u) => { x[a] = mu[a] + (B ? sum(o.map((b, q) => B[u][q] * (r[b] - mu[b]))) : 0); });
+          for (let a = 0; a < p; a++) { T1[a] += x[a]; for (let b = a; b < p; b++) T2[a][b] += x[a] * x[b]; }
+          if (C) mi.forEach((a, u) => mi.forEach((c, w) => { if (c >= a) T2[a][c] += C[u][w]; }));
+        }
+      }
+      const mu1 = T1.map(t => t / n), S1 = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => { const [i, j] = a <= b ? [a, b] : [b, a]; return T2[i][j] / n - mu1[a] * mu1[b]; }));
+      let d = 0; for (let a = 0; a < p; a++) { d = Math.max(d, Math.abs(mu1[a] - mu[a])); for (let b = 0; b < p; b++) d = Math.max(d, Math.abs(S1[a][b] - S[a][b])); }
+      mu = mu1; S = S1; if (d < tol) { conv = true; it++; break; }
+    }
+    return { mu: mu.map((v, j) => m0[j] + s0[j] * v), sigma: S.map((r, a) => r.map((v, b) => v * s0[a] * s0[b])), muZ: mu, sigmaZ: S, groups, iterations: it, converged: conv };
+  }
+  // Little (1988): d² = Σ_j n_j (ȳ_j − μ_j)' Σ_j⁻¹ (ȳ_j − μ_j) sobre las variables observadas de cada patrón; gl = Σ k_j − p
+  function littleMCAR(X) {
+    const em = emNorm(X); if (!em) return null; const p = X[0].length;
+    // con muy pocos datos por patrón la verosimilitud no tiene máximo: Σ tiende a una matriz singular y la prueba no es válida
+    const Rz = em.sigmaZ.map((r, a) => r.map((v, b) => v / Math.sqrt(em.sigmaZ[a][a] * em.sigmaZ[b][b]))), minEig = Math.min(...eigSym(Rz).values);
+    const base = { patterns: em.groups.length, mu: em.mu, sigma: em.sigma, iterations: em.iterations, converged: em.converged, minEig, groups: em.groups.map(g => ({ key: g.key, n: g.rows.length, missing: g.m })) };
+    if (!(minEig > 1e-6) || !em.converged) return Object.assign(base, { singular: true, chi: NaN, df: NaN, p: NaN });
+    let d2 = 0, kSum = 0;
+    for (const g of em.groups) { if (!g.o.length) continue; kSum += g.o.length;
+      const ybar = g.o.map(j => mean(g.rows.map(r => r[j]))), dv = g.o.map((j, q) => ybar[q] - em.muZ[j]), Si = inv(g.o.map(a => g.o.map(b => em.sigmaZ[a][b]))); if (!Si) return Object.assign(base, { singular: true, chi: NaN, df: NaN, p: NaN });
+      d2 += g.rows.length * sum(dv.map((x, a) => x * sum(dv.map((y, b) => Si[a][b] * y)))); }
+    const df = kSum - p;
+    return Object.assign(base, { singular: false, chi: d2, df, p: df > 0 ? pChi(d2, df) : NaN });
+  }
+
+  // ---------- metaanálisis (como metafor::escalc, rma, predict, confint y regtest) ----------
+  // tamaños del efecto por estudio: SMD (g de Hedges con la corrección exacta), MD, OR (log; +0.5 en las cuatro casillas si alguna es 0), COR (z de Fisher)
+  function effectSize(type, d) {
+    if (type === 'SMD') { const m = d.n1 + d.n2 - 2, sp = Math.sqrt(((d.n1 - 1) * d.sd1 ** 2 + (d.n2 - 1) * d.sd2 ** 2) / m), J_ = Math.exp(J.gammaln(m / 2) - Math.log(Math.sqrt(m / 2)) - J.gammaln((m - 1) / 2)), g = J_ * (d.m1 - d.m2) / sp;
+      return { yi: g, vi: 1 / d.n1 + 1 / d.n2 + g * g / (2 * (d.n1 + d.n2)) }; }
+    if (type === 'MD') return { yi: d.m1 - d.m2, vi: d.sd1 ** 2 / d.n1 + d.sd2 ** 2 / d.n2 };
+    if (type === 'OR') { let { a, b, c, d: dd } = d; if ([a, b, c, dd].some(x => x === 0)) { a += .5; b += .5; c += .5; dd += .5; } return { yi: Math.log(a * dd / (b * c)), vi: 1 / a + 1 / b + 1 / c + 1 / dd }; }
+    if (type === 'COR') return { yi: Math.atanh(d.r), vi: 1 / (d.n - 3) };
+    return null;
+  }
+  // modelo de efectos fijos ('FE'), DerSimonian-Laird ('DL') o REML (Fisher scoring, como metafor); X: moderadores con constante (por defecto, solo la constante)
+  function rmaFit(y, v, method = 'REML', X = null) {
+    const k = y.length, Xm = X || y.map(() => [1]), p = Xm[0].length;
+    const wls = t2 => { const w = v.map(x => 1 / (x + t2)), M = Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, c) => sum(Xm.map((r, i) => w[i] * r[a] * r[c])))), Mi = inv(M); if (!Mi) return null;
+      const Xy = Array.from({ length: p }, (_, a) => sum(Xm.map((r, i) => w[i] * r[a] * y[i]))), b = Mi.map(r => sum(r.map((q, a) => q * Xy[a]))), e = y.map((yy, i) => yy - sum(Xm[i].map((q, a) => q * b[a])));
+      return { w, Mi, b, e }; };
+    // P = W − W X (X'WX)⁻¹ X'W
+    const Pmat = (w, Mi) => y.map((_, i) => y.map((__, j) => (i === j ? w[i] : 0) - w[i] * w[j] * sum(Xm[i].map((xa, a) => xa * sum(Xm[j].map((xc, c) => Mi[a][c] * xc))))));
+    const fe = wls(0); if (!fe) return null; const QE = sum(fe.e.map((e, i) => fe.w[i] * e * e));
+    let t2 = 0;
+    if (method === 'DL') { const W = fe.w, P = Pmat(W, fe.Mi), trP = sum(P.map((r, i) => r[i])); t2 = Math.max(0, (QE - (k - p)) / trP); }
+    else if (method === 'REML') { const Wfe = fe.w, P0 = Pmat(Wfe, fe.Mi); t2 = Math.max(0, (QE - (k - p)) / sum(P0.map((r, i) => r[i])));   // arranque con el estimador de DL
+      for (let it = 0; it < 1000; it++) { const f_ = wls(t2), P = Pmat(f_.w, f_.Mi), Py = P.map(r => sum(r.map((q, j) => q * y[j])));
+        const U = -.5 * sum(P.map((r, i) => r[i])) + .5 * sum(Py.map(q => q * q)), I = .5 * sum(P.map((r, i) => sum(r.map((q, j) => q * P[j][i]))));
+        let tn = t2 + U / I; if (tn < 0) tn = 0; const done = Math.abs(tn - t2) < 1e-14 * Math.max(1, t2); t2 = tn; if (done) break; } }
+    const f_ = wls(t2), se = f_.Mi.map((r, a) => Math.sqrt(r[a])), z = f_.b.map((b, a) => b / se[a]), zq = 1.959963984540054;
+    const P = Pmat(f_.w, f_.Mi), seT2 = method === 'REML' ? Math.sqrt(2 / sum(P.map((r, i) => sum(r.map((q, j) => q * P[j][i]))))) : NaN;
+    const wf = v.map(x => 1 / x), s2 = (k - 1) * sum(wf) / (sum(wf) ** 2 - sum(wf.map(x => x * x)));   // varianza típica dentro de los estudios (Higgins y Thompson)
+    return { k, p, b: f_.b, se, z, pval: z.map(pZ), ci: f_.b.map((b, a) => [b - zq * se[a], b + zq * se[a]]), tau2: t2, seTau2: seT2, QE, dfQ: k - p, pQ: pChi(QE, k - p),
+      I2: 100 * t2 / (t2 + s2), H2: (t2 + s2) / s2, s2, w: f_.w, method };
+  }
+  // IC del 95 % de τ² por el perfil de Q (Viechtbauer, 2007; como confint.rma.uni), y los de I² y H² que se derivan
+  function tau2CI(y, v, level = .95) {
+    const k = y.length, Qg = t2 => { const w = v.map(x => 1 / (x + t2)), mu = sum(w.map((wi, i) => wi * y[i])) / sum(w); return sum(w.map((wi, i) => wi * (y[i] - mu) ** 2)); };
+    const root = target => { if (Qg(0) < target) return 0; let lo = 0, hi = 1; while (Qg(hi) > target) hi *= 2; for (let it = 0; it < 200; it++) { const md = (lo + hi) / 2; if (Qg(md) > target) lo = md; else hi = md; } return (lo + hi) / 2; };
+    const a = (1 - level) / 2, lb = root(J.chisquare.inv(1 - a, k - 1)), ub = root(J.chisquare.inv(a, k - 1));
+    const wf = v.map(x => 1 / x), s2 = (k - 1) * sum(wf) / (sum(wf) ** 2 - sum(wf.map(x => x * x)));
+    return { tau2: [lb, ub], I2: [100 * lb / (lb + s2), 100 * ub / (ub + s2)], H2: [(lb + s2) / s2, (ub + s2) / s2] };
+  }
+  // metaanálisis completo: modelo, intervalo de predicción e IC de τ²; Egger: metarregresión con el EE como moderador (como regtest)
+  function meta(y, v, method = 'REML') {
+    const r = rmaFit(y, v, method); if (!r) return null; const zq = 1.959963984540054, se = r.se[0], piH = zq * Math.sqrt(se * se + r.tau2);
+    const ci = method === 'FE' ? null : tau2CI(y, v), eg = y.length >= 3 ? rmaFit(y, v, method, v.map(x => [1, Math.sqrt(x)])) : null;
+    if (method === 'FE') { r.I2 = r.QE > 0 ? Math.max(0, 100 * (r.QE - r.dfQ) / r.QE) : 0; r.H2 = r.QE / r.dfQ; }   // en efectos fijos, a partir de Q (como metafor)
+    return Object.assign(r, { est: r.b[0], pi: method === 'FE' ? [NaN, NaN] : [r.b[0] - piH, r.b[0] + piH], tau2CI: ci,
+      egger: eg ? { z: eg.z[1], p: eg.pval[1], b: eg.b[0], ci: eg.ci[0] } : null, weights: r.w.map(w => 100 * w / sum(r.w)) });
+  }
+
+  // ---------- supervivencia: Kaplan-Meier, log-rank y regresión de Cox (empates de Efron), como survival::survfit, survdiff y coxph ----------
+  // time: tiempos; event: 1 = evento, 0 = censura. IC de S(t) en escala logarítmica (conf.type = "log", por defecto en survfit)
+  function kaplanMeier(time, event, level = .95) {
+    const z = J.normal.inv(1 - (1 - level) / 2, 0, 1), ts = [...new Set(time.filter((_, i) => event[i] === 1))].sort((a, b) => a - b), rows = [];
+    let S = 1, gw = 0;
+    ts.forEach(t => { const nr = time.filter(v => v >= t).length, d = time.filter((v, i) => v === t && event[i] === 1).length;
+      S *= 1 - d / nr; gw += nr > d ? d / (nr * (nr - d)) : Infinity; const se = S * Math.sqrt(gw), lse = Math.sqrt(gw);
+      rows.push({ t, nrisk: nr, nevent: d, surv: S, se: isFinite(se) ? se : NaN, lower: S > 0 && isFinite(lse) ? Math.exp(Math.log(S) - z * lse) : NaN, upper: S > 0 && isFinite(lse) ? Math.min(1, Math.exp(Math.log(S) + z * lse)) : NaN }); });
+    // mediana (y sus IC) como quantile.survfit: primer tiempo con S ≤ 0.5; si S vale exactamente 0.5 en un tramo, punto medio con el siguiente tiempo
+    const q = key => { const tol = Math.sqrt(2.220446049250313e-16);
+      for (let k = 0; k < rows.length; k++) { const v = rows[k][key]; if (!isFinite(v)) continue;
+        if (Math.abs(v - .5) < tol) return k + 1 < rows.length ? (rows[k].t + rows[k + 1].t) / 2 : rows[k].t;
+        if (v < .5) return rows[k].t; } return NaN; };
+    return { rows, n: time.length, events: event.filter(e => e === 1).length, median: q('surv'), medianCI: [q('lower'), q('upper')] };
+  }
+  // log-rank (survdiff, rho = 0): g = índice de grupo 0..k−1
+  function logrank(time, event, g, k) {
+    const ts = [...new Set(time.filter((_, i) => event[i] === 1))].sort((a, b) => a - b), O = new Array(k).fill(0), E = new Array(k).fill(0), V = Array.from({ length: k }, () => new Array(k).fill(0));
+    ts.forEach(t => { const nr = new Array(k).fill(0), d = new Array(k).fill(0);
+      time.forEach((v, i) => { if (v >= t) nr[g[i]]++; if (v === t && event[i] === 1) d[g[i]]++; });
+      const N = sum(nr), D = sum(d); for (let a = 0; a < k; a++) { O[a] += d[a]; E[a] += D * nr[a] / N; }
+      if (N > 1) for (let a = 0; a < k; a++) for (let b = 0; b < k; b++) V[a][b] += D * (N - D) / (N - 1) * nr[a] / N * ((a === b ? 1 : 0) - nr[b] / N); });
+    const m = k - 1, Vi = inv(V.slice(0, m).map(r => r.slice(0, m))), u = O.slice(0, m).map((o, a) => o - E[a]);
+    const chi = Vi ? sum(u.map((x, a) => x * sum(u.map((y_, b) => Vi[a][b] * y_)))) : NaN;
+    return { chi, df: m, p: pChi(chi, m), O, E, V };
+  }
+  // Cox de riesgos proporcionales con empates de Efron (Newton-Raphson desde 0): X sin constante (n × p)
+  function cox(X, time, event) {
+    const n = X.length, p = X[0].length, ord = time.map((t, i) => i).sort((a, b) => time[b] - time[a]);   // de mayor a menor tiempo (conjuntos de riesgo acumulados)
+    const ts = [...new Set(time.filter((_, i) => event[i] === 1))].sort((a, b) => b - a);
+    const step = b => { const eta = X.map(r => sum(r.map((v, k) => v * b[k]))), w = eta.map(Math.exp);
+      let ll = 0; const U = new Array(p).fill(0), I = Array.from({ length: p }, () => new Array(p).fill(0));
+      let S0 = 0; const S1 = new Array(p).fill(0), S2 = Array.from({ length: p }, () => new Array(p).fill(0)); let q = 0;
+      ts.forEach(t => { // añadir al conjunto de riesgo todos los tiempos ≥ t
+        while (q < n && time[ord[q]] >= t) { const i = ord[q++]; S0 += w[i]; for (let a = 0; a < p; a++) { S1[a] += w[i] * X[i][a]; for (let c = 0; c < p; c++) S2[a][c] += w[i] * X[i][a] * X[i][c]; } }
+        const Dset = []; for (let i = 0; i < n; i++) if (time[i] === t && event[i] === 1) Dset.push(i); const d = Dset.length;
+        let D0 = 0; const D1 = new Array(p).fill(0), D2 = Array.from({ length: p }, () => new Array(p).fill(0));
+        Dset.forEach(i => { ll += eta[i]; D0 += w[i]; for (let a = 0; a < p; a++) { U[a] += X[i][a]; D1[a] += w[i] * X[i][a]; for (let c = 0; c < p; c++) D2[a][c] += w[i] * X[i][a] * X[i][c]; } });
+        for (let l = 0; l < d; l++) { const f_ = l / d, s0 = S0 - f_ * D0, s1 = S1.map((v, a) => v - f_ * D1[a]);
+          ll -= Math.log(s0); for (let a = 0; a < p; a++) { U[a] -= s1[a] / s0; for (let c = 0; c < p; c++) I[a][c] += (S2[a][c] - f_ * D2[a][c]) / s0 - s1[a] * s1[c] / (s0 * s0); } } });
+      return { ll, U, I }; };
+    let b = new Array(p).fill(0), st = step(b); const ll0 = st.ll, U0 = st.U, I0i = inv(st.I);
+    for (let it = 0; it < 100; it++) { const Ii = inv(st.I); if (!Ii) return null; const db = Ii.map(r => sum(r.map((v, k) => v * st.U[k])));
+      let bn = b.map((v, k) => v + db[k]), sn = step(bn), h = 0; while (sn.ll < st.ll - 1e-12 && h++ < 30) { bn = b.map((v, k) => v + db[k] / 2 ** h); sn = step(bn); }   // paso reducido si empeora
+      const done = Math.abs(sn.ll - st.ll) < 1e-13 * (1 + Math.abs(st.ll)); b = bn; st = sn; if (done) break; }
+    const Vb = inv(st.I); if (!Vb) return null; const se = Vb.map((r, k) => Math.sqrt(r[k])), z = b.map((v, k) => v / se[k]), zq = 1.959963984540054;
+    const lr = 2 * (st.ll - ll0), wald = sum(b.map((v, a) => v * sum(b.map((u, c) => st.I[a][c] * u)))), score = I0i ? sum(U0.map((v, a) => v * sum(U0.map((u, c) => I0i[a][c] * u)))) : NaN;
+    return { b, se, z, p: z.map(pZ), hr: b.map(Math.exp), ci: b.map((v, k) => [Math.exp(v - zq * se[k]), Math.exp(v + zq * se[k])]), ll: st.ll, ll0,
+      lr: { chi: lr, df: p, p: pChi(lr, p) }, wald: { chi: wald, df: p, p: pChi(wald, p) }, score: { chi: score, df: p, p: pChi(score, p) }, n, events: event.filter(e => e === 1).length };
+  }
+
+  // ---------- regresión de Poisson y binomial negativa (enlace log), como glm(family = poisson) y MASS::glm.nb ----------
+  // digamma y trigamma: recurrencia hasta x ≥ 6 y serie asintótica (error < 1e-13)
+  function digamma(x) { let r = 0; while (x < 6) { r -= 1 / x; x += 1; } const f = 1 / (x * x);
+    return r + Math.log(x) - .5 / x - f * (1 / 12 - f * (1 / 120 - f * (1 / 252 - f * (1 / 240 - f / 132)))); }
+  function trigamma(x) { let r = 0; while (x < 6) { r += 1 / (x * x); x += 1; } const f = 1 / (x * x);
+    return r + 1 / x + f / 2 + f / x * (1 / 6 - f * (1 / 30 - f * (1 / 42 - f / 30))); }
+  // X: n × p con constante; y: recuentos (enteros ≥ 0); family: 'poisson' | 'negbin'; off: desplazamiento opcional (log de la exposición).
+  // θ = ∞ es Poisson. La binomial negativa alterna IRLS con θ fijo y θ de máxima verosimilitud (Newton) hasta la convergencia, como glm.nb
+  function countReg(X, y, family = 'poisson', off = null) {
+    const n = X.length, p = X[0].length, o = off || new Array(n).fill(0), NB = family === 'negbin';
+    const muOf = b => X.map((r, i) => Math.exp(o[i] + sum(r.map((v, k) => v * b[k]))));
+    const yl = (v, m) => (v > 0 ? v * Math.log(v / m) : 0);
+    const devOf = (mu, t) => 2 * sum(y.map((v, i) => (isFinite(t) ? yl(v, mu[i]) - (v + t) * Math.log((v + t) / (mu[i] + t)) : yl(v, mu[i]) - (v - mu[i]))));
+    // log-verosimilitud estable también con θ muy grande: lgamma(y + θ) − lgamma(θ) = Σ log(θ + j), j < y (exacto para recuentos enteros)
+    const lgr = (v, t) => { if (v !== Math.round(v) || v > 1e5) return J.gammaln(v + t) - J.gammaln(t); let s_ = 0; for (let j = 0; j < v; j++) s_ += Math.log(t + j); return s_; };
+    const llOf = (mu, t) => sum(y.map((v, i) => (isFinite(t) ? lgr(v, t) - J.gammaln(v + 1) - t * Math.log1p(mu[i] / t) + v * Math.log(mu[i] / (t + mu[i]))
+      : v * Math.log(mu[i]) - mu[i] - J.gammaln(v + 1))));
+    const info = (mu, b0, t) => { const w = mu.map(m => (isFinite(t) ? m / (1 + m / t) : m)), M = Array.from({ length: p }, () => new Array(p).fill(0));
+      for (let i = 0; i < n; i++) for (let a = 0; a < p; a++) for (let c = 0; c < p; c++) M[a][c] += w[i] * X[i][a] * X[i][c]; return { M, w }; };
+    const irls = (t, b0) => {
+      let b = b0 ? b0.slice() : new Array(p).fill(0), dev0 = Infinity;
+      if (!b0) b[0] = Math.log(Math.max(mean(y), 1e-8)) - mean(o);
+      for (let it = 0; it < 200; it++) {
+        const mu = muOf(b), { M, w } = info(mu, b, t), Ai = inv(M); if (!Ai) return null;
+        const zw = new Array(p).fill(0); for (let i = 0; i < n; i++) { const z = Math.log(mu[i]) - o[i] + (y[i] - mu[i]) / mu[i]; for (let a = 0; a < p; a++) zw[a] += w[i] * X[i][a] * z; }
+        b = Ai.map(r => sum(r.map((v, k) => v * zw[k]))); const dv = devOf(muOf(b), t);
+        if (Math.abs(dv - dev0) / (Math.abs(dv) + .1) < 1e-14) break; dev0 = dv;
+      }
+      const mu = muOf(b), Ai = inv(info(mu, b, t).M); return Ai ? { b, mu, Ai } : null;
+    };
+    const tInfo = (mu, t) => sum(y.map((v, i) => -trigamma(t + v) + trigamma(t) - 1 / t + 2 / (mu[i] + t) - (v + t) / (mu[i] + t) ** 2));
+    const thetaML = (mu, t0) => { // θ de máxima verosimilitud dados los μ (Newton, como MASS::theta.ml)
+      let t = t0 || n / sum(y.map((v, i) => (v / mu[i] - 1) ** 2)); if (!(t > 0) || !isFinite(t)) t = 1;
+      for (let it = 0; it < 200; it++) { const sc = sum(y.map((v, i) => digamma(t + v) - digamma(t) + Math.log(t) + 1 - Math.log(t + mu[i]) - (v + t) / (mu[i] + t)));
+        let tn = t + sc / tInfo(mu, t); if (!(tn > 0)) tn = t / 2; if (tn > 1e8) return Infinity;   // sin sobredispersión: el límite es Poisson
+        const ok = Math.abs(tn - t) < 1e-12 * Math.max(1, t); t = tn; if (ok) break; }
+      return t; };
+    let fit = irls(Infinity), theta = Infinity; if (!fit) return null;
+    if (NB) { theta = thetaML(fit.mu); let l0 = -Infinity;
+      for (let it = 0; it < 500 && isFinite(theta); it++) { fit = irls(theta, fit.b); if (!fit) return null; const t2 = thetaML(fit.mu, theta); if (!isFinite(t2)) { theta = Infinity; fit = irls(Infinity, fit.b); break; } const l1 = llOf(fit.mu, t2);
+        const done = Math.abs(t2 - theta) < 1e-11 * theta && Math.abs(l1 - l0) < 1e-11; theta = t2; l0 = l1; if (done) break; }
+      if (isFinite(theta)) { fit = irls(theta, fit.b); if (!fit) return null; } }
+    const se = fit.Ai.map((r, k) => Math.sqrt(r[k])), z = fit.b.map((v, k) => v / se[k]), L = llOf(fit.mu, theta), dev = devOf(fit.mu, theta), dfr = n - p;
+    const pear = sum(y.map((v, i) => (v - fit.mu[i]) ** 2 / (NB && isFinite(theta) ? fit.mu[i] + fit.mu[i] ** 2 / theta : fit.mu[i])));
+    return { family, b: fit.b, se, z, p: z.map(pZ), irr: fit.b.map(Math.exp), ci: fit.b.map((v, k) => [Math.exp(v - 1.959963984540054 * se[k]), Math.exp(v + 1.959963984540054 * se[k])]),
+      ll: L, dev, dfr, aic: -2 * L + 2 * (p + (NB ? 1 : 0)), pearson: pear, dispersion: pear / dfr, theta, thetaSE: NB && isFinite(theta) ? 1 / Math.sqrt(tInfo(fit.mu, theta)) : NaN, mu: fit.mu, n,
+      poissonLimit: NB && !isFinite(theta) };
+  }
+
+  // ---------- equivalencia: dos pruebas t unilaterales (TOST; Schuirmann, 1987; Lakens, 2017), como TOSTER::t_TOST ----------
+  // type: 'ind' (a, b; equalVar), 'paired' (diferencia b − a) o 'one' (a frente a mu). Límites [low, high] en unidades brutas de la
+  // diferencia o, con bound = 'd', en d de Cohen (se pasan a brutas con la DT combinada, la media de las varianzas, la DT de las diferencias o la de la muestra)
+  function tost(a, b, { type = 'ind', mu = 0, low, high, bound = 'raw', equalVar = true, alpha = .05 } = {}) {
+    let est, se, df, sdS;
+    if (type === 'ind') {
+      const n1 = a.length, n2 = b.length, v1 = variance(a), v2 = variance(b); est = mean(a) - mean(b);
+      if (equalVar) { const sp2 = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2); se = Math.sqrt(sp2 * (1 / n1 + 1 / n2)); df = n1 + n2 - 2; sdS = Math.sqrt(sp2); }
+      else { se = Math.sqrt(v1 / n1 + v2 / n2); df = (v1 / n1 + v2 / n2) ** 2 / ((v1 / n1) ** 2 / (n1 - 1) + (v2 / n2) ** 2 / (n2 - 1)); sdS = Math.sqrt((v1 + v2) / 2); }
+    } else { const x = type === 'paired' ? b.map((v, i) => v - a[i]) : a, n = x.length; est = mean(x) - (type === 'one' ? mu : 0); sdS = sd(x); se = sdS / Math.sqrt(n); df = n - 1; }
+    const lo = bound === 'd' ? low * sdS : low, hi = bound === 'd' ? high * sdS : high;
+    const t0 = est / se, tLo = (est - lo) / se, tHi = (est - hi) / se;
+    const pLo = 1 - J.studentt.cdf(tLo, df), pHi = J.studentt.cdf(tHi, df), p = Math.max(pLo, pHi), tq = J.studentt.inv(1 - alpha, df);
+    return { type, est, se, df, low: lo, high: hi, sd: sdS, t0, p0: pT(t0, df), tLo, pLo, tHi, pHi, p, alpha, equivalent: p < alpha,
+      ci: [est - tq * se, est + tq * se], dEst: est / sdS };
+  }
+
   // ---------- análisis factorial confirmatorio (ML), como lavaan::cfa ----------
   // X: n × p (casos completos); factores: lista de listas de índices de columna (cada ítem en un solo factor; el primero, marcador = 1)
   function ncChisqCdf(x, df, ncp) { // ji-cuadrado no central (mezcla de Poisson)
@@ -1570,6 +1817,86 @@
     for (let j = j0; j < j0 + 2000; j++) { const t = term(j); s += t; if (t < 1e-14 && j > j0 + 10) break; }
     for (let j = j0 - 1; j >= 0; j--) { const t = term(j); s += t; if (t < 1e-14) break; }
     return s;
+  }
+  // AFC multigrupo con estructura de medias (como lavaan::cfa(group =, group.equal =), ML con la información esperada).
+  // Xg: casos completos de cada grupo; factores: índices de los ítems de cada factor (el primero, marcador con carga 1).
+  // level: 'configural' | 'metric' (cargas iguales) | 'scalar' (+ interceptos; medias latentes libres desde el 2.º grupo) | 'strict' (+ varianzas residuales)
+  function cfaMG(Xg, factores, level = 'configural') {
+    const G = Xg.length, p = Xg[0][0].length, m = factores.length, ng = Xg.map(X => X.length), N = sum(ng), L_ = ['configural', 'metric', 'scalar', 'strict'].indexOf(level);
+    const mom = Xg.map(X => { const mu = Array.from({ length: p }, (_, j) => mean(X.map(r => r[j])));
+      return { mu, S: Array.from({ length: p }, (_, a) => Array.from({ length: p }, (_, b) => sum(X.map(r => (r[a] - mu[a]) * (r[b] - mu[b]))) / X.length)) }; });
+    const key = new Map(), P = [], idx = k => { if (!key.has(k)) { key.set(k, P.length); P.push(k); } return key.get(k); };
+    const spec = Xg.map((_, g) => {
+      const lam = [], phi = [], psi = [], nu = [], al = [];
+      factores.forEach((it, k) => it.slice(1).forEach(j => lam.push({ j, k, i: idx(L_ >= 1 ? `l:${j}:${k}` : `l:${j}:${k}:${g}`) })));
+      for (let k = 0; k < m; k++) for (let l = 0; l <= k; l++) phi.push({ k, l, i: idx(`f:${k}:${l}:${g}`) });
+      for (let j = 0; j < p; j++) psi.push({ j, i: idx(L_ >= 3 ? `u:${j}` : `u:${j}:${g}`) });
+      for (let j = 0; j < p; j++) nu.push({ j, i: idx(L_ >= 2 ? `n:${j}` : `n:${j}:${g}`) });
+      if (L_ >= 2 && g > 0) for (let k = 0; k < m; k++) al.push({ k, i: idx(`a:${k}:${g}`) });
+      return { lam, phi, psi, nu, al }; });
+    const build = (th, g) => { const s = spec[g], L = Array.from({ length: p }, () => new Array(m).fill(0)), Phi = Array.from({ length: m }, () => new Array(m).fill(0)), Psi = new Array(p).fill(0), nu = new Array(p).fill(0), al = new Array(m).fill(0);
+      factores.forEach((it, k) => { L[it[0]][k] = 1; });
+      s.lam.forEach(q => { L[q.j][q.k] = th[q.i]; }); s.phi.forEach(q => { Phi[q.k][q.l] = Phi[q.l][q.k] = th[q.i]; }); s.psi.forEach(q => { Psi[q.j] = th[q.i]; }); s.nu.forEach(q => { nu[q.j] = th[q.i]; }); s.al.forEach(q => { al[q.k] = th[q.i]; });
+      const Sig = matMul(matMul(L, Phi), tr(L)).map((r, a) => r.map((v, b) => v + (a === b ? Psi[a] : 0))), mu = nu.map((v, j) => v + sum(L[j].map((x, k) => x * al[k])));
+      return { L, Phi, Psi, nu, al, Sig, mu }; };
+    const logdetPD = A => { const n = A.length, Lc = Array.from({ length: n }, () => new Array(n).fill(0)); let ld = 0;
+      for (let i = 0; i < n; i++) for (let j = 0; j <= i; j++) { let s = A[i][j]; for (let k = 0; k < j; k++) s -= Lc[i][k] * Lc[j][k];
+        if (i === j) { if (!(s > 1e-12)) return null; Lc[i][i] = Math.sqrt(s); ld += 2 * Math.log(Lc[i][i]); } else Lc[i][j] = s / Lc[j][j]; }
+      return ld; };
+    const ldS = mom.map(o => Math.log(det(o.S)));
+    const Fg = (B, g) => { const ld = logdetPD(B.Sig); if (ld === null) return null; const Si = inv(B.Sig); if (!Si) return null; const { S, mu } = mom[g], e = mu.map((v, j) => v - B.mu[j]);
+      return ld + sum(S.map((r, a) => sum(r.map((v, b) => v * Si[b][a])))) + sum(e.map((x, a) => x * sum(e.map((y, b) => Si[a][b] * y)))) - ldS[g] - p; };
+    const F = th => { let t = 0; for (let g = 0; g < G; g++) { const v = Fg(build(th, g), g); if (v === null) return 1e10; t += ng[g] / N * v; } return t; };
+    const grad = th => { const gr = new Array(P.length).fill(0);
+      for (let g = 0; g < G; g++) { const B = build(th, g), Si = inv(B.Sig), { S, mu } = mom[g], e = mu.map((v, j) => v - B.mu[j]), w = ng[g] / N;
+        const Se = S.map((r, a) => r.map((v, b) => v + e[a] * e[b])), Om = matMul(matMul(Si, Se.map((r, a) => r.map((v, b) => B.Sig[a][b] - v))), Si);   // Σ⁻¹ (Σ − S − ee') Σ⁻¹
+        const gm = Si.map(r => -2 * sum(r.map((v, b) => v * e[b]))), OL = matMul(Om, B.L), LOL = matMul(tr(B.L), OL), OLP = matMul(OL, B.Phi), s = spec[g];
+        s.lam.forEach(q => { gr[q.i] += w * (2 * OLP[q.j][q.k] + gm[q.j] * B.al[q.k]); });
+        s.phi.forEach(q => { gr[q.i] += w * (q.k === q.l ? LOL[q.k][q.k] : 2 * LOL[q.k][q.l]); });
+        s.psi.forEach(q => { gr[q.i] += w * Om[q.j][q.j]; }); s.nu.forEach(q => { gr[q.i] += w * gm[q.j]; });
+        s.al.forEach(q => { gr[q.i] += w * sum(B.L.map((r, j) => r[q.k] * gm[j])); }); }
+      return gr; };
+    // valores iniciales (promedio entre grupos de los parámetros comunes)
+    const acc = P.map(() => [0, 0]), put = (i, v) => { acc[i][0] += v; acc[i][1]++; };
+    spec.forEach((s, g) => { const { S, mu } = mom[g];
+      s.lam.forEach(q => { const mk = factores[q.k][0]; put(q.i, S[q.j][mk] / Math.max(S[mk][mk] / 2, 1e-6)); });
+      s.phi.forEach(q => { const mk = factores[q.k][0]; put(q.i, q.k === q.l ? S[mk][mk] / 2 : 0); });
+      s.psi.forEach(q => put(q.i, S[q.j][q.j] / 2)); s.nu.forEach(q => put(q.i, mu[q.j])); s.al.forEach(q => put(q.i, 0)); });
+    let th = acc.map(([a, n]) => a / n), f0 = F(th), g = grad(th), Hn = ident(P.length), conv = false, it = 0, fresh = true;
+    for (; it < 5000; it++) {
+      const d = Hn.map(r => -sum(r.map((v, k) => v * g[k]))); let a = 1, th1, f1;
+      const slope = sum(d.map((v, k) => v * g[k])); if (slope >= 0) { Hn = ident(P.length); continue; }
+      let ok = false;
+      for (let k = 0; k < 60; k++) { th1 = th.map((v, i) => v + a * d[i]); f1 = F(th1); if (f1 <= f0 + 1e-4 * a * slope) { ok = true; break; } a /= 2; }
+      if (!ok) { if (fresh) { conv = maxOf(g.map(Math.abs)) < 1e-6; break; } Hn = ident(P.length); fresh = true; continue; }
+      fresh = false;
+      const g1 = grad(th1), s = th1.map((v, i) => v - th[i]), yv = g1.map((v, i) => v - g[i]), sy = sum(s.map((v, i) => v * yv[i]));
+      if (sy > 1e-12) { const Hy = Hn.map(r => sum(r.map((v, k) => v * yv[k]))), yHy = sum(yv.map((v, i) => v * Hy[i]));
+        Hn = Hn.map((r, i) => r.map((v, j) => v + (sy + yHy) * s[i] * s[j] / (sy * sy) - (Hy[i] * s[j] + s[i] * Hy[j]) / sy)); }
+      const df_ = Math.abs(f0 - f1); th = th1; f0 = f1; g = g1;
+      if (maxOf(g.map(Math.abs)) < 1e-10 || (df_ < 1e-15 && maxOf(g.map(Math.abs)) < 1e-7)) { conv = true; break; }
+    }
+    // errores típicos con la información esperada: Σ_g n_g [½ tr(Σ⁻¹ ∂Σ_a Σ⁻¹ ∂Σ_b) + ∂μ_a' Σ⁻¹ ∂μ_b]
+    const Bs = Xg.map((_, gg) => build(th, gg)), Sis = Bs.map(B => inv(B.Sig));
+    const der = P.map((_, i) => { const h = 1e-6 * Math.max(1, Math.abs(th[i])), a = th.slice(), b = th.slice(); a[i] += h; b[i] -= h;
+      return Xg.map((__, gg) => { const A = build(a, gg), Bm = build(b, gg); return { dS: A.Sig.map((r, x) => r.map((v, y) => (v - Bm.Sig[x][y]) / (2 * h))), dm: A.mu.map((v, x) => (v - Bm.mu[x]) / (2 * h)) }; }); });
+    const I = P.map(() => new Array(P.length).fill(0));
+    for (let gg = 0; gg < G; gg++) { const Si = Sis[gg], SdS = der.map(D => matMul(Si, D[gg].dS)), Sdm = der.map(D => Si.map(r => sum(r.map((v, y) => v * D[gg].dm[y]))));
+      for (let a = 0; a < P.length; a++) for (let b = a; b < P.length; b++) { const v = ng[gg] * (.5 * sum(SdS[a].map((r, x) => sum(r.map((q, y) => q * SdS[b][y][x])))) + sum(der[a][gg].dm.map((q, x) => q * Sdm[b][x]))); I[a][b] += v; if (b !== a) I[b][a] += v; } }
+    const Ii = inv(I), se = Ii ? Ii.map((r, i) => Math.sqrt(r[i])) : P.map(() => NaN);
+    const chi = N * f0, df = G * (p * (p + 1) / 2 + p) - P.length, pval = df > 0 ? pChi(chi, df) : NaN;
+    const chiB = sum(mom.map((o, gg) => ng[gg] * (sum(o.S.map((r, i) => Math.log(r[i]))) - ldS[gg]))), dfB = G * p * (p - 1) / 2;
+    const cfi = 1 - Math.max(chi - df, 0) / Math.max(chiB - dfB, chi - df, 1e-12), tli = df > 0 ? ((chiB / dfB) - (chi / df)) / ((chiB / dfB) - 1) : NaN;
+    const rm = l => Math.sqrt(Math.max(0, l / (N * df))) * Math.sqrt(G), rmsea = df > 0 ? rm(chi - df) : NaN;
+    const ncpAt = target => { if (ncChisqCdf(chi, df, 0) < target) return 0; let lo = 0, hi = Math.max(10, chi * 4); while (ncChisqCdf(chi, df, hi) > target) hi *= 2;
+      for (let k = 0; k < 200; k++) { const md = (lo + hi) / 2; if (ncChisqCdf(chi, df, md) > target) lo = md; else hi = md; } return (lo + hi) / 2; };
+    const rmseaCI = df > 0 ? [rm(ncpAt(.95)), rm(ncpAt(.05))] : [NaN, NaN];
+    // SRMR (Bentler, con las medias) en cada grupo, combinado con los pesos n_g/N
+    const srmrG = mom.map((o, gg) => { const B = Bs[gg]; let s2 = 0, k = 0;
+      for (let a = 0; a < p; a++) { for (let b = 0; b <= a; b++) { s2 += ((o.S[a][b] - B.Sig[a][b]) / Math.sqrt(o.S[a][a] * o.S[b][b])) ** 2; k++; } s2 += ((o.mu[a] - B.mu[a]) / Math.sqrt(o.S[a][a])) ** 2; k++; }
+      return Math.sqrt(s2 / k); });
+    const srmr = sum(srmrG.map((v, gg) => v * ng[gg] / N));
+    return { level, chi, df, p: pval, cfi, tli, rmsea, rmseaCI, srmr, srmrG, npar: P.length, N, ng, converged: conv, iterations: it, params: P.map((k, i) => ({ key: k, est: th[i], se: se[i] })), groups: Bs };
   }
   function cfa(X, factores) {
     const N = X.length, p = X[0].length, m = factores.length, cm = Array.from({ length: p }, (_, j) => mean(X.map(r => r[j])));
@@ -1643,7 +1970,7 @@
       heywood: B.Psi.map((v, j) => v < 0 ? j : -1).filter(j => j >= 0) };
   }
 
-  root.TharpStats = { manova, boxM, brantTest, glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
+  root.TharpStats = { cfaMG, stepwisePH, smmCdf, kde, emNorm, littleMCAR, effectSize, rmaFit, tau2CI, meta, kaplanMeier, logrank, cox, countReg, digamma, trigamma, tost, manova, boxM, brantTest, glmFactorial, multinomial, ordinalLogit, pseudoR2, roc, lilliefors, seSkew, seKurt, cronbach, logistic, anova2, sum, mean, variance, sd, median, quantile, sorted, skewness, kurtosis, ranks, describe, meanCI, holm,
     shapiro, anova, levene, welchAnova, tTestInd, mannWhitney, kruskal, dunn, tukeyHSD, gamesHowell, pairwiseHolm, hasTukey, posthocMethod, dunnett, dunnettProb, contrasts, contrastWeights, brownForsythe,
     tTestPaired, tTestOne, wilcoxonOne, wilcoxonSigned, rmAnova, mixedAnova, rmFactorial, friedman, friedmanPosthoc, signTest, medianTest, ks2, jonckheere, runsTest, ancova, mcnemar, cochranQ, binomTwoSided, binomTest, chiGOF, pncf, power, sampleSize, icc, cohenKappa, fleissKappa, kendallW, krippAlpha, blandAltman, efa, fitUniq, promax, geomin, gpOrth, parallelAnalysis, omegaTotal, kmoBartlett, corMatrix, eigSym, moderation, mediation, processModel, lmm, nelderMead, cfa, ncChisqCdf, pearson, spearman, kendall, corrCI, partialCorr, fisher2x2, chiSquare, risk2x2, ordinalAssoc, fisherRxC, mantelHaenszel, ols, olsCore, tcrit, pT, pF, pnct, ncpCI };
 })(typeof window !== 'undefined' ? window : this);

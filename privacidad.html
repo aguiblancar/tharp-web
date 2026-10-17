@@ -6,30 +6,36 @@
 <title>Política de privacidad · Tharp</title>
 <meta name="description" content="Cómo trata Tharp tus datos: el análisis se hace en tu navegador, no se suben archivos y no hay cookies.">
 <link rel="canonical" href="https://tharp.es/privacidad.html">
-<link rel="icon" href="img/favicon-32.png" sizes="32x32" type="image/png"><link rel="icon" href="img/favicon-64.png" sizes="64x64" type="image/png">
+<meta name="theme-color" content="#0b2230">
+<link rel="icon" href="img/favicon-32.png" sizes="32x32" type="image/png"><meta name="theme-color" content="#0b2230">
+<link rel="icon" href="img/favicon-64.png" sizes="64x64" type="image/png">
 <script>/* ?no-contar excluye este navegador de las estadísticas (Umami); ?contar lo vuelve a incluir */try{var q=location.search;if(/[?&]no-contar(&|=|$)/.test(q)){localStorage.setItem("umami.disabled","1");alert("Listo: las visitas desde este navegador ya no se cuentan en las estadísticas.")}else if(/[?&]contar(&|=|$)/.test(q)){localStorage.removeItem("umami.disabled");alert("Las visitas desde este navegador vuelven a contarse.")}}catch(e){}</script>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
-<link rel="stylesheet" href="fonts.css">
-<style>
-body{margin:0;font-family:Inter,system-ui,sans-serif;background:#f6f3ec;color:#14202b;line-height:1.65}
-header{background:#07131f;padding:18px 0}
-.wrap{max-width:780px;margin:0 auto;padding:0 20px}
-.logo{display:inline-flex;align-items:center;gap:10px;color:#fff;text-decoration:none;font-family:Fraunces,serif;font-size:1.35rem;font-weight:650}
-.logo img{width:32px;height:32px}
-main{padding:48px 0 80px}
-h1,h2{font-family:Fraunces,Georgia,serif;font-weight:650;line-height:1.2}
-h1{font-size:2.2rem;margin:0 0 6px}
-h2{font-size:1.3rem;margin:34px 0 8px}
-.muted{color:#566676}
-a{color:#1d6f8f}
-</style>
+<link rel="stylesheet" href="fuentes.css">
+<link rel="stylesheet" href="tharp.css">
 </head>
 <body>
-<header><div class="wrap"><a class="logo" href="./"><img src="img/logo-144.png" alt="">Tharp</a></div></header>
-<main class="wrap">
-  <h1>Política de privacidad</h1>
-  <p class="muted">Última actualización: 14 de octubre de 2026</p>
+<div class="dark">
+<nav aria-label="Principal">
+  <div class="wrap">
+    <a href="./" class="brand" aria-label="Tharp, inicio"><img src="img/logo-144.png" alt="" width="32" height="32">Tharp</a>
+    <div class="navlinks">
+      <a href="./#como">Cómo funciona</a>
+      <a href="validacion.html">Validación</a>
+      <a href="app.html" class="btn btn-ping">Analizar mis datos</a>
+    </div>
+  </div>
+</nav>
+<header class="page-hd">
+  <div class="wrap">
+    <div class="k">Última actualización: 17 de octubre de 2026</div>
+    <h1>Política de <em>privacidad.</em></h1>
+    <p>Tharp está diseñado para no necesitar tus datos: los archivos que analizas no salen de tu ordenador.</p>
+  </div>
+</header>
+</div>
 
+<main class="wrap prose">
   <h2>En resumen</h2>
   <p>Tharp está diseñado para no necesitar tus datos. Los archivos que analizas se procesan en tu navegador y no se envían a ningún servidor. La web no usa cookies; solo contamos las visitas y el uso de forma anónima y agregada.</p>
 
@@ -41,7 +47,7 @@ a{color:#1d6f8f}
 
   <h2>Navegación por la web</h2>
   <p>La web no instala cookies ni utiliza almacenamiento local ni píxeles de seguimiento. Las fuentes tipográficas y las librerías se sirven desde el propio dominio.</p>
-  <p><b>Estadísticas de uso.</b> Para saber cuántas personas usan Tharp y qué funciones son útiles, usamos <a href="https://umami.is/privacy" rel="noopener">Umami</a> (Umami Software, servidores en la Unión Europea), una herramienta de analítica sin cookies que no recoge datos personales ni permite identificar a nadie: registra de forma agregada las páginas visitadas, el país, el tipo de dispositivo y navegador, la web de procedencia y algunos usos de la aplicación (por ejemplo, el formato de archivo cargado —Excel, CSV, SPSS…—, el tipo de prueba ejecutada, el tipo de cálculo de potencia, que se ha descargado un informe o que se ha copiado la cita de Tharp). <b>Nunca registra el contenido de tus archivos, los nombres de tus variables ni tus resultados.</b> La base jurídica es nuestro interés legítimo en conocer el uso agregado del servicio para mejorarlo.</p>
+  <p><b>Estadísticas de uso.</b> Para saber cuántas personas usan Tharp y qué funciones son útiles, usamos <a href="https://umami.is/privacy" rel="noopener">Umami</a> (Umami Software, servidores en la Unión Europea), una herramienta de analítica sin cookies que no recoge datos personales ni permite identificar a nadie: registra de forma agregada las páginas visitadas, el país, el tipo de dispositivo y navegador, la web de procedencia y algunos usos de la aplicación (por ejemplo, el formato de archivo cargado —Excel, CSV, SPSS…—, el tipo de prueba ejecutada, el tipo de cálculo de potencia, que se ha descargado un informe o que se ha copiado la cita de Tharp) y qué botones de la portada se pulsan (por ejemplo, «Ver un análisis de ejemplo»). <b>Nunca registra el contenido de tus archivos, los nombres de tus variables ni tus resultados.</b> La base jurídica es nuestro interés legítimo en conocer el uso agregado del servicio para mejorarlo.</p>
   <p>La web está alojada en GitHub Pages (GitHub, Inc.). Como cualquier servidor web, GitHub puede registrar datos técnicos de la conexión, como la dirección IP, para garantizar la seguridad y el funcionamiento del servicio. Puedes consultar la <a href="https://docs.github.com/es/site-policy/privacy-policies/github-general-privacy-statement" rel="noopener">declaración de privacidad de GitHub</a>.</p>
 
   <h2>Si nos escribes</h2>
@@ -55,5 +61,12 @@ a{color:#1d6f8f}
 
   <p style="margin-top:40px"><a href="./">← Volver a Tharp</a></p>
 </main>
+
+<footer class="dark" style="padding-top:0">
+  <div class="wrap">
+    <div><i lang="en">From question to evidence.</i> · © 2026 Blanca Agüí Ruiz (<a href="https://orcid.org/0009-0002-3982-2565" rel="noopener">ORCID</a>). Todos los derechos reservados.</div>
+    <div><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/" rel="noopener">Instagram</a> · <a href="validacion.html">Validación</a> · Sin cookies</div>
+  </div>
+</footer>
 </body>
 </html>

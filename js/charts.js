@@ -6,7 +6,7 @@
   const maxOf = a => { let m = -Infinity; for (const v of a) { if (v !== v) return NaN; if (v > m) m = v; } return m; };
   const COL = { s: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'],
     axis: '#52514e', grid: '#e8e6e0', text: '#14202b', point: '#9aa6b1', surface: '#ffffff' };
-  const FONT = "Inter, system-ui, -apple-system, Segoe UI, sans-serif";
+  const FONT = "Instrument Sans, system-ui, -apple-system, Segoe UI, sans-serif";
   const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   function niceStep(span, count) {
@@ -173,6 +173,49 @@
     return s + '</svg>';
   }
 
+  // bosque de un metaanálisis: efecto e IC de cada estudio (cuadrado proporcional al peso), diamante del efecto combinado e intervalo de predicción.
+  // Los valores van en la escala de análisis (log OR, z de Fisher…); back transforma las etiquetas del eje a la escala original
+  // marcas del eje en valores redondos de la escala original: 0.1, 0.2, 0.5, 1, 2, 5… para log ('log') y r redondas para z de Fisher ('tanh')
+  function scaleTicks(min, max, kind) {
+    if (kind === 'log') {
+      const e0 = Math.floor(Math.log10(Math.exp(min))) - 1, e1 = Math.ceil(Math.log10(Math.exp(max))) + 1;
+      const pick = mults => { const c = []; for (let e = e0; e <= e1; e++) mults.forEach(k => c.push(Math.log(k * 10 ** e))); const ins = c.filter(v => v >= min - 1e-12 && v <= max + 1e-12);
+        const below = c.filter(v => v < min - 1e-12), above = c.filter(v => v > max + 1e-12); return (below.length ? [below[below.length - 1]] : []).concat(ins, above.length ? [above[0]] : []); };
+      const t = pick([1, 2, 5]); return t.length <= 9 ? t : pick([1]);
+    }
+    if (kind === 'tanh') return ticks(Math.tanh(min), Math.tanh(max), 6).map(r => Math.atanh(Math.max(-.99, Math.min(.99, r)))).filter((v, i, a) => i === 0 || v > a[i - 1]);
+    return ticks(min, max, 6);
+  }
+  function metaForest(rows, pooled, xlabel, back = v => v, ref = 0, kind = '') {
+    const rowH = 24, m = { l: 190, r: 150, t: 14, b: 44 }, W = 700, H = m.t + m.b + rowH * (rows.length + 2), pw = W - m.l - m.r;
+    const all = rows.flatMap(r => [r.lo, r.hi]).concat([pooled.lo, pooled.hi]).concat(isFinite(pooled.pi[0]) ? pooled.pi : []), xt = scaleTicks(Math.min(ref, minOf(all)), Math.max(ref, maxOf(all)), kind);
+    const sx = v => m.l + (v - xt[0]) / (xt[xt.length - 1] - xt[0]) * pw, wmax = maxOf(rows.map(r => r.w)), fb = v => { const b = back(v); return Math.abs(b) >= 100 ? b.toFixed(0) : b.toFixed(2); };
+    let s = svgOpen(W, H, 'Gráfico de bosque del metaanálisis');
+    xt.forEach(v => { s += `<line x1="${sx(v)}" x2="${sx(v)}" y1="${m.t}" y2="${H - m.b}" stroke="${Math.abs(v - ref) < 1e-12 ? COL.axis : COL.grid}"${Math.abs(v - ref) < 1e-12 ? ' stroke-dasharray="4 4"' : ''}/><text x="${sx(v)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${esc(fmt(+back(v).toPrecision(6)))}</text>`; });
+    rows.forEach((r, i) => { const y = m.t + i * rowH + rowH / 2, h = 4 + 8 * Math.sqrt(r.w / wmax);
+      s += `<text x="${m.l - 10}" y="${y + 4}" text-anchor="end" fill="${COL.text}">${esc(trunc(r.label, 28))}</text><text x="${W - m.r + 8}" y="${y + 4}" fill="${COL.text}" font-size="11">${fb(r.y)} [${fb(r.lo)}, ${fb(r.hi)}]</text>`;
+      s += `<g><title>${esc(r.label)}: ${fb(r.y)} [${fb(r.lo)}, ${fb(r.hi)}]; peso ${r.w.toFixed(1)} %</title><line x1="${sx(r.lo)}" x2="${sx(r.hi)}" y1="${y}" y2="${y}" stroke="${COL.text}" stroke-width="1.5"/><rect x="${sx(r.y) - h / 2}" y="${y - h / 2}" width="${h}" height="${h}" fill="${COL.s[0]}"/></g>`; });
+    const yp = m.t + (rows.length + .8) * rowH;
+    if (isFinite(pooled.pi[0])) s += `<line x1="${sx(pooled.pi[0])}" x2="${sx(pooled.pi[1])}" y1="${yp}" y2="${yp}" stroke="${COL.s[1]}" stroke-width="2"><title>Intervalo de predicción</title></line>`;
+    s += `<path d="M${sx(pooled.lo)},${yp} L${sx(pooled.y)},${yp - 7} L${sx(pooled.hi)},${yp} L${sx(pooled.y)},${yp + 7} Z" fill="${COL.s[1]}"><title>Efecto combinado</title></path>`;
+    s += `<text x="${m.l - 10}" y="${yp + 4}" text-anchor="end" fill="${COL.text}" font-weight="600">Combinado</text><text x="${W - m.r + 8}" y="${yp + 4}" fill="${COL.text}" font-size="11" font-weight="600">${fb(pooled.y)} [${fb(pooled.lo)}, ${fb(pooled.hi)}]</text>`;
+    s += `<text x="${m.l + pw / 2}" y="${H - 6}" text-anchor="middle" fill="${COL.axis}">${esc(xlabel)}</text>`;
+    return s + '</svg>';
+  }
+  // embudo: efecto de cada estudio frente a su error típico (eje invertido) con las líneas del efecto combinado ± 1.96 EE
+  function funnel(y, se, est, xlabel) {
+    const W = 380, H = 280, m = { l: 50, r: 14, t: 12, b: 42 }, pw = W - m.l - m.r, ph = H - m.t - m.b, smax = maxOf(se) * 1.05;
+    const xt = ticks(Math.min(minOf(y), est - 1.96 * smax), Math.max(maxOf(y), est + 1.96 * smax), 5), yt = ticks(0, smax, 4);
+    const sx = v => m.l + (v - xt[0]) / (xt[xt.length - 1] - xt[0]) * pw, sy = v => m.t + v / yt[yt.length - 1] * ph;
+    let s = svgOpen(W, H, 'Gráfico de embudo') + yAxis(yt, sy, m.l, W - m.r);
+    xt.forEach(v => { s += `<text x="${sx(v)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${fmt(v)}</text>`; });
+    const S = yt[yt.length - 1];
+    s += `<path d="M${sx(est - 1.96 * S)},${sy(S)} L${sx(est)},${sy(0)} L${sx(est + 1.96 * S)},${sy(S)}" fill="none" stroke="${COL.axis}" stroke-dasharray="4 3"/><line x1="${sx(est)}" x2="${sx(est)}" y1="${sy(0)}" y2="${sy(S)}" stroke="${COL.s[1]}"/>`;
+    y.forEach((v, i) => { s += `<circle cx="${sx(v)}" cy="${sy(se[i])}" r="4" fill="${COL.s[0]}" fill-opacity=".75"/>`; });
+    s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(xlabel, 40))}</text><text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" fill="${COL.axis}">Error típico</text>`;
+    return s + '</svg>';
+  }
+
   // gráfico de sedimentación: autovalores observados frente al percentil 95 del análisis paralelo
   function scree(obs, ref) {
     const W = 640, H = 320, m = { l: 48, r: 16, t: 16, b: 44 }, pw = W - m.l - m.r, ph = H - m.t - m.b, k = obs.length;
@@ -215,6 +258,29 @@
     s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(label, 40))}</text>`;
     return s + '</svg>';
   }
+  // nube de lluvia (raincloud) o violín por grupo: densidad, caja estrecha (Q1, mediana, Q3) y, en la nube, los puntos individuales
+  function raincloud(groups, label, kind = 'rain') {
+    const st = groups.filter(g => g.x.length >= 2).map(g => ({ name: g.name, x: g.x, k: root.TharpStats.kde(g.x) })); if (!st.length) return '';
+    const all = st.flatMap(g => g.x), yt = ticks(minOf(all), maxOf(all), 5), y0 = yt[0], y1 = yt[yt.length - 1];
+    const W = Math.max(300, 70 + st.length * 110), H = 280, m = { l: 46, r: 12, t: 12, b: 40 }, pw = W - m.l - m.r, ph = H - m.t - m.b, sy = v => m.t + ph - (v - y0) / (y1 - y0) * ph, bw = pw / st.length;
+    const dmax = Math.max(...st.map(g => Math.max(...g.k.pts.map(p => p[1])))), MAXP = 800;
+    let s = svgOpen(W, H, (kind === 'rain' ? 'Gráfico de nube de lluvia de ' : 'Gráfico de violín de ') + label) + yAxis(yt, sy, m.l, W - m.r);
+    st.forEach((g, i) => {
+      const col = COL.s[i % COL.s.length], half = Math.min(bw * .42, 60), cx = kind === 'rain' ? m.l + bw * i + bw * .42 : m.l + bw * (i + .5), sc = d => d / dmax * half;
+      const P = g.k.pts, right = P.map(([y, d]) => `${kind === 'rain' ? cx - sc(d) : cx + sc(d)},${sy(y)}`);
+      const path = kind === 'rain' ? `M${cx},${sy(P[0][0])} L${right.join(' L')} L${cx},${sy(P[P.length - 1][0])} Z`
+        : `M${right.join(' L')} L${P.slice().reverse().map(([y, d]) => `${cx - sc(d)},${sy(y)}`).join(' L')} Z`;
+      s += `<path d="${path}" fill="${col}" fill-opacity=".28" stroke="${col}" stroke-width="1.2"><title>${esc(g.name)}: densidad (ancho de banda ${fmt(g.k.bw)}; n = ${g.k.n})</title></path>`;
+      const bx = kind === 'rain' ? cx + 8 : cx, w = 9;
+      s += `<rect x="${bx - w / 2}" y="${sy(g.k.q3)}" width="${w}" height="${Math.max(1, sy(g.k.q1) - sy(g.k.q3))}" fill="${COL.surface}" stroke="${COL.text}"><title>${esc(g.name)}: Q1 = ${fmt(g.k.q1)}, Mdn = ${fmt(g.k.md)}, Q3 = ${fmt(g.k.q3)}</title></rect><line x1="${bx - w / 2}" x2="${bx + w / 2}" y1="${sy(g.k.md)}" y2="${sy(g.k.md)}" stroke="${COL.text}" stroke-width="2"/>`;
+      if (kind === 'rain') { const step = Math.max(1, Math.ceil(g.x.length / MAXP)), x0 = cx + 18, spread = Math.max(10, Math.min(bw * .4, 50));
+        g.x.forEach((v, j) => { if (j % step) return; const h = Math.sin((j + 1) * 12.9898 + i * 78.233) * 43758.5453, jit = h - Math.floor(h);
+          s += `<circle cx="${(x0 + jit * spread).toFixed(1)}" cy="${sy(v).toFixed(1)}" r="2.2" fill="${col}" fill-opacity=".55"/>`; }); }
+      if (st.length > 1) s += `<text x="${m.l + bw * (i + .5)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(g.name, 14))}</text>`;
+    });
+    s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(label, 40))}</text>`;
+    return s + '</svg>';
+  }
   // gráfico Q-Q normal: cuantiles observados frente a los teóricos (posiciones de Blom, como qqnorm de R con n > 10)
   function qqplot(values, label, ninv) {
     const s = values.slice().sort((a, b) => a - b), n = s.length, a = n <= 10 ? 3 / 8 : .5, th = s.map((_, i) => ninv((i + 1 - a) / (n + 1 - 2 * a)));
@@ -241,6 +307,20 @@
     s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">1 − especificidad</text><text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" fill="${COL.axis}">Sensibilidad</text>`;
     return s + '</svg>';
   }
+  // curvas de Kaplan-Meier: escalones de S(t) desde 1 y una marca (+) en cada tiempo censurado
+  function kmCurve(curves, xlabel) {
+    const W = 420, H = 270, m = { l: 46, r: 14, t: 12, b: 42 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+    const tmax = maxOf(curves.map(c => maxOf(c.times.concat([0])))), xt = ticks(0, tmax || 1, 5), sx = v => m.l + v / xt[xt.length - 1] * pw, sy = v => m.t + (1 - v) * ph, yt = [0, .25, .5, .75, 1];
+    let s = svgOpen(W, H, 'Curvas de supervivencia de Kaplan-Meier') + yAxis(yt, sy, m.l, W - m.r);
+    xt.forEach(v => { s += `<text x="${sx(v)}" y="${H - m.b + 16}" text-anchor="middle" fill="${COL.axis}">${fmt(v)}</text>`; });
+    curves.forEach((c, i) => { const col = COL.s[i % COL.s.length]; let d = `M${sx(0).toFixed(1)},${sy(1).toFixed(1)}`, S = 1;
+      c.rows.forEach(r => { d += ` H${sx(r.t).toFixed(1)} V${sy(r.surv).toFixed(1)}`; S = r.surv; }); d += ` H${sx(maxOf(c.times)).toFixed(1)}`;
+      s += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2"><title>${esc(c.name)}</title></path>`;
+      c.cens.forEach(t => { const k = c.rows.filter(r => r.t <= t), y = k.length ? k[k.length - 1].surv : 1;
+        s += `<path d="M${(sx(t) - 3).toFixed(1)},${sy(y).toFixed(1)} h6 M${sx(t).toFixed(1)},${(sy(y) - 3).toFixed(1)} v6" stroke="${col}" stroke-width="1.3"/>`; }); });
+    s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(xlabel, 40))}</text><text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle" fill="${COL.axis}">Supervivencia</text>`;
+    return s + '</svg>';
+  }
   // gráfico de Bland-Altman: media de las dos medidas frente a su diferencia, con el sesgo y los límites de acuerdo
   function blandAltmanPlot(mean, diff, bias, lo, hi, labX) {
     const W = 400, H = 250, m = { l: 46, r: 108, t: 12, b: 40 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
@@ -254,5 +334,5 @@
     s += `<text x="${m.l + pw / 2}" y="${H - 4}" text-anchor="middle" fill="${COL.axis}">${esc(trunc(labX, 40))}</text>`;
     return s + '</svg>';
   }
-  root.TharpCharts = { pathDiagram, scree, histogram, boxplot, qqplot, rocCurve, blandAltmanPlot, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
+  root.TharpCharts = { raincloud, metaForest, funnel, kmCurve, pathDiagram, scree, histogram, boxplot, qqplot, rocCurve, blandAltmanPlot, barsCat, meansCI, groupedBars, scatter, interaction, forest, legend, COL, esc };
 })(window);
