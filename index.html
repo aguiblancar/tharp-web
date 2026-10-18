@@ -36,459 +36,597 @@
  ]}
 ]}
 </script>
-<link rel="stylesheet" href="tharp.css">
+<style>
+:root{
+  --deep:#0b2230; --deep-2:#11313f; --deep-3:#1a4252; --paper:#ffffff; --mist:#eef4f3; --mist-2:#dfeae8;
+  --ink:#13212b; --soft:#4a5c66; --on-deep:#e6f0ef; --on-deep-soft:#a9c3c6; --amber:#f2b33d; --amber-soft:#fbe4b0; --ok:#17695f; --okbg:#e2f2ee; --ok-on-deep:#8fd3c4;
+  --sans:"Schibsted Grotesk",system-ui,sans-serif; --apa:"STIX Two Text","Times New Roman",serif;
+  --t-xs:.875rem; --t-small:.875rem; --t-apa:1.0625rem; --t-body:clamp(1.0625rem,1rem + .2vw,1.1875rem); --t-lead:clamp(1.2rem,1.05rem + .55vw,1.5rem);
+  --t-head:clamp(2rem,1.35rem + 2.2vw,3.25rem); --t-display:clamp(2.7rem,1.3rem + 3.6vw,4.6rem);
+  --m:clamp(16px,3.5vw,48px); --sec:clamp(96px,10vw,152px); --r:10px;
+  --ease:cubic-bezier(.16,1,.3,1);
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+.hero-grid>*,.decide>*,.ledger>*,.take>*,.finder-grid>*,.story-grid>*{min-width:0}
+html{scroll-behavior:smooth;scrollbar-color:var(--deep-3) var(--mist)}
+body{margin:0;background:var(--paper);color:var(--ink);font:400 var(--t-body)/1.55 var(--sans);-webkit-font-smoothing:antialiased;caret-color:var(--amber)}
+::selection{background:var(--amber-soft);color:var(--ink)}
+a{color:inherit;text-underline-offset:5px;text-decoration-thickness:2px}
+img{max-width:100%;display:block}
+h1,h2,h3{margin:0;font-weight:650;letter-spacing:-.025em;text-wrap:balance}
+p{margin:0}
+:focus-visible{outline:3px solid var(--amber);outline-offset:3px;border-radius:4px}
+.wrap{max-width:1320px;margin-inline:auto;padding-inline:var(--m)}
+.num{font-variant-numeric:tabular-nums lining-nums}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:48px;padding:12px 22px;border-radius:var(--r);font:650 var(--t-body)/1 var(--sans);text-decoration:none;border:0;cursor:pointer;transition:transform .18s var(--ease),background .18s}
+.btn:active{transform:scale(.97)}
+.btn.amber{background:var(--amber);color:var(--deep)} .btn.amber:hover{background:#f6c55f}
+.btn.ink{background:var(--deep);color:#fff} .btn.ink:hover{background:var(--deep-3)}
+.link{font-weight:650}
+svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- portada ---------- */
+.hero{background:var(--deep);color:var(--on-deep)}
+nav.top{display:flex;justify-content:space-between;align-items:center;gap:16px;padding-block:18px}
+.word{display:flex;align-items:center;gap:10px;font:700 var(--t-lead)/1 var(--sans);color:#fff;text-decoration:none;letter-spacing:-.02em}
+.word img{width:32px;height:32px;border-radius:50%}
+nav.top ul{display:flex;gap:26px;list-style:none;margin:0;padding:0;font-size:var(--t-small);font-weight:550}
+nav.top ul a{color:var(--on-deep-soft);text-decoration:none} nav.top ul a:hover{color:#fff;text-decoration:underline}
+@media(max-width:900px){nav.top ul{display:none}}
+.hero-grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(28px,4vw,64px);align-items:start;padding-block:clamp(16px,2.4vw,36px) clamp(56px,6vw,88px)}
+@media(max-width:1000px){.hero-grid{grid-template-columns:1fr}}
+.hero h1{font-size:var(--t-display);line-height:1;color:#fff;letter-spacing:-.035em}
+.hero h1 em{display:block;font-style:italic;color:var(--amber)}
+.hero .lead{margin-top:18px;font-size:var(--t-lead);line-height:1.4;max-width:32ch}
+.privacy{margin-top:14px;display:flex;gap:10px;align-items:flex-start;font-size:var(--t-small);color:var(--on-deep-soft);max-width:44ch}
+.privacy svg{margin-top:3px;color:var(--amber)}
+
+/* el instrumento: los datos como sondeos, la evidencia sobre papel */
+.inst{background:var(--deep-2);border-radius:16px;overflow:hidden;min-width:0;align-self:start}
+.inst-hd{display:grid;gap:4px;justify-items:start;padding:16px 22px 0;font-size:var(--t-small);color:var(--on-deep-soft)}
+.inst-hd b{color:var(--on-deep);font-weight:650}
+.inst-hd .st{display:inline-flex;gap:8px;align-items:baseline}
+.inst-hd button{font:650 var(--t-small)/1 var(--sans);background:none;border:0;padding:0;color:var(--on-deep);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.qsel{display:flex;flex-wrap:wrap;gap:6px;padding:12px 22px 0}
+.qsel button{font:600 var(--t-xs)/1.2 var(--sans);padding:7px 12px;border-radius:999px;border:0;background:var(--deep-3);color:var(--on-deep-soft);cursor:pointer;transition:background .18s,color .18s}
+.qsel button:hover{color:#fff}
+.qsel button[aria-pressed="true"]{background:var(--on-deep);color:var(--deep)}
+.sonar{position:relative;margin-top:2px;height:132px}
+.sonar svg{position:absolute;inset:0;width:100%;height:100%;display:block;overflow:visible}
+.leg{display:flex;flex-wrap:wrap;gap:4px 16px;padding:12px 22px 0;font-size:.8125rem;color:var(--on-deep-soft);min-height:1.5em}
+.leg i{display:inline-block;width:14px;height:2px;margin-right:6px;vertical-align:middle;background:currentColor}
+.sonar .cv{fill:none;stroke-width:1.8;vector-effect:non-scaling-stroke}
+.sonar .ar{stroke:none}
+.sonar .rug{stroke-width:1;vector-effect:non-scaling-stroke}
+.sonar .pt{opacity:.7}
+.sonar .fit{stroke:var(--on-deep);stroke-width:2;fill:none;vector-effect:non-scaling-stroke}
+.sonar .mk{stroke:var(--deep-3);stroke-width:1;stroke-dasharray:2 3;transition:stroke .3s}
+.sonar .mk.on{stroke:var(--on-deep-soft)}
+.sonar .mn{font:600 11px/1 var(--sans);fill:var(--on-deep-soft)}
+.sonar .scan{stroke:var(--amber);stroke-width:2;vector-effect:non-scaling-stroke}
+.chk{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--deep);margin-top:4px}
+.chk div{padding:10px 14px 12px;display:grid;gap:3px;min-width:0}
+.chk span{font-size:.8125rem;color:var(--on-deep-soft)}
+.chk b{font-size:var(--t-small);font-weight:650;color:var(--on-deep-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chk div.on b{color:#fff}
+.chk b svg{width:14px;height:14px;margin-right:5px;vertical-align:-2px;color:var(--ok-on-deep)}
+@media(max-width:560px){.chk{grid-template-columns:repeat(2,minmax(0,1fr))}.inst-hd,.qsel,.leg{padding-inline:16px}}
+.paper{background:var(--paper);color:var(--ink);padding:20px 22px 18px;min-height:268px}
+
+@media(max-width:560px){.paper{padding:16px}}
+.paper>*{transition:opacity .5s var(--ease),transform .5s var(--ease)}
+.js .paper:not(.on)>*{opacity:0;transform:translateY(6px)}
+.paper .tw{overflow-x:auto}
+.apa{width:100%;border-collapse:collapse;font:400 var(--t-apa)/1.3 var(--apa);font-variant-numeric:tabular-nums}
+.apa caption{text-align:left;padding:0 0 8px;font-family:var(--apa)}
+.apa caption b{display:block;font-weight:700}
+.apa th,.apa td{padding:4px 10px;text-align:right;font-weight:400;white-space:nowrap}
+.apa th:first-child,.apa td:first-child{text-align:left;padding-left:0;white-space:normal}
+.apa thead tr{border-top:1.5px solid var(--ink);border-bottom:1px solid var(--ink)}
+.apa tbody tr:last-child{border-bottom:1.5px solid var(--ink)}
+@media(max-width:560px){.apa th,.apa td{padding:3px 5px}}
+.apa td.key{transition:background .8s var(--ease)}
+.paper.end .apa td.key{background:rgba(242,179,61,.32)}
+.prose{margin-top:14px;font:400 var(--t-apa)/1.5 var(--apa);max-width:70ch}
+.prose mark{color:inherit;background:none;text-decoration:underline .42em;text-decoration-color:transparent;text-underline-offset:-.28em;text-decoration-skip-ink:none;transition:text-decoration-color 1s var(--ease) .2s}
+.paper.end .prose mark{text-decoration-color:rgba(242,179,61,.6)}
+@media(prefers-reduced-motion:reduce){.paper>*,.prose mark,.apa td.key,.chk b{transition:none}}
+
+.terms{margin-top:6px;padding-left:28px;font-size:var(--t-small);color:var(--on-deep-soft)}
+.hero-grid{padding-bottom:clamp(40px,4.5vw,64px)!important}
+
+
+/* variante «Perfil»: los datos son la imagen de la portada */
+.ph{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,6fr) minmax(0,5fr);gap:clamp(28px,4vw,72px);align-items:start;padding-block:clamp(12px,2vw,28px) 0;border-radius:18px;transition:background .2s}
+.ph.over{background:var(--deep-2)}
+@media(max-width:960px){.ph{grid-template-columns:1fr;align-items:start}}
+.hero h1{font-size:clamp(2.5rem,1.2rem + 3vw,3.75rem)}
+.hero .lead{max-width:36ch;font-size:var(--t-body);color:var(--on-deep-soft);line-height:1.5}
+.ph-act{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-top:26px}
+.ph-note{display:flex;gap:10px;align-items:flex-start;margin-top:16px;font-size:var(--t-small);color:var(--on-deep-soft);max-width:52ch}
+.ph-note svg{margin-top:3px;color:var(--amber)}
+.ph-res{min-width:0}
+.ph-res .inst-hd,.ph-res .qsel{padding-inline:0}
+.ph-res .inst-hd{padding-top:0}
+.ph-res .qsel{padding-bottom:12px}
+.ph-res .paper{border-radius:12px;min-height:226px;padding:16px 20px 14px}
+.ph-res .paper .apa{font-size:1rem}
+.ph-res .prose{font-size:1rem;margin-top:10px}
+.ph-res .js .ph-res .paper:not(.on){background:var(--paper)}
+.js .ph-res .paper:not(.on)>*{opacity:1;transform:none}
+.ph-res .paper td:not(:first-child),.ph-res .paper .prose{transition:opacity .45s var(--ease)}
+.js .ph-res .paper:not(.on) td:not(:first-child),.js .ph-res .paper:not(.on) .prose{opacity:0}
+.band{position:relative;margin-top:clamp(20px,2.4vw,32px);margin-inline:calc(-1 * var(--m))}
+@media(max-width:960px){.hero>.wrap{display:flex;flex-direction:column}.ph{display:contents}.ph-txt{order:1}.band{order:2;margin-top:22px}.ph-res{order:3;margin-top:22px}.readout{order:4}}
+.band .leg{padding:4px var(--m) 0}
+.band .sonar{height:clamp(160px,15vw,220px);margin-top:0;overflow:hidden}
+.band .sonar .cv{stroke-width:2.4}
+.band .chk{background:none;margin-top:0;padding-inline:calc(var(--m) - 14px)}
+.band .chk div{padding-top:8px}
+@media(max-width:560px){.band .chk{padding-inline:2px}}
+
+/* ---------- secciones ---------- */
+section{padding-block:var(--sec)}
+.mist{background:var(--mist)}
+.h2{font-size:var(--t-head);line-height:1.05;max-width:20ch}
+.intro{margin-top:16px;font-size:var(--t-lead);line-height:1.45;color:var(--soft);max-width:56ch}
+
+/* registro de decisiones */
+.decide{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(28px,5vw,72px);margin-top:clamp(36px,4vw,56px);align-items:start}
+@media(max-width:960px){.decide{grid-template-columns:1fr}}
+.log{margin:0;padding:0;list-style:none;display:grid;gap:14px}
+.log li{display:grid;grid-template-columns:7.5rem 1fr;gap:14px;align-items:baseline;font-size:var(--t-body)}
+.log li b{justify-self:start;font:600 var(--t-small)/1 var(--sans);color:var(--ok);background:var(--okbg);padding:5px 9px;border-radius:999px;white-space:nowrap}
+.vars{background:#fff;border-radius:14px;padding:clamp(16px,2.2vw,24px);min-width:0;overflow-x:auto}
+.vars table{width:100%;border-collapse:collapse;font-size:var(--t-small)}
+.vars th{text-align:left;color:var(--soft);font-weight:600;padding:0 10px 8px 0}
+.vars td{padding:9px 10px 9px 0;border-top:1px solid var(--mist-2);vertical-align:top}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.8125rem;font-weight:650;background:var(--mist);color:var(--soft)}
+.pill.q{background:var(--okbg);color:var(--ok)}
+
+/* validación: un registro, no tarjetas */
+.vtab{width:100%;border-collapse:collapse;font-size:var(--t-small)}
+.vtab th{text-align:left;font-weight:600;color:var(--soft);padding:0 12px 10px 0;border-bottom:1.5px solid var(--ink)}
+.vtab td{padding:10px 12px 10px 0;border-bottom:1px solid var(--mist-2);vertical-align:top}
+.vtab td:last-child,.vtab th:last-child{text-align:right;white-space:nowrap;padding-right:0}
+.vtab td.pk{color:var(--soft)}
+.vtab tr.more[hidden]{display:none}
+.vtab tfoot td{border-bottom:1.5px solid var(--ink);font-weight:700}
+.vtab .okmark{display:inline-flex;align-items:center;gap:6px;color:var(--ok);font-weight:650}
+.vtab-wrap{overflow-x:auto}
+.showall{margin-top:16px;font:650 var(--t-small)/1 var(--sans);background:none;border:0;padding:0;color:var(--ink);cursor:pointer;text-decoration:underline;text-underline-offset:4px}
+
+/* lo que te llevas */
+.take{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:clamp(28px,4vw,56px);margin-top:clamp(36px,4vw,56px);align-items:start}
+@media(max-width:960px){.take{grid-template-columns:1fr}}
+.doc{background:#fff;border-radius:14px;padding:clamp(14px,2vw,22px)}
+.doc img{width:100%;height:auto}
+.doc figcaption{margin-top:12px;font-size:var(--t-small);color:var(--soft)}
+.rcode{background:var(--deep);color:var(--on-deep);border-radius:14px;padding:clamp(16px,2vw,24px);min-width:0}
+.rcode p{font-size:var(--t-small);color:var(--on-deep-soft)}
+.rcode pre{margin:12px 0 0;font:400 var(--t-xs)/1.6 ui-monospace,Menlo,monospace;white-space:pre;overflow-x:auto}
+.rcode .c{color:var(--on-deep-soft)}
+.cite-note{margin-top:18px;font-size:var(--t-small);color:var(--soft);max-width:52ch}
+.take .acts{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-top:22px}
+
+/* buscador de pruebas */
+.finder-grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(28px,5vw,72px);align-items:start}
+@media(max-width:960px){.finder-grid{grid-template-columns:1fr}}
+.finder{background:var(--mist);border-radius:16px;padding:clamp(20px,3vw,34px)}
+.progress{height:4px;background:var(--mist);border-radius:4px;margin-bottom:22px;overflow:hidden}
+.progress i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s var(--ease)}
+.q h3{font-size:var(--t-lead);margin-bottom:6px}
+.q .hint{color:var(--soft);margin:0 0 18px;font-size:var(--t-small)}
+.opts{display:grid;gap:8px}
+.opt{text-align:left;padding:14px 16px;border:0;border-radius:var(--r);background:#fff;cursor:pointer;font:inherit;color:var(--ink);transition:background .16s}
+.opt:hover{background:var(--mist-2)}
+.finder .upsell{background:#fff}
+.opt b{display:block;font-weight:650}
+.opt small{color:var(--soft)}
+.finder-foot{display:flex;justify-content:space-between;margin-top:20px}
+.finder .link{background:none;border:0;color:var(--ink);font:inherit;cursor:pointer;padding:0;font-weight:650;text-decoration:underline}
+.result h3{font-size:var(--t-lead);margin:6px 0 16px}
+.result h4{margin:20px 0 6px;font-size:var(--t-small);font-weight:700}
+.result ul{margin:0;padding-left:20px}
+.finder .alt{background:var(--mist);padding:10px 14px;border-radius:8px}
+.finder pre{background:var(--deep);color:var(--on-deep);padding:12px 14px;border-radius:8px;overflow-x:auto;font-size:.875rem}
+.finder .warn{background:#fff5e0;color:#7a5200;padding:12px 14px;border-radius:8px;margin-top:16px}
+.finder .upsell{margin-top:22px;padding:18px;border-radius:12px;background:var(--mist);display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.finder .btn-dark{background:var(--deep);color:#fff;padding:12px 18px;border-radius:var(--r);text-decoration:none;font-weight:650}
+.finder .btn-line{border:1px solid var(--mist-2);padding:12px 18px;border-radius:var(--r);text-decoration:none;font-weight:650}
+.finder .eyebrow{font-size:var(--t-small);color:var(--soft)}
+
+/* docentes y cierre */
+.teach{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(28px,5vw,72px);align-items:start}
+@media(max-width:960px){.teach{grid-template-columns:1fr}}
+.closing{padding-block:clamp(72px,8vw,120px)}
+.endgrid{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:24px clamp(28px,5vw,72px);align-items:end}
+@media(max-width:960px){.endgrid{grid-template-columns:1fr}}
+.closing .acts{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center}
+.terms-ink{margin-top:14px;font-size:var(--t-small);color:var(--soft)}
+
+/* Marie Tharp y cierre */
+.story{background:var(--deep);color:var(--on-deep)}
+.story-grid{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:clamp(28px,5vw,72px);align-items:start}
+@media(max-width:960px){.story-grid{grid-template-columns:1fr}}
+.story .sounding{width:100%;height:auto;display:block;margin-top:clamp(28px,4vw,48px)}
+.story .sounding path{fill:none;stroke:var(--amber);stroke-width:2;vector-effect:non-scaling-stroke}
+.story .sounding .sea{fill:var(--deep-2);stroke:none}
+.story .thumb{display:grid;grid-template-columns:180px 1fr;gap:16px;align-items:center;margin-top:18px}
+.story .thumb img{width:180px;height:auto;border-radius:6px}
+@media(max-width:560px){.story .thumb{grid-template-columns:120px 1fr}.story .thumb img{width:120px}}
+.story figcaption{margin-top:10px;font-size:.875rem;color:var(--on-deep-soft)}
+.story h2{color:#fff;font-size:var(--t-head);line-height:1.05}
+.story .txt p{margin-top:16px;color:var(--on-deep-soft)}
+.story .txt p b{color:var(--on-deep);font-weight:600}
+.story .acts{display:flex;flex-wrap:wrap;gap:12px 22px;align-items:center;margin-top:28px}
+.story .acts .link{color:#fff}
+
+/* preguntas: todas a la vista */
+.faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px clamp(28px,5vw,72px);margin-top:clamp(32px,4vw,48px)}
+@media(max-width:800px){.faq{grid-template-columns:1fr}}
+.faq h3{font-size:var(--t-lead);line-height:1.25}
+.faq p{margin-top:8px;color:var(--soft);max-width:52ch}
+.faq .cite{display:block;margin-top:10px;font:400 var(--t-apa)/1.5 var(--apa);color:var(--ink);background:var(--mist);padding:12px 14px;border-radius:8px}
+
+footer{background:var(--ink);color:var(--on-deep-soft);padding-block:36px;font-size:var(--t-small)}
+footer .wrap{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px 40px}
+@media(max-width:800px){footer .wrap{grid-template-columns:1fr}}
+footer b{display:block;color:#fff;margin-bottom:6px}
+footer a{color:#fff}
+
+/* la paleta del diagrama fisiográfico de 1957: mar en verde agua, tinta de carta náutica, tierra en oro */
+section{--ink:#0f2d37;--soft:#36555e;--mist:#eaf4f2;--mist-2:#b4cfcb;--ok:#14615a;--okbg:#c4e2dc;background:#d8eae7;color:var(--ink)}
+section.mist{background:#c8dfdb}
+section.deep{background:var(--deep);color:var(--on-deep);--ink:#e6f0ef;--soft:#a9c3c6;--mist:#11313f;--mist-2:#1f4a5a}
+section.story{background:#071a24}
+section.deep h2,section.story h2{color:#fff}
+section.deep .link{color:#fff}
+::selection{background:var(--amber);color:var(--deep)}
+.vars{background:var(--mist)}
+.finder{background:var(--mist)}
+.opt{background:#fff;color:var(--ink)} .opt:hover{background:#d8eae7}
+.finder .upsell,.finder .alt{background:#d8eae7}
+.finder .btn-dark{background:var(--deep);color:#fff}
+.finder .btn-line{border-color:var(--mist-2);color:var(--ink)}
+.progress{background:#c8dfdb}
+.rcode{background:#071a24}
+.faq .cite{background:var(--mist);color:var(--ink)}
+.closing{background:var(--amber);color:var(--deep);--soft:#4a3a12}
+.closing h2{color:var(--deep)}
+.closing .btn.amber{background:var(--deep);color:#fff}.closing .btn.amber:hover{background:var(--deep-3)}
+.closing .link{color:var(--deep)}
+.closing .terms-ink{color:#4a3a12}
+.word-list{list-style:none;margin:0;padding:0;display:grid;gap:18px}
+.word-list li{display:grid;grid-template-columns:minmax(0,12rem) minmax(0,1fr);gap:6px 24px}
+.word-list b{font-weight:650;color:#fff}
+.word-list span{color:var(--soft)}
+@media(max-width:560px){.word-list li{grid-template-columns:1fr}}
+@media(min-width:961px){.take{grid-template-columns:minmax(0,5fr) minmax(0,7fr)!important}}
+.take .acts{margin-top:30px}
+.faq{display:block;max-width:880px}
+.faq{display:grid!important;grid-template-columns:1fr!important;gap:8px}
+.faq details{background:var(--mist);border-radius:12px;padding-inline:22px}
+.faq summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;gap:18px;align-items:center;padding:18px 0;font:650 var(--t-lead)/1.3 var(--sans);color:var(--ink)}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::after{content:"";flex:none;width:12px;height:12px;border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:rotate(45deg) translate(-3px,-3px);transition:transform .25s var(--ease)}
+.faq details[open] summary::after{transform:rotate(225deg) translate(-3px,-3px)}
+.faq summary:hover{color:var(--ok)}
+.faq .ans{padding:0 0 20px;color:var(--soft);max-width:64ch}
+.faq .ans p{margin:0 0 8px}
+.chart1957{margin:clamp(28px,4vw,48px) 0 0}
+.chart1957 img{width:100%;height:clamp(200px,26vw,380px);object-fit:cover;object-position:60% 40%;border-radius:12px}
+.chart1957 figcaption{margin-top:12px;font-size:var(--t-small);color:var(--on-deep-soft);max-width:64ch}
+.band .leg{padding:2px var(--m) 0;font-size:.8125rem}
+.band .leg:empty{display:none}
+.sonar .lab{font:600 13px/1 var(--sans);paint-order:stroke;stroke:var(--deep);stroke-width:7px;stroke-linejoin:round}
+.sonar .lab.sm{font-weight:500;font-size:12px;fill:var(--on-deep-soft)}
+.ph-proof{margin-top:8px;padding-left:28px;font-size:var(--t-small)}
+.ph-proof a{color:var(--on-deep);text-underline-offset:4px;text-decoration-thickness:1px}
+.ph-proof a:hover{color:#fff}
+.sonar .tk{stroke:var(--on-deep-soft);stroke-width:1;vector-effect:non-scaling-stroke}
+.sonar .lab.tick{font:500 11px/1 var(--sans);fill:var(--on-deep-soft);stroke-width:3px}
+
+/* ritmo por profundidad, como el diagrama de 1957 */
+section.shallow{background:#e2efed}
+section.shelf{background:#b9d2ce;--soft:#2f4c55;--mist:#cfe2df}
+.sec-hd{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:16px clamp(28px,5vw,72px);align-items:end}
+.sec-hd .intro{margin-top:0}
+.sec-hd .intro b{color:var(--ink);font-weight:650}
+@media(max-width:960px){.sec-hd{grid-template-columns:1fr}}
+#decide .vars{margin-top:clamp(32px,4vw,48px);background:#f4f9f8}
+#decide .log{grid-template-columns:repeat(5,minmax(0,1fr));gap:24px;margin-top:clamp(28px,3vw,40px)}
+#decide .log li{grid-template-columns:1fr;grid-template-rows:auto 1fr;gap:10px;align-items:start;align-content:start;font-size:var(--t-small)}
+#decide .log{align-items:start}
+#decide .log li b{align-self:start}
+@media(max-width:960px){#decide .log{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){#decide .log{grid-template-columns:1fr}}
+#validacion .vtab-wrap{margin-top:clamp(32px,4vw,48px)}
+.teachband{padding-block:clamp(48px,6vw,80px)}
+.teach{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:12px clamp(28px,5vw,72px);align-items:baseline}
+.teach h2{font-size:var(--t-lead);line-height:1.25}
+.teach p{color:var(--ink);max-width:70ch}
+@media(max-width:800px){.teach{grid-template-columns:1fr}}
+.faq details{background:#cfe3df}
+@media(min-width:961px) and (max-height:820px){.band .sonar{height:clamp(130px,11vw,160px)}.band{margin-top:14px}.ph{padding-top:4px}.band .chk div{padding:6px 14px 8px}.ph-act{margin-top:20px}}
+@media(min-width:961px){.hero{display:flex;flex-direction:column;height:min(100svh,1000px);min-height:640px}.hero>.wrap{flex:1;display:flex;flex-direction:column;width:100%;min-height:0}.ph{padding-top:clamp(28px,6vh,72px)}.hero .band{flex:1;display:flex;flex-direction:column;min-height:0}.hero .band .sonar{flex:1;height:auto!important;min-height:150px;max-height:340px}.hero .band .chk div{padding-bottom:22px}}
+@media(max-width:960px){.ph-txt{padding-top:28px}}
+</style>
+<script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
-
-<div class="dark">
-<nav aria-label="Principal">
-  <div class="wrap">
-    <a href="./" class="brand" aria-label="Tharp, inicio"><img src="img/logo-144.png" alt="" width="32" height="32">Tharp</a>
-    <div class="navlinks">
-      <a href="#como">Cómo funciona</a>
-      <a href="#rigor">Rigor</a>
-      <a href="#finder">¿Qué prueba uso?</a>
-      <a href="validacion.html" data-umami-event="nav_validacion">Validación</a>
-      <a href="app.html" class="btn btn-ping" data-umami-event="nav_analizar">Analizar mis datos</a>
-    </div>
-  </div>
-</nav>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-ok" viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 17v-6M9.5 13.5L12 11l2.5 2.5"/></symbol>
+</svg>
 
 <header class="hero">
   <div class="wrap">
-    <div class="txt">
-      <span class="badge">Gratis durante el lanzamiento</span>
-      <h1 lang="en">From question <em>to evidence.</em></h1>
-      <p class="sub">De tus datos al apartado de resultados, en&nbsp;minutos.</p>
-      <p class="desc">Para tu artículo, tu tesis o tu proyecto. Tharp comprueba los supuestos, elige la prueba adecuada y te entrega las tablas APA, los gráficos y los resultados redactados, con el registro de cada decisión y el código R que lo reproduce.</p>
-      <div class="ctas"><a class="btn btn-ping" href="app.html" data-umami-event="portada_analizar">Analizar mis datos gratis →</a><a class="lnk" href="app.html#ejemplo" data-umami-event="portada_ejemplo">Ver un análisis de ejemplo</a></div>
-      <div class="trust"><span>Validado contra R</span><span>Los datos no salen de tu equipo</span><span>Excel, CSV, SPSS y JASP</span></div>
+    <nav class="top" aria-label="Principal">
+      <a class="word" href="#"><img src="img/logo-144.png" alt="" width="32" height="32">Tharp</a>
+      <ul><li><a href="#decide">Cómo trabaja</a></li><li><a href="#validacion">Validación</a></li><li><a href="#finder">¿Qué prueba uso?</a></li><li><a href="#docentes">Para docentes</a></li></ul>
+      <a data-umami-event="nav_analizar" class="btn amber" href="app.html" style="min-height:42px;padding:0 18px">Analizar mis datos</a>
+    </nav>
+    <div class="ph" id="drop">
+      <div class="ph-txt">
+        <h1 lang="en">From question <em>to evidence.</em></h1>
+        <p class="lead">Para tu artículo, tu tesis o tu proyecto: Tharp comprueba los supuestos, elige la prueba, redacta la tabla APA y te da el código R que reproduce cada número.</p>
+        <div class="ph-act">
+          <label class="btn amber" for="file"><svg class="i"><use href="#i-file"/></svg>Analizar mi archivo</label>
+          <input type="file" id="file" accept=".xlsx,.xls,.ods,.csv,.tsv,.txt,.sav,.zsav,.jasp" hidden>
+          <a data-umami-event="portada_ejemplo" class="link" style="color:#fff" href="app.html#ejemplo">Ver un análisis de ejemplo</a>
+        </div>
+        <p class="ph-note" id="dropMsg" aria-live="polite"><svg class="i"><use href="#i-lock"/></svg>Excel, CSV, SPSS o JASP. Se lee en tu navegador, no se sube a ningún servidor.</p>
+        <p class="ph-proof"><a data-umami-event="franja_validacion" href="#validacion">Validado contra R: 46&nbsp;633 valores idénticos en 30 análisis</a></p>
+      </div>
+      <div class="ph-res" id="inst" role="group" aria-label="Análisis de ejemplo calculado en este navegador">
+        <div class="inst-hd"><b id="instTitle">ansiedad_pre y ansiedad_post · 324 casos</b><span class="st"><span id="instState">Analizando…</span><button type="button" id="replay">Repetir</button></span></div>
+        <div class="qsel" role="group" aria-label="Pregunta de investigación">
+          <button type="button" data-q="rho" aria-pressed="true">¿Se relacionan?</button>
+          <button type="button" data-q="anova" aria-pressed="false">¿Difieren los grupos?</button>
+          <button type="button" data-q="t" aria-pressed="false">¿Hombres y mujeres?</button>
+        </div>
+        <div class="paper" id="paper" aria-live="polite"></div>
+      </div>
     </div>
-    <div class="inst" role="img" aria-label="Ejemplo con los datos de prueba: Tharp comprueba la normalidad y las varianzas, elige un ANOVA con post hoc de Tukey y entrega la tabla y el resultado en formato APA">
-      <div class="inst-hd"><span>ansiedad_post según grupo · 324 casos</span><b id="dState">Analizando…</b></div>
-      <div class="sonar"><canvas id="cvD" aria-hidden="true"></canvas></div>
-      <div class="checks" id="dChecks">
-        <div data-at=".24"><span>1 · Normalidad</span><b class="ok" data-wait="comprobando…" data-done="Shapiro-Wilk ✓"></b></div>
-        <div data-at=".48"><span>2 · Varianzas</span><b class="ok" data-wait="comprobando…" data-done="Levene ✓"></b></div>
-        <div data-at=".72"><span>3 · Prueba</span><b data-wait="eligiendo…" data-done="ANOVA + Tukey"></b></div>
-        <div data-at=".95"><span>4 · Efecto</span><b data-wait="calculando…" data-done="η² = .050"></b></div>
-      </div>
-      <div class="sheet" id="dSheet">
-        <div class="tn">Tabla 3</div><div class="tt">ANOVA de un factor para ansiedad_post según el grupo</div>
-        <div class="tw"><table class="apa">
-          <thead><tr><th>Fuente</th><th><i>gl</i></th><th><i>F</i></th><th><i>p</i></th><th>η²</th></tr></thead>
-          <tbody><tr><td>Grupo</td><td>2</td><td>8.45</td><td>&lt; .001</td><td>.050</td></tr><tr><td>Error</td><td>321</td><td></td><td></td><td></td></tr></tbody>
-        </table></div>
-        <p class="res">Se encontraron diferencias estadísticamente significativas entre los grupos, <mark><i>F</i>(2, 321) = 8.45, <i>p</i> &lt; .001, η² = .050</mark>. Las comparaciones post hoc (Tukey) mostraron diferencias entre Control y Mindfulness, <i>p</i> &lt; .001.</p>
-        <div class="files"><span>resultados.docx</span><span>analisis.R</span><span>registro de decisiones</span></div>
-      </div>
+    <div class="band">
+      <div class="sonar" id="sonar" aria-hidden="true"></div>
+      <div class="chk" id="chk"></div>
+      <div class="leg" id="leg" aria-hidden="true"></div>
     </div>
   </div>
 </header>
 
-<div class="proof">
+<section class="shallow" id="decide">
   <div class="wrap">
-    <div><h3>Rápido</h3><p>Subes el archivo y marcas qué quieres analizar. Supuestos, prueba, tablas APA, gráficos y redacción salen en una sola pasada.</p></div>
-    <div><h3>Comprobable</h3><p>30 análisis validados contra R, con más de 46&nbsp;000 comprobaciones. Cada resultado trae el código R para que cualquier revisor lo reproduzca. <a class="lnk" href="validacion.html" data-umami-event="franja_validacion">Cómo lo validamos</a></p></div>
-    <div><h3>Trazable</h3><p>Por qué esa prueba, qué supuestos se comprobaron y qué casos se excluyeron: listo para el apartado de método y para responder a los revisores.</p></div>
-  </div>
-</div>
-</div>
-
-<section id="preguntas">
-  <div class="wrap">
-    <div class="k">Pregúntale a tus datos</div>
-    <h2 style="margin-top:14px">¿Qué quieres saber <em>de tus datos?</em></h2>
-    <p class="lead">Elige una pregunta. Tharp decide la prueba adecuada, comprueba sus supuestos y escribe el resultado en APA. Son resultados reales, calculados con los datos de ejemplo de la aplicación.</p>
-    <div class="ask">
-      <div class="qs" role="group" aria-label="Preguntas de ejemplo">
-        <button type="button" aria-pressed="true">¿Hay diferencias entre grupos?</button>
-        <button type="button" aria-pressed="false">¿Se relacionan dos variables?</button>
-        <button type="button" aria-pressed="false">¿Qué predice el rendimiento?</button>
-        <button type="button" aria-pressed="false">¿Cambió algo con el tiempo?</button>
-      </div>
-      <div class="answer" aria-live="polite">
-        <div class="lbl">Prueba elegida</div>
-        <h3 id="fTest"></h3>
-        <p class="why" id="fWhy"></p>
-        <div class="lbl">Resultado en APA, listo para el manuscrito</div>
-        <p class="apa-text" id="fRes"></p>
-        <p class="foot">Con la tabla APA, el gráfico, los supuestos comprobados y el código R. <a href="app.html#ejemplo" class="lnk" data-umami-event="preguntas_ejemplo">Ver el análisis completo →</a></p>
-      </div>
-    </div>
+    <div class="sec-hd"><h2 class="h2">Registro de decisiones</h2>
+    <p class="intro">Cada análisis deja constancia de qué prueba se eligió y por qué, qué supuestos se comprobaron y qué casos se excluyeron: lo que necesitas para el apartado de método y para responder a los revisores.</p></div>
+    <div class="vars" data-ui><table><thead><tr><th>Variable</th><th>Tipo</th><th>Lo que Tharp ha visto</th></tr></thead><tbody id="vars"></tbody></table></div>
+    <ol class="log">
+      <li><b>Datos</b><span>324 participantes y 20 variables: 15 cuantitativas, 4 categóricas y el identificador.</span></li>
+      <li><b>Perdidos</b><span>Cada análisis usa los casos completos en sus variables; las correlaciones, por parejas.</span></li>
+      <li><b>Correlaciones</b><span>En la matriz de 8 variables se usa Spearman porque edad presenta una asimetría marcada.</span></li>
+      <li><b>Grupos</b><span>ANOVA de un factor: tres grupos independientes, normalidad aceptable y varianzas homogéneas.</span></li>
+      <li><b>Sensibilidad</b><span>La alternativa no paramétrica llega a la misma conclusión.</span></li>
+    </ol>
   </div>
 </section>
 
-<section id="como" style="padding-top:0">
+<section class="shelf" id="validacion">
   <div class="wrap">
-    <div class="k">Cómo funciona</div>
-    <h2 style="margin-top:14px">De tu archivo a los resultados, <em>en tres pasos.</em></h2>
-    <div class="steps">
-      <div><span class="n">01</span><h3>Sube tus datos</h3><p>Excel, CSV o archivos de SPSS (.sav) y JASP (.jasp), con sus etiquetas y valores perdidos. Tharp reconoce las variables, sus tipos y los participantes.</p></div>
-      <div><span class="n">02</span><h3>Elige qué necesitas</h3><p>Marca los análisis y las variables. Tharp comprueba los supuestos y, si no se cumplen, aplica la alternativa adecuada y te lo explica.</p></div>
-      <div><span class="n">03</span><h3>Descarga los resultados</h3><p>Tablas APA, gráficos y el apartado de resultados redactado en Word, con la cita del software y el script de R que reproduce cada número.</p></div>
-    </div>
+    <div class="sec-hd"><h2 class="h2">Validación contra R</h2>
+    <p class="intro">Antes de cada versión, una batería automática compara cada análisis con los paquetes de referencia de R: <b>46&nbsp;633 valores en 30 análisis, todos idénticos</b> con una tolerancia de seis cifras. Si uno deja de coincidir, la versión no se publica. <a data-umami-event="rigor_validacion" class="link" href="validacion.html">Ver el método</a></p></div>
+    <div class="vtab-wrap"><table class="vtab"><thead><tr><th>Análisis</th><th>Referencia en R</th><th>Coinciden</th></tr></thead><tbody id="vrows"></tbody><tfoot><tr><td>30 análisis</td><td>R 4.5.3</td><td class="num">46&nbsp;633 / 46&nbsp;633</td></tr></tfoot></table></div>
+    <button type="button" class="showall" id="showall" aria-expanded="false">Ver los 30 análisis</button>
   </div>
 </section>
 
-<section style="padding-top:0">
-  <div class="wrap split">
-    <div>
-      <div class="k">Trazabilidad</div>
-      <h2 style="margin-top:14px">Automático, pero <em>siempre transparente.</em></h2>
-      <p class="lead">Cada decisión queda documentada: qué prueba se eligió y por qué, qué supuestos se comprobaron, qué casos se excluyeron y con qué código se reproduce. Tú entiendes lo que has hecho, y tu director, tu tribunal o un revisor pueden comprobarlo paso a paso.</p>
-      <ul class="ticks">
-        <li>Por qué se eligió esa prueba, y su alternativa</li>
-        <li>Supuestos comprobados, con su resultado</li>
-        <li>Registro de cada decisión: casos excluidos, valores perdidos, recodificaciones</li>
-        <li>Análisis de sensibilidad con la prueba alternativa</li>
-        <li>Código R reproducible de cada análisis</li>
-        <li>Avisos claros cuando un resultado no es fiable</li>
-      </ul>
-    </div>
-    <div class="doc" aria-label="Ejemplo de explicación de un análisis">
-      <div class="doc-hd"><span>¿Por qué este análisis?</span><span>Datos de ejemplo</span></div>
-      <div class="doc-bd">
-        <h4>Prueba t de Student para muestras independientes</h4>
-        <ul>
-          <li>Variable dependiente: <em>ansiedad_pre</em> → cuantitativa</li>
-          <li>Variable de agrupación: <em>sexo</em> → 2 grupos independientes</li>
-          <li>Normalidad aceptable (Shapiro-Wilk, <i>p</i> = .582 y <i>p</i> = .399)</li>
-          <li>Varianzas homogéneas (Levene, <i>p</i> = .396): prueba t clásica</li>
-          <li>Sensibilidad: la U de Mann-Whitney da <i>p</i> = .006, la misma conclusión</li>
+<section class="deep">
+  <div class="wrap">
+    <h2 class="h2">El informe en Word y el script de R</h2>
+    <div class="take">
+      <div>
+        <ul class="word-list">
+          <li><b>Tablas APA</b><span>Numeradas, con notas y tamaños del efecto.</span></li>
+          <li><b>Figuras</b><span>Listas para el manuscrito.</span></li>
+          <li><b>Resultados redactados</b><span>Con la notación estadística completa.</span></li>
+          <li><b>Cita del software</b><span>En APA 7, para el apartado de método.</span></li>
         </ul>
-        <div class="alt"><strong>Alternativa:</strong> U de Mann-Whitney si no se cumpliera la normalidad con muestras pequeñas.</div>
-        <pre>t.test(ansiedad_pre ~ sexo, data = datos, var.equal = TRUE)</pre>
+        <div class="acts"><a data-umami-event="word_ejemplo" class="btn amber" href="ejemplo/tharp-resultados-ejemplo.docx">Descargar el Word de ejemplo</a><a data-umami-event="word_app" class="link" href="app.html#ejemplo">Verlo en la aplicación</a></div>
       </div>
+      <div class="rcode" data-ui><p>Cada resultado trae su script de R. Si lo ejecutas, obtienes los mismos números que Tharp:</p>
+<pre><code>datos &lt;- read.csv("tharp_datos_ejemplo.csv")
+datos$grupo &lt;- factor(datos$grupo,
+  levels = c("Control", "Ejercicio", "Mindfulness"))
+modelo &lt;- aov(ansiedad_post ~ grupo, data = datos)
+summary(modelo)          <span class="c"># F(2, 321) = 8.45, igual que en Tharp</span>
+TukeyHSD(modelo)
+effectsize::eta_squared(modelo)</code></pre></div>
     </div>
   </div>
 </section>
 
-<section id="word" style="padding-top:0">
-  <div class="wrap split">
-    <figure class="sheetimg">
-      <img src="img/ejemplo-word.jpg" alt="Página del Word de resultados generado por Tharp con los datos de ejemplo: tablas APA de descriptivos, ANOVA de un factor y comparaciones post hoc de Tukey, seguidas de la redacción de resultados" width="1042" height="1037" loading="lazy">
-      <figcaption>Una página del Word real que genera Tharp con los datos de ejemplo.</figcaption>
-    </figure>
-    <div>
-      <div class="k">Lo que descargas</div>
-      <h2 style="margin-top:14px">Un Word que puedes <em>pegar en tu manuscrito.</em></h2>
-      <p class="lead">Tablas con formato APA 7 numeradas, figuras con su título, el apartado de resultados redactado y el registro de decisiones para el método. Editable, para que lo adaptes a tu revista o a tu universidad.</p>
-      <ul class="ticks">
-        <li>Tablas APA con notas, tamaños del efecto e intervalos de confianza</li>
-        <li>Resultados redactados con cada estadístico bien escrito</li>
-        <li>Justificación y supuestos de cada análisis</li>
-        <li>La cita del software y el script de R que lo reproduce</li>
-      </ul>
-      <div class="ctas" style="margin-top:28px"><a class="btn btn-ink" href="ejemplo/tharp-resultados-ejemplo.docx" download data-umami-event="word_ejemplo">Descargar un Word de ejemplo</a><a class="lnk" href="app.html#ejemplo" data-umami-event="word_app">Verlo en la aplicación</a></div>
-    </div>
-  </div>
-</section>
-
-<section id="rigor" class="rigor">
-  <div class="wrap">
-    <div class="k">Rigor</div>
-    <h2 style="margin-top:14px">Un resultado solo vale <em>si puedes confiar en él.</em></h2>
-    <p class="lead">Cada análisis de Tharp se compara automáticamente con R antes de cada versión, número a número. Si un número no coincide, no se publica. <a class="lnk" href="validacion.html" data-umami-event="rigor_validacion" style="color:var(--teal)">Ver cómo lo validamos, análisis por análisis →</a></p>
-    <div class="nums">
-      <div><b>30</b><span>análisis validados contra R, con más de 46&nbsp;000 comprobaciones automáticas</span></div>
-      <div><b>R</b><span>cada número que muestra Tharp aparece en la salida de su script de R</span></div>
-      <div><b>0</b><span>datos enviados a servidores: todo se calcula en tu navegador</span></div>
-      <div><b>APA 7</b><span>tablas, gráficos, redacción y cita del software</span></div>
-    </div>
-    <div class="methods">
-      <p><b>Comparación de grupos</b>t de Student, de Welch y para una muestra (también unilaterales, con <i>d</i> e IC), U de Mann-Whitney, ANOVA de un factor, de Welch y de Brown-Forsythe, Kruskal-Wallis, Jonckheere-Terpstra y equivalencia (TOST). Post hoc de Tukey, Games-Howell, Bonferroni, Holm, Šidák, Scheffé, Dunnett, Tamhane, S-N-K, Duncan, REGW-Q, GT2, Gabriel y Dunn, y contrastes planificados.</p>
-      <p><b>Medidas relacionadas</b>t relacionada, Wilcoxon y prueba de los signos; ANOVA de medidas repetidas con uno o dos factores intrasujeto y ANOVA mixta, con Mauchly, Greenhouse-Geisser y Huynh-Feldt; Friedman, McNemar y Q de Cochran.</p>
-      <p><b>Asociación</b>Pearson, Spearman y Kendall con IC, correlación parcial; chi-cuadrado con residuos, Fisher, OR y RR, Mantel-Haenszel, medidas ordinales (γ, τ, <i>d</i> de Somers), binomial y bondad de ajuste.</p>
-      <p><b>Modelos</b>Regresión lineal (por bloques y por pasos, errores robustos HC3), logística binaria, multinomial y ordinal, Poisson y binomial negativa; ANOVA factorial, ANCOVA y MANOVA; modelos lineales mixtos; moderación y mediación (modelos 1, 4, 6, 7 y 14 de PROCESS).</p>
-      <p><b>Cuestionarios y escalas</b>Análisis factorial exploratorio y componentes principales (siete rotaciones, análisis paralelo), confirmatorio con invarianza de medida entre grupos, alfa de Cronbach y omega de McDonald; CCI, kappa de Cohen y de Fleiss, alfa de Krippendorff y Bland-Altman.</p>
-      <p><b>Y además</b>Supervivencia (Kaplan-Meier, log-rank y Cox), metaanálisis (REML, heterogeneidad, Egger, gráficos de bosque y embudo), curva ROC, valores perdidos (MCAR de Little) y potencia y tamaño muestral.</p>
-    </div>
-  </div>
-</section>
-
-<section id="finder" class="dark">
-  <div class="wrap">
-    <div class="k">Herramienta gratuita</div>
-    <h2 style="margin-top:14px;color:#fff">¿Qué prueba estadística <em>tengo que usar?</em></h2>
-    <p class="lead">Responde unas pocas preguntas sobre tu diseño y te decimos qué análisis encaja, por qué y qué supuestos debes comprobar.</p>
+<section class="shallow" id="finder">
+  <div class="wrap finder-grid">
+    <div><h2 class="h2">¿Qué prueba uso?</h2>
+    <p class="intro">Unas preguntas sobre el diseño del estudio indican qué análisis corresponde, por qué y qué supuestos hay que comprobar. Sin subir datos.</p></div>
     <div class="finder" id="finderBox" aria-live="polite"></div>
   </div>
 </section>
 
-<section>
-  <div class="wrap">
-    <div class="k">Para quién</div>
-    <h2 style="margin-top:14px">Pensado para quien investiga, <em>enseña o aprende.</em></h2>
-    <div class="modes">
-      <div class="mode"><div class="who">Investigadores y doctorandos</div><blockquote>«Sé lo que tengo que hacer, pero quiero hacerlo más rápido.»</blockquote><p>Ve directo al análisis: tablas APA, gráficos, resultados redactados y código R, con cada decisión documentada para el método y los revisores.</p></div>
-      <div class="mode"><div class="who">Docentes y directores</div><blockquote>«Quiero enseñar el razonamiento, no los menús.»</blockquote><p>Cada análisis muestra la cadena de decisiones: tipo de variable, supuestos, prueba elegida y alternativa. Resultados que puedes revisar en minutos.</p></div>
-      <div class="mode"><div class="who">Estudiantes de grado y máster</div><blockquote>«No sé qué análisis tengo que hacer.»</blockquote><p>Empieza por el buscador de pruebas y lee en cada resultado por qué se eligió y qué supuestos se comprobaron, para entender lo que haces.</p></div>
-    </div>
+<section class="shelf teachband" id="docentes">
+  <div class="wrap teach">
+    <h2>Para docentes y departamentos</h2>
+    <p>En clase, cada análisis muestra qué prueba se eligió y por qué; los estudiantes no instalan nada. Uso gratuito durante el lanzamiento, <a data-umami-event="ficha_docentes" class="link" href="docentes/tharp-ficha-docentes.pdf">ficha para docentes en PDF</a> y programa piloto para departamentos y grupos de investigación: <a data-umami-event="piloto_participar" class="link" href="mailto:info@tharp.es?subject=Programa%20piloto%20Tharp">info@tharp.es</a>.</p>
   </div>
 </section>
 
-<section id="marie-tharp" class="dark story">
+<section class="story" id="tharp">
   <div class="wrap">
     <div class="story-grid">
-      <figure class="story-map">
-        <img src="img/atlantico-1957.jpg" alt="Diagrama fisiográfico del Atlántico Norte dibujado por Marie Tharp y Bruce Heezen en 1957, con la dorsal mesoatlántica en el centro y la península ibérica a la derecha" width="1200" height="663" loading="lazy">
-        <figcaption>Diagrama fisiográfico del Atlántico Norte, Heezen y Tharp, 1957. A la derecha, la península ibérica. <span>Dominio público.</span></figcaption>
-      </figure>
-      <div>
-        <div class="k">Por qué nos llamamos Tharp</div>
-        <h2>Frente al escepticismo, <em>la evidencia.</em></h2>
-        <p>Con miles de mediciones de sonar, <strong>Marie Tharp</strong> dibujó el primer mapa del fondo del Atlántico y descubrió el valle que recorre la dorsal mesoatlántica. Su hallazgo fue recibido con escepticismo, pero los datos lo confirmaron y contribuyó a la aceptación de la tectónica de placas.</p>
-        <p class="claim">Tharp lleva su nombre: del dato a la evidencia, con rigor y transparencia.</p>
-        <div class="facts">
-          <div><b>1952</b><span>Descubre el valle del rift atlántico</span></div>
-          <div><b>1957</b><span>Publica este mapa</span></div>
-          <div><b>1997</b><span>Reconocida entre los grandes cartógrafos del siglo XX</span></div>
-        </div>
+      <h2>Frente al escepticismo, la evidencia.</h2>
+      <div class="txt">
+        <p>Con miles de sondeos de sonar, <b>Marie Tharp</b> dibujó el primer mapa del fondo del Atlántico y descubrió el valle de la dorsal mesoatlántica. La recibieron con escepticismo; los datos le dieron la razón. Tharp lleva su nombre.</p>
+        <div class="acts"><a data-umami-event="historia_analizar" class="btn amber" href="app.html">Analizar mis datos</a><a data-umami-event="piloto_participar" class="link" href="mailto:info@tharp.es?subject=Programa%20piloto%20Tharp">Unirme al programa piloto</a></div>
       </div>
     </div>
+    <svg class="sounding" viewBox="0 0 1200 120" preserveAspectRatio="none" role="img" aria-label="Perfil del fondo del Atlántico a 27 grados norte, de Florida a Canarias, con la dorsal mesoatlántica en el centro"><path class="sea" d="M0.0,18.3 L5.0,53.4 L10.0,84.9 L15.0,83.7 L20.0,82.5 L25.0,81.0 L30.0,79.7 L35.0,79.2 L40.0,77.7 L45.0,74.8 L50.0,74.1 L55.0,75.8 L60.0,78.0 L65.0,80.5 L70.0,83.1 L75.0,85.7 L80.0,86.8 L85.0,87.5 L90.0,88.1 L95.0,88.7 L100.0,90.4 L105.0,92.1 L110.0,93.0 L115.0,93.7 L120.0,94.0 L125.0,94.1 L130.0,94.0 L135.0,93.7 L140.0,93.2 L145.0,93.0 L150.0,93.0 L155.0,92.8 L160.0,92.3 L165.0,91.6 L170.0,90.8 L175.0,91.5 L180.0,92.9 L185.0,90.9 L190.0,88.2 L195.0,86.1 L200.0,84.2 L205.0,84.2 L210.0,84.7 L215.0,89.7 L220.0,93.8 L225.0,93.4 L230.0,92.8 L235.0,91.7 L240.0,91.6 L245.0,93.5 L250.0,95.5 L255.0,97.7 L260.0,97.6 L265.0,95.7 L270.0,96.8 L275.0,99.2 L280.0,100.4 L285.0,101.0 L290.0,101.8 L295.0,102.5 L300.0,104.2 L305.0,105.7 L310.0,104.3 L315.0,103.2 L320.0,103.6 L325.0,104.6 L330.0,107.7 L335.0,108.7 L340.0,105.8 L345.0,103.4 L350.0,101.5 L355.0,102.2 L360.0,105.2 L365.0,103.8 L370.0,99.5 L375.0,97.5 L380.0,96.4 L385.0,98.9 L390.0,102.3 L395.0,102.0 L400.0,101.3 L405.0,97.4 L410.0,94.2 L415.0,98.2 L420.0,101.7 L425.0,103.3 L430.0,102.6 L435.0,96.5 L440.0,94.8 L445.0,100.3 L450.0,102.3 L455.0,100.4 L460.0,97.7 L465.0,94.3 L470.0,94.1 L475.0,95.6 L480.0,92.1 L485.0,87.1 L490.0,82.8 L495.0,78.7 L500.0,83.2 L505.0,87.9 L510.0,86.7 L515.0,85.7 L520.0,85.2 L525.0,85.1 L530.0,86.1 L535.0,86.4 L540.0,85.7 L545.0,84.4 L550.0,82.5 L555.0,79.4 L560.0,75.1 L565.0,72.5 L570.0,70.7 L575.0,69.6 L580.0,68.8 L585.0,68.5 L590.0,68.4 L595.0,65.0 L600.0,61.3 L605.0,53.3 L610.0,47.0 L615.0,56.9 L620.0,63.7 L625.0,57.3 L630.0,54.9 L635.0,62.6 L640.0,67.5 L645.0,68.1 L650.0,64.6 L655.0,56.7 L660.0,59.7 L665.0,70.8 L670.0,70.3 L675.0,64.0 L680.0,65.4 L685.0,69.2 L690.0,70.3 L695.0,70.9 L700.0,74.9 L705.0,78.8 L710.0,76.5 L715.0,74.5 L720.0,74.0 L725.0,74.6 L730.0,78.9 L735.0,82.9 L740.0,86.1 L745.0,86.3 L750.0,82.4 L755.0,80.5 L760.0,80.4 L765.0,82.5 L770.0,86.0 L775.0,88.6 L780.0,90.7 L785.0,87.2 L790.0,82.5 L795.0,87.0 L800.0,92.5 L805.0,89.8 L810.0,87.4 L815.0,87.7 L820.0,88.6 L825.0,92.2 L830.0,94.4 L835.0,93.6 L840.0,92.6 L845.0,91.6 L850.0,90.8 L855.0,90.0 L860.0,87.6 L865.0,84.1 L870.0,87.3 L875.0,93.9 L880.0,94.3 L885.0,92.9 L890.0,91.9 L895.0,91.0 L900.0,90.7 L905.0,90.4 L910.0,91.4 L915.0,92.1 L920.0,91.8 L925.0,91.7 L930.0,91.8 L935.0,91.8 L940.0,91.3 L945.0,89.5 L950.0,85.9 L955.0,85.8 L960.0,88.9 L965.0,89.2 L970.0,87.8 L975.0,87.9 L980.0,88.6 L985.0,88.6 L990.0,88.4 L995.0,88.1 L1000.0,87.8 L1005.0,87.8 L1010.0,87.6 L1015.0,86.6 L1020.0,85.7 L1025.0,85.2 L1030.0,84.8 L1035.0,84.4 L1040.0,84.0 L1045.0,83.6 L1050.0,83.0 L1055.0,82.2 L1060.0,81.3 L1065.0,80.3 L1070.0,79.1 L1075.0,77.8 L1080.0,76.1 L1085.0,74.3 L1090.0,72.4 L1095.0,70.4 L1100.0,68.0 L1105.0,65.7 L1110.0,65.3 L1115.0,64.9 L1120.0,64.5 L1125.0,64.0 L1130.0,63.6 L1135.0,63.2 L1140.0,62.7 L1145.0,62.2 L1150.0,61.5 L1155.0,60.6 L1160.0,59.4 L1165.0,57.9 L1170.0,56.0 L1175.0,52.9 L1180.0,49.3 L1185.0,43.8 L1190.0,37.9 L1195.0,24.7 L1200.0,10.7 L1200,120 L0,120 Z"/><path d="M0.0,18.3 L5.0,53.4 L10.0,84.9 L15.0,83.7 L20.0,82.5 L25.0,81.0 L30.0,79.7 L35.0,79.2 L40.0,77.7 L45.0,74.8 L50.0,74.1 L55.0,75.8 L60.0,78.0 L65.0,80.5 L70.0,83.1 L75.0,85.7 L80.0,86.8 L85.0,87.5 L90.0,88.1 L95.0,88.7 L100.0,90.4 L105.0,92.1 L110.0,93.0 L115.0,93.7 L120.0,94.0 L125.0,94.1 L130.0,94.0 L135.0,93.7 L140.0,93.2 L145.0,93.0 L150.0,93.0 L155.0,92.8 L160.0,92.3 L165.0,91.6 L170.0,90.8 L175.0,91.5 L180.0,92.9 L185.0,90.9 L190.0,88.2 L195.0,86.1 L200.0,84.2 L205.0,84.2 L210.0,84.7 L215.0,89.7 L220.0,93.8 L225.0,93.4 L230.0,92.8 L235.0,91.7 L240.0,91.6 L245.0,93.5 L250.0,95.5 L255.0,97.7 L260.0,97.6 L265.0,95.7 L270.0,96.8 L275.0,99.2 L280.0,100.4 L285.0,101.0 L290.0,101.8 L295.0,102.5 L300.0,104.2 L305.0,105.7 L310.0,104.3 L315.0,103.2 L320.0,103.6 L325.0,104.6 L330.0,107.7 L335.0,108.7 L340.0,105.8 L345.0,103.4 L350.0,101.5 L355.0,102.2 L360.0,105.2 L365.0,103.8 L370.0,99.5 L375.0,97.5 L380.0,96.4 L385.0,98.9 L390.0,102.3 L395.0,102.0 L400.0,101.3 L405.0,97.4 L410.0,94.2 L415.0,98.2 L420.0,101.7 L425.0,103.3 L430.0,102.6 L435.0,96.5 L440.0,94.8 L445.0,100.3 L450.0,102.3 L455.0,100.4 L460.0,97.7 L465.0,94.3 L470.0,94.1 L475.0,95.6 L480.0,92.1 L485.0,87.1 L490.0,82.8 L495.0,78.7 L500.0,83.2 L505.0,87.9 L510.0,86.7 L515.0,85.7 L520.0,85.2 L525.0,85.1 L530.0,86.1 L535.0,86.4 L540.0,85.7 L545.0,84.4 L550.0,82.5 L555.0,79.4 L560.0,75.1 L565.0,72.5 L570.0,70.7 L575.0,69.6 L580.0,68.8 L585.0,68.5 L590.0,68.4 L595.0,65.0 L600.0,61.3 L605.0,53.3 L610.0,47.0 L615.0,56.9 L620.0,63.7 L625.0,57.3 L630.0,54.9 L635.0,62.6 L640.0,67.5 L645.0,68.1 L650.0,64.6 L655.0,56.7 L660.0,59.7 L665.0,70.8 L670.0,70.3 L675.0,64.0 L680.0,65.4 L685.0,69.2 L690.0,70.3 L695.0,70.9 L700.0,74.9 L705.0,78.8 L710.0,76.5 L715.0,74.5 L720.0,74.0 L725.0,74.6 L730.0,78.9 L735.0,82.9 L740.0,86.1 L745.0,86.3 L750.0,82.4 L755.0,80.5 L760.0,80.4 L765.0,82.5 L770.0,86.0 L775.0,88.6 L780.0,90.7 L785.0,87.2 L790.0,82.5 L795.0,87.0 L800.0,92.5 L805.0,89.8 L810.0,87.4 L815.0,87.7 L820.0,88.6 L825.0,92.2 L830.0,94.4 L835.0,93.6 L840.0,92.6 L845.0,91.6 L850.0,90.8 L855.0,90.0 L860.0,87.6 L865.0,84.1 L870.0,87.3 L875.0,93.9 L880.0,94.3 L885.0,92.9 L890.0,91.9 L895.0,91.0 L900.0,90.7 L905.0,90.4 L910.0,91.4 L915.0,92.1 L920.0,91.8 L925.0,91.7 L930.0,91.8 L935.0,91.8 L940.0,91.3 L945.0,89.5 L950.0,85.9 L955.0,85.8 L960.0,88.9 L965.0,89.2 L970.0,87.8 L975.0,87.9 L980.0,88.6 L985.0,88.6 L990.0,88.4 L995.0,88.1 L1000.0,87.8 L1005.0,87.8 L1010.0,87.6 L1015.0,86.6 L1020.0,85.7 L1025.0,85.2 L1030.0,84.8 L1035.0,84.4 L1040.0,84.0 L1045.0,83.6 L1050.0,83.0 L1055.0,82.2 L1060.0,81.3 L1065.0,80.3 L1070.0,79.1 L1075.0,77.8 L1080.0,76.1 L1085.0,74.3 L1090.0,72.4 L1095.0,70.4 L1100.0,68.0 L1105.0,65.7 L1110.0,65.3 L1115.0,64.9 L1120.0,64.5 L1125.0,64.0 L1130.0,63.6 L1135.0,63.2 L1140.0,62.7 L1145.0,62.2 L1150.0,61.5 L1155.0,60.6 L1160.0,59.4 L1165.0,57.9 L1170.0,56.0 L1175.0,52.9 L1180.0,49.3 L1185.0,43.8 L1190.0,37.9 L1195.0,24.7 L1200.0,10.7"/></svg>
+    <figure class="chart1957"><img src="img/atlantico-1957.jpg" alt="Diagrama fisiográfico del Atlántico Norte de Heezen y Tharp, 1957: el fondo marino dibujado a mano en verde agua y la tierra en amarillo" width="1200" height="663" loading="lazy"><figcaption>Arriba, el fondo del Atlántico a 27° N, de Florida a Canarias, con datos batimétricos reales de la NOAA (ETOPO1). Debajo, el diagrama fisiográfico de Heezen y Tharp de 1957 (dominio público), del que salen los colores de esta página.</figcaption></figure>
   </div>
 </section>
 
-<section id="privacidad">
+<section class="shallow">
   <div class="wrap">
-    <div class="k">Privacidad desde el diseño</div>
-    <h2 style="margin-top:14px">Tus datos de investigación <em>no salen de tu ordenador.</em></h2>
-    <p class="lead">Trabajas con datos sensibles: participantes, pacientes, alumnos. Por eso Tharp está construido para no necesitarlos.</p>
-    <div class="privacy">
-      <div><b>Cálculo en tu navegador</b><p>El archivo se procesa en tu propio equipo. No se sube a ningún servidor.</p></div>
-      <div><b>Nada se guarda</b><p>Al cerrar la pestaña, los datos desaparecen. No hay cuentas ni archivos almacenados.</p></div>
-      <div><b>Sin cookies</b><p>Solo contamos visitas de forma anónima y agregada, sin cookies ni datos personales. Tus archivos nunca se envían.</p></div>
-      <div><b>Pensado para el RGPD</b><p>Si los datos no se transmiten, no hay cesión a terceros ni transferencias internacionales: más sencillo ante el comité de ética.</p></div>
-    </div>
-  </div>
-</section>
-
-<section style="padding-top:0">
-  <div class="wrap">
-    <div class="k">Preguntas frecuentes</div>
-    <h2 style="margin-top:14px">Lo que nos suelen <em>preguntar.</em></h2>
+    <h2 class="h2">Preguntas frecuentes</h2>
     <div class="faq">
-      <details><summary>¿Tharp es gratis?</summary><p>Durante el lanzamiento, sí, y sin registro: entras, subes tu archivo y analizas. Más adelante habrá planes de pago; te avisaremos con antelación.</p></details>
-      <details><summary>¿Mis datos se suben a algún servidor?</summary><p>No. Todo el cálculo se hace en tu navegador, con el código de la página. El archivo no sale de tu ordenador y nada se guarda cuando cierras la pestaña.</p></details>
-      <details><summary>¿Qué archivos puedo usar?</summary><p>Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp). Se respetan las etiquetas de valor, los tipos de medida y los valores perdidos definidos por el usuario. La primera fila debe tener los nombres de las variables y cada fila, un participante.</p></details>
-      <details><summary>¿Los resultados son fiables?</summary><p>Cada análisis se valida automáticamente contra R, número a número, antes de cada versión (<a href="validacion.html" style="color:var(--teal)">cómo lo validamos</a>), y cada resultado incluye el script de R para que cualquiera (tú, tu director o un revisor) pueda reproducirlo. Aun así, revisa siempre los resultados: Tharp automatiza el cálculo, pero la interpretación es tuya.</p></details>
-      <details><summary>¿Qué análisis incluye?</summary><p>Desde descriptivos y pruebas t hasta modelos mixtos, análisis factorial confirmatorio con invarianza de medida, supervivencia o metaanálisis: tienes la lista completa en <a href="#rigor">Rigor</a>. Si necesitas un análisis que aún no está, el buscador de pruebas te lo indica y puedes escribirnos: priorizamos lo que más nos pedís.</p></details>
-      <details><summary>¿Puedo usarlo en mi artículo o mi tesis? ¿Cómo lo cito?</summary><p>Sí. Tharp genera tablas y texto en formato APA y un documento de Word editable. Las normas APA piden mencionar el software en el método y citarlo en las referencias; Tharp te da la cita al final de cada análisis:</p><p class="cite">Agüí Ruiz, B. (<span data-tharp="year">2026</span>). <i>Tharp</i> (Versión <span data-tharp="version">1.2.0</span>) [Software]. https://tharp.es</p></details>
+      <details><summary>¿Tharp es gratis?</summary><div class="ans"><p>Durante el lanzamiento, sí, y sin registro: entras, subes tu archivo y analizas. Más adelante habrá planes de pago; te avisaremos con antelación.</p></div></details>
+      <details><summary>¿Mis datos se suben a algún servidor?</summary><div class="ans"><p>No. Todo el cálculo se hace en tu navegador, con el código de la página. El archivo no sale de tu ordenador y nada se guarda cuando cierras la pestaña.</p></div></details>
+      <details><summary>¿Qué archivos puedo usar?</summary><div class="ans"><p>Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp). Se respetan las etiquetas de valor, los tipos de medida y los valores perdidos definidos por el usuario. La primera fila debe tener los nombres de las variables y cada fila, un participante.</p></div></details>
+      <details><summary>¿Los resultados son fiables?</summary><div class="ans"><p>Cada análisis se valida automáticamente contra R, número a número, antes de cada versión (<a href="validacion.html">cómo lo validamos</a>), y cada resultado incluye el script de R para que cualquiera (tú, tu director o un revisor) pueda reproducirlo. Aun así, revisa siempre los resultados: Tharp automatiza el cálculo, pero la interpretación es tuya.</p></div></details>
+      <details><summary>¿Qué análisis incluye?</summary><div class="ans"><p>Desde descriptivos y pruebas t hasta modelos mixtos, análisis factorial confirmatorio con invarianza de medida, supervivencia o metaanálisis: tienes la lista completa en <a href="#validacion">Validación</a>. Si necesitas un análisis que aún no está, el buscador de pruebas te lo indica y puedes escribirnos: priorizamos lo que más nos pedís.</p></div></details>
+      <details><summary>¿Puedo usarlo en mi artículo o mi tesis? ¿Cómo lo cito?</summary><div class="ans"><p>Sí. Tharp genera tablas y texto en formato APA y un documento de Word editable. Las normas APA piden mencionar el software en el método y citarlo en las referencias; Tharp te da la cita al final de cada análisis:</p><p class="cite">Agüí Ruiz, B. (<span data-tharp="year">2026</span>). <i>Tharp</i> (Versión <span data-tharp="version">1.2.0</span>) [Software]. https://tharp.es</p></div></details>
     </div>
   </div>
 </section>
 
-<section id="piloto" class="dark">
-  <div class="wrap pilot">
-    <div>
-      <div class="k">Programa piloto · Gratuito</div>
-      <h2 style="margin-top:14px">¿Investigas o enseñas metodología? <em>Ayúdanos a hacer Tharp.</em></h2>
-      <p class="lead">Buscamos investigadores, doctorandos y docentes que lo prueben con sus propios datos y nos cuenten qué les falta. Te enseñamos la herramienta en 10 minutos y tu opinión decide qué construimos después.</p>
-    </div>
-    <div>
-      <div class="acts">
-        <a class="btn btn-ping" data-umami-event="piloto_participar" href="mailto:info@tharp.es?subject=Programa%20piloto%20Tharp&body=Hola%2C%20me%20interesa%20probar%20Tharp.%0A%0ASoy%20(investigador%2Fa%20%2F%20doctorando%2Fa%20%2F%20docente)%3A%0AUniversidad%20o%20centro%3A%0A">Quiero participar</a>
-        <a class="btn btn-line" href="app.html#ejemplo" data-umami-event="piloto_ejemplo">Ver un análisis de ejemplo</a>
-      </div>
-      <p style="margin:20px 0 0"><a class="lnk" href="docentes/tharp-ficha-docentes.pdf" data-umami-event="ficha_docentes" style="color:var(--ping)">Descargar la ficha para docentes (PDF, una página)</a></p>
-      <small>O escríbenos a <a href="mailto:info@tharp.es">info@tharp.es</a> · Instagram: <a href="https://www.instagram.com/tharpstats/" rel="noopener">@tharpstats</a></small>
-    </div>
+<section class="closing">
+  <div class="wrap endgrid">
+    <h2 class="h2">Empieza con tus datos</h2>
+    <div><div class="acts"><a data-umami-event="cierre_analizar" class="btn amber" href="app.html">Analizar mis datos</a><a data-umami-event="cierre_ejemplo" class="link" href="app.html#ejemplo">Ver un análisis de ejemplo</a></div>
+    <p class="terms-ink">Gratis durante el lanzamiento, sin registro. El cálculo se hace en tu navegador.</p></div>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <div><i lang="en">From question to evidence.</i> · © 2026 Blanca Agüí Ruiz (<a href="https://orcid.org/0009-0002-3982-2565" rel="noopener">ORCID</a>). Todos los derechos reservados.</div>
-    <div><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/" rel="noopener">Instagram</a> · <a href="privacidad.html">Privacidad</a> · Sin cookies</div>
+    <div><b lang="en">From question to evidence.</b>Tharp <span data-tharp="version">1.2.0</span> · © 2026 Blanca Agüí Ruiz · <a href="https://orcid.org/0009-0002-3982-2565">ORCID 0009-0002-3982-2565</a>. Todos los derechos reservados.</div>
+    <div><b>Producto</b><a href="app.html">Analizar mis datos</a> · <a data-umami-event="nav_validacion" href="validacion.html">Validación</a> · <a href="#finder">¿Qué prueba uso?</a></div>
+    <div><b>Contacto</b><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/">Instagram</a> · <a href="privacidad.html">Privacidad</a> · Sin cookies</div>
   </div>
 </footer>
 
+<script src="vendor/jstat.min.js"></script>
+<script>window.jStat = window.jStat || jStat;</script>
+<script src="js/stats.js"></script>
+<script src="js/demo.js"></script>
+<script src="js/validacion.js"></script>
 <script src="js/version.js"></script>
-<script>try{document.querySelectorAll("[data-tharp]").forEach(function(e){var v=window.TharpVersion;if(v&&v[e.dataset.tharp])e.textContent=v[e.dataset.tharp];});}catch(e){}</script>
 <script>
-(function(){
-  // sonda: avanza sobre el relieve de una dorsal; al pasar cada umbral se enciende una comprobación y al final se marca el resultado
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const fit = cv => { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = Math.max(1, r.width * d); cv.height = Math.max(1, r.height * d); const c = cv.getContext('2d'); c.setTransform(d, 0, 0, d, 0, 0); return [c, r.width, r.height]; };
-  const rnd = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
-  const noise = Array.from({ length: 400 }, () => rnd() - .5);
-  const nz = x => { const i = Math.floor(x) % 399, f = x - Math.floor(x); return noise[i] * (1 - f) + noise[i + 1] * f; };
-  const relief = (u, row) => { const c = .5 + .04 * Math.sin(row * .7), d = u - c, ridge = Math.exp(-(d * d) / .018), rift = Math.exp(-(d * d) / .0009);
-    return ridge * .9 - rift * .55 + .22 * nz(u * 40 + row * 13) * (.4 + ridge) + .12 * nz(u * 9 + row * 3); };
-  const cv = document.getElementById('cvD'), cells = [...document.querySelectorAll('#dChecks > div')], sheet = document.getElementById('dSheet'), state = document.getElementById('dState');
-  const C = { grid: '#1f4a5e', ping: '#f2b33d', foam: '#dcedf0', dim: '#8fb0bd' };
-  let dims = null, t0 = performance.now(), visible = true;
-  function draw(now) {
-    if (!dims) dims = fit(cv); const [c, W, H] = dims;
-    const SWEEP = 6500, HOLD = 4000, el = reduce ? SWEEP : (now - t0) % (SWEEP + HOLD), prog = Math.min(1, el / SWEEP), xe = W * prog, base = H * .62, depth = x => base - 44 * relief(x / W, 5);
-    c.clearRect(0, 0, W, H); c.strokeStyle = C.grid; c.lineWidth = 1;
-    for (let y = 12; y < H; y += 22) { c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
-    cells.forEach((d, i) => { const at = +d.dataset.at, x = W * at, on = prog >= at; c.setLineDash([2, 4]); c.strokeStyle = on ? C.ping : C.dim; c.globalAlpha = .7; c.beginPath(); c.moveTo(x, 4); c.lineTo(x, H); c.stroke(); c.setLineDash([]); c.globalAlpha = 1;
-      c.fillStyle = on ? C.ping : C.dim; c.font = '500 10px "Spline Sans Mono", monospace'; c.fillText(String(i + 1), x + 4, 14); d.classList.toggle('on', on); });
-    c.beginPath(); for (let x = 0; x <= xe; x += 3) { const y = depth(x); x ? c.lineTo(x, y) : c.moveTo(x, y); } c.lineTo(xe, H); c.lineTo(0, H); c.closePath(); c.fillStyle = 'rgba(242,179,61,.08)'; c.fill();
-    c.fillStyle = C.foam; c.globalAlpha = .5; for (let x = 0; x <= xe; x += 8) c.fillRect(x, depth(x) - 1, 2, 2); c.globalAlpha = 1;
-    c.beginPath(); for (let x = 0; x <= xe; x += 3) { const y = depth(x); x ? c.lineTo(x, y) : c.moveTo(x, y); } c.strokeStyle = C.ping; c.lineWidth = 1.6; c.stroke();
-    if (prog < 1) { const yd = depth(xe), rr = (now / 6) % 26; c.globalAlpha = 1 - rr / 26; c.beginPath(); c.arc(xe, yd, rr, 0, Math.PI * 2); c.strokeStyle = C.ping; c.stroke(); c.globalAlpha = 1; c.fillStyle = C.ping; c.beginPath(); c.arc(xe, yd, 3, 0, Math.PI * 2); c.fill(); }
-    sheet.classList.toggle('lit', prog >= 1); state.textContent = prog >= 1 ? 'Resultados listos ✓' : 'Analizando…';
-    if (!reduce && visible) requestAnimationFrame(draw);
-  }
-  addEventListener('resize', () => { dims = null; if (reduce) draw(performance.now()); });
-  if ('IntersectionObserver' in window) new IntersectionObserver(es => { const v = es[0].isIntersecting; if (v && !visible && !reduce) { visible = true; requestAnimationFrame(draw); } visible = v; }).observe(cv);
-  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(draw));
+(function () {
+  const S = window.TharpStats, rows = window.TharpDemo(), H = rows[0], R = rows.slice(1), col = n => R.map(r => r[H.indexOf(n)]);
+  const neg = s => s.replace(/^-/, '−'), f = (x, d = 2) => neg(x.toFixed(d)), nz = s => neg(s.replace(/^(-?)0\./, '$1.')), pv = p => (p < .001 ? '< .001' : '= ' + nz(p.toFixed(3))), pc = p => (p < .001 ? '< .001' : nz(p.toFixed(3)));
+  const ok = '<svg class="i"><use href="#i-ok"/></svg>', esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const narrow = matchMedia('(max-width: 560px)');
+  const by = (y, g) => { const Y = col(y), G = col(g), lv = [...new Set(G)].sort(); return { lv, groups: lv.map(l => Y.filter((v, i) => G[i] === l && v !== null)) }; };
+  const tbl = (cap, head, body) => `<div class="tw"><table class="apa"><caption>${cap}</caption><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body.map(r => `<tr>${r.map(c => (typeof c === 'object' ? `<td class="key">${c.v}</td>` : `<td>${c}</td>`)).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const sig = (p, yes, no) => (p < .05 ? yes : no);
+  const normal = sw => sw.every(t => t.p >= .05);
+  const files = '<div class="files"><span>resultados.docx</span><span>analisis.R</span><span>registro de decisiones</span></div>';
 
-  // pregúntale a tus datos: resultados reales de los datos de ejemplo de la aplicación
-  const FQ = [
-    { t: 'ANOVA de un factor', w: 'Comparas 3 grupos independientes en una variable cuantitativa. La normalidad es aceptable y las varianzas son homogéneas (Levene), así que no hace falta la alternativa no paramétrica.', r: 'Se aplicó un ANOVA de un factor para comparar ansiedad_post según grupo (Control: <i>M</i> = 25.58, <i>DT</i> = 6.77; Ejercicio: <i>M</i> = 23.84, <i>DT</i> = 7.44; Mindfulness: <i>M</i> = 21.56, <i>DT</i> = 7.38). Se encontraron diferencias estadísticamente significativas, <i>F</i>(2, 321) = 8.45, <i>p</i> &lt; .001, η² = .050, con un tamaño del efecto pequeño.' },
-    { t: 'Correlación de Spearman', w: 'Relacionas variables cuantitativas y alguna presenta una asimetría marcada, por lo que se usa Spearman en lugar de Pearson.', r: 'ansiedad_post y ansiedad_pre mostraron una correlación positiva fuerte, <i>r</i><sub>s</sub>(322) = .78, <i>p</i> &lt; .001; autoestima y ansiedad_post mostraron una correlación negativa fuerte, <i>r</i><sub>s</sub>(313) = -.53, <i>p</i> &lt; .001.' },
-    { t: 'Regresión lineal múltiple', w: 'Quieres explicar una variable cuantitativa a partir de varias. Tharp comprueba la normalidad de los residuos, la homocedasticidad (Breusch-Pagan), la colinealidad (VIF) y los casos influyentes.', r: 'El modelo fue estadísticamente significativo, <i>F</i>(3, 308) = 31.64, <i>p</i> &lt; .001, y explicó el 23.6 % de la varianza (<i>R</i>² ajustado = .23). horas_sueno se asoció positivamente con rendimiento (<i>B</i> = 0.37, β = .28, <i>p</i> &lt; .001) y estres se asoció negativamente (<i>B</i> = -0.09, β = -.35, <i>p</i> &lt; .001).' },
-    { t: 'ANOVA de medidas repetidas', w: 'Comparas 3 medidas de las mismas personas. No se cumple la esfericidad (Mauchly), así que se corrigen los grados de libertad con Greenhouse-Geisser.', r: 'Se encontraron diferencias estadísticamente significativas entre los momentos, <i>F</i>(1.52, 460.44) = 60.50, <i>p</i> &lt; .001, η²<sub>p</sub> = .166. Las comparaciones por pares (Holm) mostraron puntuaciones más bajas en ansiedad_post y en ansiedad_seguimiento que en ansiedad_pre (<i>p</i> &lt; .001).' } ];
-  const fb = [...document.querySelectorAll('.qs button')];
-  const show = i => { fb.forEach((b, j) => b.setAttribute('aria-pressed', String(i === j))); document.getElementById('fTest').textContent = FQ[i].t; document.getElementById('fWhy').textContent = FQ[i].w; document.getElementById('fRes').innerHTML = FQ[i].r; };
-  fb.forEach((b, i) => b.addEventListener('click', () => { show(i); try { window.umami && window.umami.track('portada_pregunta', { prueba: FQ[i].t }); } catch (e) { /* estadística opcional */ } }));
-  show(0);
-})();
-</script>
-<script>
-(function(){
-  const box = document.getElementById('finderBox');
-  const state = {};
-  const history = [];
-
-  // Árbol de decisión
+  // cada pregunta: calculada con el motor de Tharp; lo que se dice depende de los resultados
   const Q = {
-    goal: {t:'¿Qué quieres hacer con tus datos?', h:'Piensa en tu pregunta de investigación.', o:[
-      ['compare','Comparar grupos','¿Hay diferencias entre grupos o momentos?'],
-      ['relate','Relacionar variables','¿Están asociadas dos variables?'],
-      ['predict','Predecir una variable','¿Qué variables explican o predicen un resultado?'],
-      ['describe','Describir mis datos','Medias, frecuencias, distribución…']]},
-    dv: {t:'¿Cómo es tu variable dependiente (la que mides)?', h:'Ej.: ansiedad, nota, satisfacción, aprobado/suspenso.', o:[
-      ['quant','Cuantitativa','Puntuaciones, tiempos, edad, escalas con muchos valores'],
-      ['ord','Ordinal','Categorías con orden: bajo / medio / alto, Likert de un ítem'],
-      ['cat','Categórica','Categorías sin orden: sí/no, tipo de tratamiento']]},
-    groups: {t:'¿Cuántos grupos o momentos comparas?', h:'Ej.: hombres/mujeres = 2; tres tratamientos = 3 o más.', o:[
-      ['2','2 grupos o momentos',''],['3','3 o más','']]},
-    design: {t:'¿Los grupos son independientes o relacionados?', h:'Relacionados = las mismas personas medidas varias veces (pre/post) o parejas emparejadas.', o:[
-      ['ind','Independientes','Cada persona pertenece a un solo grupo'],
-      ['rel','Relacionados','Las mismas personas en varios momentos o condiciones']]},
-    vars: {t:'¿Qué tipo de variables quieres relacionar?', h:'', o:[
-      ['qq','Las dos cuantitativas','Ej.: horas de estudio y nota'],
-      ['oo','Al menos una es ordinal','Ej.: nivel de estudios y satisfacción'],
-      ['cc','Las dos categóricas','Ej.: sexo y opción de voto']]},
-    pdv: {t:'¿Cómo es la variable que quieres predecir?', h:'', o:[
-      ['quant','Cuantitativa','Ej.: nota final, nivel de estrés'],
-      ['bin','Dicotómica (2 categorías)','Ej.: aprueba/suspende, sí/no'],
-      ['ord','Ordinal','Ej.: nivel bajo / medio / alto']]}
-  };
+    anova() { const { lv, groups } = by('ansiedad_post', 'grupo'), a = S.anova(groups), tk = S.tukeyHSD(groups, a.msw, a.df2), lev = S.levene(groups), sw = groups.map(g => S.shapiro(g));
+      const nOk = normal(sw), vOk = lev.p >= .05, pairs = tk.filter(c => c.padj < .05).map(c => `${lv[c.i]} y ${lv[c.j]}`), n = groups.reduce((t, g) => t + g.length, 0);
+      return { xname: 'ansiedad_post', title: `ansiedad_post según grupo · ${n} casos`, series: lv.map((l, i) => ({ name: l, v: groups[i] })),
+        chk: [['Normalidad', `Shapiro-Wilk ${nOk ? ok : '✗'}`], ['Varianzas', `Levene ${vOk ? ok : '✗'}`], ['Prueba', nOk && vOk ? 'ANOVA + Tukey' : !nOk ? 'Kruskal-Wallis' : 'Welch + Games-Howell'], ['Efecto', `η² = ${nz(a.eta2.toFixed(3))}`]],
+        table: tbl('<b>Tabla 1</b><i>ANOVA de un factor para ansiedad_post según el grupo</i>', ['Fuente', '<i>gl</i>', '<i>F</i>', '<i>p</i>', 'η²'], [['Grupo', a.df1, { v: f(a.F) }, pc(a.p), nz(a.eta2.toFixed(3))], ['Error', a.df2, '', '', '']]),
+        text: `${sig(a.p, 'Se encontraron diferencias estadísticamente significativas', 'No se encontraron diferencias estadísticamente significativas')} en ansiedad_post según el grupo, <mark><i>F</i>(${a.df1}, ${a.df2}) = ${f(a.F)}, <i>p</i> ${pv(a.p)}, η² = ${nz(a.eta2.toFixed(3))}</mark>${pairs.length ? `. Las comparaciones de Tukey mostraron diferencias entre ${pairs.join(', ')}` : ''}.` }; },
+    t() { const { lv, groups } = by('ansiedad_pre', 'sexo'), lev = S.levene(groups), eq = lev.p >= .05, r = S.tTestInd(groups[0], groups[1], eq), d = groups.map(g => S.describe(g)), sw = groups.map(g => S.shapiro(g));
+      const nOk = normal(sw), dir = r.diff < 0 ? 'más bajas' : 'más altas', gl = Number.isInteger(r.df) ? r.df : f(r.df);
+      return { xname: 'ansiedad_pre', title: `ansiedad_pre según sexo · ${groups[0].length + groups[1].length} casos`, series: lv.map((l, i) => ({ name: l, v: groups[i] })),
+        chk: [['Normalidad', `Shapiro-Wilk ${nOk ? ok : '✗'}`], ['Varianzas', `Levene ${eq ? ok : '✗'}`], ['Prueba', nOk ? (eq ? 't de Student' : 't de Welch') : 'Mann-Whitney'], ['Efecto', `<i>d</i> = ${f(r.d)}`]],
+        table: narrow.matches ? tbl('<b>Tabla 1</b><i>Prueba t para muestras independientes</i>', ['Comparación', '<i>t</i>', '<i>gl</i>', '<i>p</i>', '<i>d</i>'], [[`${lv[0]} − ${lv[1]}`, { v: f(r.t) }, gl, pc(r.p), f(r.d)]])
+          : tbl('<b>Tabla 1</b><i>Prueba t para muestras independientes</i>', ['Comparación', '<i>t</i>', '<i>gl</i>', '<i>p</i>', '<i>d</i>', 'IC&nbsp;95&nbsp;% (<i>d</i>)'], [[`${lv[0]} − ${lv[1]}`, { v: f(r.t) }, gl, pc(r.p), f(r.d), `[${f(r.dCI[0])}, ${f(r.dCI[1])}]`]]),
+        text: `${lv[0]} (<i>M</i> = ${f(d[0].mean)}, <i>DT</i> = ${f(d[0].sd)}) ${sig(r.p, `obtuvo puntuaciones significativamente ${dir} que`, 'no difirió significativamente de')} ${lv[1]} (<i>M</i> = ${f(d[1].mean)}, <i>DT</i> = ${f(d[1].sd)}), <mark><i>t</i>(${gl}) = ${f(r.t)}, <i>p</i> ${pv(r.p)}, <i>d</i> = ${f(r.d)}</mark>, IC&nbsp;95&nbsp;% [${f(r.dCI[0])}, ${f(r.dCI[1])}].` }; },
+    rho() { const X = col('ansiedad_pre'), Y = col('ansiedad_post'), m = X.map((v, i) => v !== null && Y[i] !== null), x = X.filter((_, i) => m[i]), y = Y.filter((_, i) => m[i]);
+      const sx = S.shapiro(x), sy = S.shapiro(y), nOk = sx.p >= .05 && sy.p >= .05, r = nOk ? S.pearson(x, y) : S.spearman(x, y), sym = nOk ? '<i>r</i>' : '<i>r</i><sub>s</sub>';
+      const fuerza = Math.abs(r.r) >= .5 ? 'fuerte' : Math.abs(r.r) >= .3 ? 'moderada' : 'débil', signo = r.r > 0 ? 'positiva' : 'negativa';
+      return { title: `ansiedad_pre y ansiedad_post · ${x.length} casos`, scatter: { x, y },
+        chk: [['Normalidad', `Shapiro-Wilk ${nOk ? ok : '✗'}`], ['Casos', `${x.length} pares`], ['Prueba', nOk ? 'Pearson' : 'Spearman'], ['Efecto', `${sym} = ${nz(r.r.toFixed(2))}`]],
+        table: tbl(`<b>Tabla 1</b><i>Correlación de ${nOk ? 'Pearson' : 'Spearman'}</i>`, ['Par', sym, '<i>gl</i>', '<i>p</i>'], [['ansiedad_pre y ansiedad_post', { v: nz(r.r.toFixed(2)) }, r.df, pc(r.p)]]),
+        text: `Las variables ansiedad_pre y ansiedad_post mostraron una correlación ${signo} ${fuerza}${sig(r.p, '', ' no significativa')}, <mark>${sym}(${r.df}) = ${nz(r.r.toFixed(2))}, <i>p</i> ${pv(r.p)}</mark>.` }; } };
 
-  function next(){
-    const s = state;
-    if(!s.goal) return 'goal';
-    if(s.goal==='describe') return null;
-    if(s.goal==='compare'){
-      if(!s.dv) return 'dv';
-      if(!s.groups) return 'groups';
-      if(!s.design) return 'design';
-      return null;
-    }
-    if(s.goal==='relate'){ return s.vars ? null : 'vars'; }
-    if(s.goal==='predict'){ return s.pdv ? null : 'pdv'; }
-  }
+  const $ = id => document.getElementById(id);
+  const inst = $('inst'), sonar = $('sonar'), chk = $('chk'), paper = $('paper'), qb = [...document.querySelectorAll('.qsel button')];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; let raf = 0, timers = [], cur = 'rho', O = null;
+  const nb = h => h.replace(/ (=|<|&lt;|>|&gt;) /g, '&nbsp;$1&nbsp;').replace(/(\([\d.]+|\[[−\d.]+), /g, '$1,&nbsp;');
+  const TONES = ['#e6f0ef', '#8fd3c4', '#f0a58f'], MARKS = [.25, .5, .75, .995];
+  const NS = 'http://www.w3.org/2000/svg';
 
-  const DVN = {quant:'cuantitativa',ord:'ordinal',cat:'categórica'};
-  function result(){
-    const s = state; let r;
-    const why = [];
-    if(s.goal==='describe'){
-      r = {name:'Estadísticos descriptivos', why:['Tu objetivo es describir la muestra, no contrastar una hipótesis'],
-        assum:['Elegir la medida según el tipo de variable: media y DT para cuantitativas, mediana y rango intercuartílico si la distribución es asimétrica, frecuencias y porcentajes para categóricas'],
-        alt:'Acompaña la descripción con histogramas, diagramas de caja o gráficos de barras.',
-        code:'summary(datos)\npsych::describe(datos)'};
-      return r;
-    }
-    if(s.goal==='compare'){
-      why.push('Quieres comparar grupos o momentos');
-      why.push('Variable dependiente '+DVN[s.dv]);
-      why.push(s.groups==='2'?'Comparas 2 grupos o momentos':'Comparas 3 o más grupos o momentos');
-      why.push(s.design==='ind'?'Los grupos son independientes':'Las medidas están relacionadas (mismas personas)');
-      const k = s.dv+'|'+s.groups+'|'+s.design;
-      const T = {
-        'quant|2|ind':['Prueba t de muestras independientes',['Normalidad de la VD en cada grupo (o n ≥ 30 por grupo)','Homogeneidad de varianzas (Levene); si no se cumple, usa la corrección de Welch','Independencia de las observaciones'],'U de Mann-Whitney si no se cumple la normalidad con muestras pequeñas.','t.test(vd ~ grupo, data = datos, var.equal = FALSE)'],
-        'quant|2|rel':['Prueba t de muestras relacionadas',['Normalidad de las diferencias entre las dos medidas','Las parejas de medidas corresponden a la misma persona'],'Prueba de rangos con signo de Wilcoxon si las diferencias no son normales.','t.test(datos$post, datos$pre, paired = TRUE)'],
-        'quant|3|ind':['ANOVA de un factor',['Normalidad de la VD en cada grupo','Homogeneidad de varianzas (Levene); si no se cumple, usa el ANOVA de Welch','Independencia de las observaciones','Si es significativo, comparaciones post hoc (Tukey, Games-Howell)'],'Kruskal-Wallis si no se cumplen los supuestos.','modelo <- aov(vd ~ grupo, data = datos)\nsummary(modelo)\nTukeyHSD(modelo)'],
-        'quant|3|rel':['ANOVA de medidas repetidas',['Normalidad en cada momento','Esfericidad (Mauchly); si no se cumple, corrección de Greenhouse-Geisser'],'Prueba de Friedman si no se cumplen los supuestos.','rstatix::anova_test(datos_largo, dv = vd, wid = id, within = momento)'],
-        'ord|2|ind':['U de Mann-Whitney',['Observaciones independientes','VD al menos ordinal'],'Si la VD fuera cuantitativa y normal, la prueba t sería más potente.','wilcox.test(vd ~ grupo, data = datos)'],
-        'ord|2|rel':['Prueba de rangos con signo de Wilcoxon',['Medidas emparejadas','VD al menos ordinal'],'Prueba de los signos si las diferencias no son simétricas.','wilcox.test(datos$post, datos$pre, paired = TRUE)'],
-        'ord|3|ind':['Prueba H de Kruskal-Wallis',['Observaciones independientes','VD al menos ordinal','Si es significativa, comparaciones post hoc de Dunn'],'ANOVA de un factor si la VD es cuantitativa y se cumplen sus supuestos.','kruskal.test(vd ~ grupo, data = datos)'],
-        'ord|3|rel':['Prueba de Friedman',['Las mismas personas en todas las condiciones','VD al menos ordinal'],'ANOVA de medidas repetidas si la VD es cuantitativa y se cumplen sus supuestos.','friedman.test(vd ~ momento | id, data = datos_largo)'],
-        'cat|2|ind':['Chi-cuadrado de independencia',['Observaciones independientes','Frecuencias esperadas ≥ 5 en al menos el 80 % de las casillas'],'Prueba exacta de Fisher si las frecuencias esperadas son bajas.','chisq.test(table(datos$grupo, datos$vd))'],
-        'cat|3|ind':['Chi-cuadrado de independencia',['Observaciones independientes','Frecuencias esperadas ≥ 5 en al menos el 80 % de las casillas','Analiza los residuos tipificados para ver dónde están las diferencias'],'Prueba exacta de Fisher (o simulación de Monte Carlo) si las frecuencias esperadas son bajas.','chisq.test(table(datos$grupo, datos$vd))'],
-        'cat|2|rel':['Prueba de McNemar',['VD dicotómica medida dos veces en las mismas personas'],'Prueba binomial exacta si hay pocos casos discordantes.','mcnemar.test(table(datos$pre, datos$post))'],
-        'cat|3|rel':['Q de Cochran',['VD dicotómica (sí/no) medida en las mismas personas en 3 o más momentos'],'Si la VD tiene más de dos categorías, considera modelos mixtos (GLMM).','DescTools::CochranQTest(respuesta ~ momento | id, data = datos_largo)']
-      };
-      const t = T[k];
-      r = {name:t[0], why, assum:t[1], alt:t[2], code:t[3]};
-      if(k==='cat|3|rel') r.warn = 'La Q de Cochran solo sirve si tu variable es dicotómica. Si tiene más categorías, consulta a un estadístico antes de continuar.';
-      return r;
-    }
-    if(s.goal==='relate'){
-      why.push('Quieres estudiar la asociación entre dos variables');
-      if(s.vars==='qq'){ why.push('Las dos variables son cuantitativas');
-        return {name:'Correlación de Pearson', why, assum:['Relación lineal (revisa el diagrama de dispersión)','Normalidad bivariada aproximada','Sin valores atípicos influyentes'], alt:'Correlación de Spearman si la relación no es lineal o hay atípicos.', code:'cor.test(datos$x, datos$y, method = "pearson")'}; }
-      if(s.vars==='oo'){ why.push('Al menos una variable es ordinal');
-        return {name:'Correlación de Spearman', why, assum:['Relación monótona (siempre crece o siempre decrece)','Variables al menos ordinales'], alt:'Tau-b de Kendall si hay muchos empates o la muestra es pequeña.', code:'cor.test(datos$x, datos$y, method = "spearman")'}; }
-      why.push('Las dos variables son categóricas');
-      return {name:'Chi-cuadrado + V de Cramér', why, assum:['Observaciones independientes','Frecuencias esperadas ≥ 5 en al menos el 80 % de las casillas'], alt:'Prueba exacta de Fisher en tablas 2×2 con frecuencias bajas.', code:'tabla <- table(datos$x, datos$y)\nchisq.test(tabla)\nrcompanion::cramerV(tabla)'};
-    }
-    if(s.goal==='predict'){
-      why.push('Quieres explicar o predecir una variable a partir de otras');
-      if(s.pdv==='quant'){ why.push('La variable resultado es cuantitativa');
-        return {name:'Regresión lineal', why, assum:['Linealidad','Independencia de los residuos (Durbin-Watson)','Homocedasticidad','Normalidad de los residuos','Ausencia de multicolinealidad (VIF)'], alt:'Regresión robusta o transformaciones si los residuos no se comportan bien.', code:'modelo <- lm(vd ~ x1 + x2, data = datos)\nsummary(modelo)\nplot(modelo)'}; }
-      if(s.pdv==='bin'){ why.push('La variable resultado es dicotómica');
-        return {name:'Regresión logística binaria', why, assum:['Observaciones independientes','Linealidad entre los predictores continuos y el logit','Ausencia de multicolinealidad','Suficientes casos por predictor (orientativo: ≥ 10 eventos por predictor)'], alt:'Regresión logística penalizada (Firth) si hay pocos eventos.', code:'modelo <- glm(vd ~ x1 + x2, data = datos, family = binomial)\nsummary(modelo)\nexp(coef(modelo))'}; }
-      why.push('La variable resultado es ordinal');
-      return {name:'Regresión logística ordinal', why, assum:['Supuesto de odds proporcionales (prueba de Brant)','Ausencia de multicolinealidad'], alt:'Regresión multinomial si no se cumplen las odds proporcionales.', code:'modelo <- MASS::polr(vd ~ x1 + x2, data = datos, Hess = TRUE)\nsummary(modelo)', warn:'La regresión ordinal tiene supuestos delicados. Si no tienes claro cómo interpretarla, consulta a un estadístico.'};
-    }
-  }
+  // los datos tal cual: cada caso es un sondeo; cada grupo, un perfil (densidad de núcleo gaussiano)
+  function draw() { const W = sonar.clientWidth, H = sonar.clientHeight, top = O.series ? (W < 640 ? 38 : 30) : 22, bot = 46, px = 22, o = O; let g = '';
+    const ticks = (a, b, X, name) => { const raw = (b - a) / 6, m = Math.pow(10, Math.floor(Math.log10(raw))), st = [1, 2, 5, 10].map(k => k * m).find(k => k >= raw); let t = '';
+      for (let v = Math.ceil(a / st) * st; v <= b; v += st) { const x = X(v); if (x > W - px - 120) continue; t += `<line class="tk" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${H - 14}" y2="${H - 10}"/><text class="lab tick" text-anchor="middle" x="${x.toFixed(1)}" y="${H - 1}">${neg(String(+v.toFixed(1)))}</text>`; }
+      return t + `<text class="lab tick" text-anchor="end" x="${W - px}" y="${H - 1}">${name}</text>`; };
+    if (o.series) { const all = o.series.flatMap(s => s.v), lo = Math.min(...all), hi = Math.max(...all), span = hi - lo || 1, a = lo - span * .04, b = hi + span * .04;
+      const X = v => px + (v - a) / (b - a) * (W - 2 * px), xs = Array.from({ length: 140 }, (_, i) => a + (b - a) * i / 139);
+      const dens = o.series.map(s => { const d = S.describe(s.v), h = 1.06 * d.sd * Math.pow(s.v.length, -.2); return xs.map(x => s.v.reduce((t, v) => t + Math.exp(-.5 * ((x - v) / h) ** 2), 0) / (s.v.length * h)); });
+      const mx = Math.max(...dens.flat()), Yd = d => H - bot - d / mx * (H - top - bot);
+      dens.forEach((d, k) => { const pts = d.map((y, i) => `${X(xs[i]).toFixed(1)},${Yd(y).toFixed(1)}`).join(' L');
+        g += `<path class="ar" fill="${TONES[k]}" fill-opacity=".07" d="M${X(a).toFixed(1)},${H - bot} L${pts} L${X(b).toFixed(1)},${H - bot} Z"/><path class="cv" stroke="${TONES[k]}" d="M${pts}"/>`; });
+      g += ticks(a, b, X, o.xname);
+      o.series.forEach((s, k) => { const y0 = H - bot + 6 + k * 6; g += `<path class="rug" stroke="${TONES[k]}" stroke-opacity=".55" d="${s.v.map(v => `M${X(v).toFixed(1)},${y0}v4`).join('')}"/>`; });
+      g += `<text class="lab sm" text-anchor="end" x="${W - px}" y="14" xml:space="preserve">${o.series.map((s, k) => `<tspan fill="${TONES[k]}">— ${s.name}</tspan>`).join('   ')}${W < 640 ? '' : '   · cada marca es un caso'}</text>`;
+    } else { const { x, y } = o.scatter, ax = Math.min(...x), bx = Math.max(...x), ay = Math.min(...y), by2 = Math.max(...y);
+      const X = v => px + 26 + (v - ax) / (bx - ax) * (W - 2 * px - 26), Y = v => H - bot + 14 - (v - ay) / (by2 - ay) * (H - top - bot + 8);
+      g += x.map((v, i) => `<circle class="pt" r="1.7" fill="${TONES[0]}" cx="${X(v).toFixed(1)}" cy="${Y(y[i]).toFixed(1)}"/>`).join('');
+      const mxv = x.reduce((t, v) => t + v, 0) / x.length, myv = y.reduce((t, v) => t + v, 0) / y.length; let sxy = 0, sxx = 0; x.forEach((v, i) => { sxy += (v - mxv) * (y[i] - myv); sxx += (v - mxv) ** 2; });
+      const bb = sxy / sxx, aa = myv - bb * mxv; g += `<path class="fit" d="M${X(ax).toFixed(1)},${Y(aa + bb * ax).toFixed(1)} L${X(bx).toFixed(1)},${Y(aa + bb * bx).toFixed(1)}"/>`
+        + ticks(ax, bx, X, 'ansiedad_pre') + (() => { const raw = (by2 - ay) / 4, m = Math.pow(10, Math.floor(Math.log10(raw))), st = [1, 2, 5, 10].map(k => k * m).find(k => k >= raw); let t = '';
+          for (let v = Math.ceil(ay / st) * st; v <= by2; v += st) { const y = Y(v); if (y < 10 || y > H - bot + 10) continue; t += `<text class="lab tick" x="${px}" y="${(y + 4).toFixed(1)}">${neg(String(+v.toFixed(1)))}</text>`; } return t; })()
+        + `<text class="lab sm" x="${px + 30}" y="${top - 6}">Vertical: ansiedad_post${W < 640 ? '' : '. Cada punto es un caso'}</text>`; }
+    const mk = '';
+    sonar.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><defs><clipPath id="sw"><rect id="swr" x="0" y="0" width="${W}" height="${H}"/></clipPath></defs>${mk}<g clip-path="url(#sw)">${g}</g><line class="scan" id="scan" x1="-9" x2="-9" y1="8" y2="${H}" opacity="0"/></svg>`
+    ; $('leg').innerHTML = ''; }
 
-  function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
-  function steps(){ const s=state; if(!s.goal) return 3; return {compare:4,relate:2,predict:2,describe:1}[s.goal]; }
+  function setChk(n) { [...chk.children].forEach((c, i) => { const on = i < n; c.classList.toggle('on', on); c.querySelector('b').innerHTML = on ? nb(O.chk[i][1]) : ['comprobando…', 'comprobando…', 'eligiendo…', 'calculando…'][i]; });
+    sonar.querySelectorAll('.mk').forEach((l, i) => l.classList.toggle('on', i < n)); }
+  function finish() { setChk(4); paper.classList.add('on'); $('instState').textContent = 'Listo · calculado en este navegador';
+    const sw = $('swr'), sc = $('scan'); if (sw) sw.setAttribute('width', sonar.clientWidth); if (sc) sc.setAttribute('opacity', 0);
+    timers.push(setTimeout(() => paper.classList.add('end'), reduce ? 0 : 450)); }
+  function play() { cancelAnimationFrame(raf); timers.forEach(clearTimeout); timers = []; paper.classList.remove('on', 'end'); draw();
+    if (reduce) { finish(); return; }
+    $('instState').textContent = 'Analizando…'; setChk(0); const W = sonar.clientWidth, sw = $('swr'), sc = $('scan'), D = 2600, t0 = performance.now(); sc.setAttribute('opacity', 1);
+    const step = t => { const k = Math.min(1, (t - t0) / D), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, x = W * e;
+      sw.setAttribute('width', x); sc.setAttribute('x1', x); sc.setAttribute('x2', x); setChk(MARKS.filter(m => e >= m).length);
+      if (k < 1) raf = requestAnimationFrame(step); else finish(); };
+    raf = requestAnimationFrame(step); }
+  function render(k) { O = Q[k](); cur = k; qb.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.q === k)));
+    $('instTitle').textContent = O.title;
+    chk.innerHTML = O.chk.map((c, i) => `<div><span>${i + 1} · ${c[0]}</span><b></b></div>`).join('');
+    paper.innerHTML = O.table + `<p class="prose">${nb(O.text)}</p>`; play(); }
+  qb.forEach(b => b.addEventListener('click', () => { render(b.dataset.q); try { window.umami && window.umami.track('portada_pregunta', { prueba: b.textContent }); } catch (e) { /* estadística opcional */ } }));
+  $('replay').addEventListener('click', play);
+  render('rho');
+  let lastNarrow = narrow.matches, rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (narrow.matches !== lastNarrow) { lastNarrow = narrow.matches; render(cur); } else if (paper.classList.contains('on')) { draw(); setChk(4); $('swr').setAttribute('width', sonar.clientWidth); $('scan').setAttribute('opacity', 0); } }, 150); });
 
-  function render(){
-    const key = next();
-    const done = history.length;
-    const pct = key ? Math.round(done/steps()*100) : 100;
-    let html = '<div class="progress"><i style="width:'+pct+'%"></i></div>';
-    if(key){
-      const q = Q[key];
-      html += '<div class="q"><h3>'+q.t+'</h3>'+(q.h?'<p class="hint">'+q.h+'</p>':'<p class="hint"></p>')+'<div class="opts">';
-      q.o.forEach(o=>{ html += '<button class="opt" data-k="'+key+'" data-v="'+o[0]+'"><b>'+o[1]+'</b>'+(o[2]?'<small>'+o[2]+'</small>':'')+'</button>'; });
-      html += '</div></div>';
-      html += '<div class="finder-foot">'+(done?'<button class="link" id="back">← Atrás</button>':'<span></span>')+'<span style="color:var(--muted);font-size:.9rem">Paso '+(done+1)+'</span></div>';
-    } else {
-      const r = result();
-      try { window.umami && window.umami.track('buscador_resultado', { prueba: r.name }); } catch (e) { /* estadística opcional */ }
-      // análisis que la app ya realiza (el resto se recomienda, pero se avisa de que aún no está disponible)
-      r.inApp = ['Estadísticos descriptivos','Prueba t de muestras independientes','Prueba t de muestras relacionadas','ANOVA de un factor','U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis','Chi-cuadrado de independencia','Correlación de Pearson','Correlación de Spearman','Chi-cuadrado + V de Cramér','Regresión lineal','Regresión logística binaria','ANOVA de medidas repetidas','Prueba de Friedman','Prueba de McNemar','Q de Cochran','Regresión logística ordinal'].includes(r.name);
-      html += '<div class="result"><div class="eyebrow">Tu análisis recomendado</div><h3>'+r.name+'</h3>';
-      html += '<h4>Por qué</h4><ul>'+r.why.map(w=>'<li>'+w+'</li>').join('')+'</ul>';
-      html += '<h4>Supuestos que debes comprobar</h4><ul>'+r.assum.map(w=>'<li>'+w+'</li>').join('')+'</ul>';
-      html += '<h4>Alternativa</h4><div class="alt">'+r.alt+'</div>';
-      html += '<h4>Código R</h4><pre>'+esc(r.code)+'</pre>';
-      if(r.warn) html += '<div class="warn">⚠️ '+r.warn+'</div>';
-      html += '<p style="color:var(--muted);font-size:.88rem;margin-top:18px">Es una orientación general según tu diseño. La decisión final depende de tu pregunta de investigación y de tus datos.</p>';
-      const auto = ['U de Mann-Whitney','Prueba de rangos con signo de Wilcoxon','Prueba H de Kruskal-Wallis','Prueba de Friedman'].includes(r.name);
-      if (r.inApp) html += '<div class="upsell"><div><strong>'+(auto ? 'Tharp hace esta comparación con tus datos' : 'Tharp hace este análisis con tus datos')+'</strong><br><span style="color:var(--muted)">'+(auto ? 'Ten en cuenta que Tharp elige entre la prueba paramétrica y esta alternativa no paramétrica según se cumplan o no los supuestos, no según el nivel de medida.' : 'Comprueba los supuestos, aplica la alternativa si hace falta y redacta los resultados.')+' Tus datos no salen de tu navegador.</span></div><a class="btn btn-dark" href="app.html">Analizar mis datos →</a></div>';
-      else html += '<div class="upsell"><div><strong>Este análisis todavía no está en Tharp</strong><br><span style="color:var(--muted)">Estamos trabajando en ello. Mientras tanto, puedes hacerlo en R con el código de arriba, o en JASP o SPSS.</span></div><a class="btn btn-line" href="mailto:info@tharp.es?subject=Quiero%20este%20an%C3%A1lisis%20en%20Tharp&body='+encodeURIComponent('Me gustaría poder hacer en Tharp: '+r.name)+'">Pedir este análisis</a></div>';
-      html += '<div class="finder-foot"><button class="link" id="back">← Atrás</button><button class="link" id="restart">Empezar de nuevo</button></div></div>';
-    }
-    box.innerHTML = html;
-    box.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>{ state[b.dataset.k]=b.dataset.v; history.push(b.dataset.k); render(); }));
-    const back = document.getElementById('back'); if(back) back.addEventListener('click',()=>{ const k=history.pop(); delete state[k]; render(); });
-    const rs = document.getElementById('restart'); if(rs) rs.addEventListener('click',()=>{ Object.keys(state).forEach(k=>delete state[k]); history.length=0; render(); });
-  }
-  render();
+  // tu propio archivo: se guarda en este navegador (IndexedDB) y la aplicación lo abre sin volver a elegirlo
+  const APP = 'app.html';
+  const handoff = fl => new Promise(res => { try { const rq = indexedDB.open('tharp', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('traspaso');
+      rq.onsuccess = () => { const tx = rq.result.transaction('traspaso', 'readwrite'); tx.objectStore('traspaso').put(fl, 'archivo'); tx.oncomplete = () => res(true); tx.onerror = () => res(false); }; rq.onerror = () => res(false); } catch (e) { res(false); } });
+  const drop = $('drop'), file = $('file'), msg = $('dropMsg');
+  function take(fl) { if (!fl) return; try { window.umami && window.umami.track('portada_analizar', { via: 'archivo' }); } catch (e) { /* estadística opcional */ } msg.textContent = `Abriendo «${fl.name}» en Tharp. El archivo no sale de este navegador.`; handoff(fl).then(okk => { location.href = APP + (okk ? '#importar' : ''); }); }
+  file.addEventListener('change', () => take(file.files[0]));
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => take(e.dataTransfer.files[0]));
+
+  // variables reconocidas (datos de ejemplo)
+  $('vars').innerHTML = ['grupo', 'sexo', 'ansiedad_pre', 'ansiedad_post', 'horas_sueno', 'satisfaccion'].map(n => { const v = col(n), num = typeof v.find(x => x !== null) === 'number', miss = v.filter(x => x === null).length;
+    if (!num) { const lv = [...new Set(v.filter(x => x !== null))].sort(); return `<tr><td>${n}</td><td><span class="pill">categórica</span></td><td>${lv.length} categorías: ${lv.join(', ')}</td></tr>`; }
+    const d = S.describe(v.filter(x => x !== null)); return `<tr><td>${n}</td><td><span class="pill q">cuantitativa</span></td><td>${nb(`<i>M</i> = ${f(d.mean)}, <i>DT</i> = ${f(d.sd)}`)}${miss ? `; ${miss}&nbsp;perdidos` : ''}</td></tr>`; }).join('');
+
+  // registro de validación: datos reales de la batería contra R
+  (V => { const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
+    $('vrows').innerHTML = V.map((o, i) => `<tr class="${i >= 8 ? 'more' : ''}" ${i >= 8 ? 'hidden' : ''}><td>${o.a}</td><td class="pk">${o.r}</td><td class="num"><span class="okmark">${ok}${fmt(o.ok)} / ${fmt(o.n)}</span></td></tr>`).join('');
+    const btn = $('showall'); btn.addEventListener('click', () => { const open = btn.getAttribute('aria-expanded') === 'true'; document.querySelectorAll('#vrows tr.more').forEach(t => { t.hidden = open; }); btn.setAttribute('aria-expanded', String(!open)); btn.textContent = open ? `Ver los ${V.length} análisis` : 'Ver solo los principales'; }); })(window.TharpValidacion || []);
+
 })();
 </script>
+<script src="js/buscador.js"></script>
+<script>try{document.querySelectorAll("[data-tharp]").forEach(function(e){var v=window.TharpVersion;if(v&&v[e.dataset.tharp])e.textContent=v[e.dataset.tharp];});}catch(e){}</script>
 </body>
 </html>

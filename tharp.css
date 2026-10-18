@@ -1,8 +1,8 @@
-/* Estilo de tharp.es: océano (portada, buscador, historia) y papel (resultados, texto). Fuentes en fuentes.css */
+/* Estilo de las páginas secundarias de tharp.es (validación, privacidad, 404), alineado con la portada: océano arriba, agua del diagrama de 1957 para leer, oro para la acción. Fuentes en fuentes.css. La portada lleva su propio estilo. */
 :root{
   --deep:#0b2230; --panel:#0f2b3c; --grid:#1f4a5e; --ping:#f2b33d; --ping-2:#f6c768; --foam:#dcedf0; --dim:#8fb0bd;
-  --paper:#fbfaf6; --sand:#f3f1ea; --ink:#15202a; --soft:#55606a; --line:#e2dfd5; --hl:#fbe1a2; --teal:#1d7a73;
-  --dsp:"Newsreader","Times New Roman",serif; --txt:"Instrument Sans",system-ui,-apple-system,sans-serif; --mono:"Spline Sans Mono",ui-monospace,monospace;
+  --paper:#e2efed; --sand:#c8dfdb; --ink:#0f2d37; --soft:#36555e; --line:#b4cfcb; --hl:#fbe4b0; --teal:#14615a;
+  --dsp:"Schibsted Grotesk",system-ui,sans-serif; --txt:"Schibsted Grotesk",system-ui,-apple-system,sans-serif; --apa:"STIX Two Text","Times New Roman",serif; --mono:"Spline Sans Mono",ui-monospace,monospace;
   --max:1180px; --gut:clamp(16px,4vw,40px);
 }
 *{box-sizing:border-box}
@@ -11,7 +11,7 @@ body{margin:0;font-family:var(--txt);color:var(--ink);background:var(--paper);li
 a{color:inherit}
 img{max-width:100%;display:block}
 .wrap{max-width:var(--max);margin:0 auto;padding:0 var(--gut)}
-h1,h2,h3,h4{font-family:var(--dsp);font-weight:500;line-height:1.08;letter-spacing:-.012em;margin:0;text-wrap:balance}
+h1,h2,h3,h4{font-family:var(--dsp);font-weight:650;line-height:1.08;letter-spacing:-.025em;margin:0;text-wrap:balance}
 h2{font-size:clamp(2rem,4.2vw,3.1rem)}
 h2 em,h1 em{font-style:italic}
 .k{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);display:flex;align-items:center;gap:10px}
@@ -267,3 +267,23 @@ footer i{font-family:var(--dsp);font-size:1rem;color:var(--foam)}
 .notfound{min-height:100vh;display:grid;place-items:center;text-align:center;padding:24px}
 .notfound h1{font-size:clamp(2.4rem,6vw,3.6rem);color:#fff;margin:18px 0 8px}
 .notfound p{color:var(--dim)}
+
+/* sistema de la portada (2026-10-18) */
+::selection{background:var(--ping);color:var(--deep)}
+.k{font-family:var(--txt);font-size:.9rem;letter-spacing:0;text-transform:none;color:var(--soft)}
+.k::before{display:none}
+.dark .k{color:var(--dim)}
+.page-hd .wrap{display:flex;flex-direction:column}
+.page-hd .k{order:3;margin-top:16px}
+.page-hd h1{margin-top:0}
+.page-hd h1 em,.notfound h1 em{color:var(--ping)}
+nav{border-bottom:0}
+.brand{font-weight:700;letter-spacing:-.02em}
+.btn{border-radius:10px;font-weight:650}
+.btn-line{border-color:var(--line)}
+footer .wrap{background:none}
+.layers li::before{font-family:var(--txt);font-weight:700}
+.vtable td.pk{font-family:var(--txt);font-size:.85rem}
+.vtable caption{font-family:var(--apa)}
+.rigor{border:0}
+.prose a{color:var(--ink);text-underline-offset:4px}

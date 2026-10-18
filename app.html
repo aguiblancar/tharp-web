@@ -16,7 +16,7 @@
 <script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
 <link rel="stylesheet" href="fuentes.css">
 <style>
-:root{--ink:#0b2230;--ink-2:#1f4a5e;--sea:#1d7a73;--teal:#f2b33d;--foam:#f2b33d;--sand:#f3f1ea;--paper:#fff;--text:#15202a;--muted:#55606a;--line:#e2dfd5;--dsp:'Newsreader','Times New Roman',serif;--txt:'Instrument Sans',system-ui,-apple-system,sans-serif;--mono:'Spline Sans Mono',ui-monospace,monospace;--ok:#11756c;--ok-bg:#e6f6f4;--warn:#8a5a00;--warn-bg:#fff5e0;--bad:#a33232;--bad-bg:#fdecec}
+:root{--ink:#0b2230;--ink-2:#1f4a5e;--sea:#14615a;--teal:#f2b33d;--foam:#f2b33d;--sand:#e2efed;--paper:#fff;--text:#0f2d37;--muted:#36555e;--line:#cfe0dd;--dsp:'Schibsted Grotesk',system-ui,sans-serif;--txt:'Schibsted Grotesk',system-ui,-apple-system,sans-serif;--apa:'STIX Two Text','Times New Roman',serif;--mono:'Spline Sans Mono',ui-monospace,monospace;--ok:#11756c;--ok-bg:#e6f6f4;--warn:#8a5a00;--warn-bg:#fff5e0;--bad:#a33232;--bad-bg:#fdecec}
 *{box-sizing:border-box}
 body{margin:0;font-family:var(--txt);color:var(--text);background:var(--sand);line-height:1.55;-webkit-font-smoothing:antialiased}
 h1,h2,h3{font-family:var(--dsp);font-weight:500;line-height:1.15;letter-spacing:-.01em;margin:0}
@@ -114,6 +114,17 @@ figcaption button{font:inherit;font-size:.75rem;font-weight:500;background:none;
 .corr td{color:var(--text)}
 footer{padding:30px 0 50px;color:var(--muted);font-size:.85rem}
 .hidden{display:none!important}
+/* sistema de la portada (2026-10-18): Schibsted Grotesk en la interfaz, STIX Two Text en lo publicable, agua del diagrama de 1957 de fondo */
+h1,h2,h3{font-weight:650;letter-spacing:-.02em}
+.logo{font-weight:700;letter-spacing:-.02em}
+.stepper div{font-family:var(--txt);font-weight:600;font-size:.82rem;letter-spacing:0;text-transform:none;border-radius:999px;background:#d5e6e3}
+.btn{border-radius:10px;font-weight:650}
+.card,.res,.an{border-radius:12px}
+.res .test{font-family:var(--txt);font-weight:600;border-radius:999px}
+.apa{font-family:var(--apa)}
+.apa caption i{font-family:var(--apa)}
+.text{font-family:var(--apa);background:#f4f9f8;border-left:0;border-radius:8px}
+::selection{background:var(--teal);color:var(--ink)}
 </style>
 </head>
 <body>
@@ -242,6 +253,7 @@ footer{padding:30px 0 50px;color:var(--muted);font-size:.85rem}
 <script src="js/jasp.js"></script>
 <script src="js/sav.js"></script>
 <script src="js/charts.js"></script>
+<script src="js/demo.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
