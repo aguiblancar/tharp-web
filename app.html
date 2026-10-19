@@ -44,6 +44,14 @@ header.top .wrap{display:flex;align-items:center;justify-content:space-between;h
 .muted{color:var(--muted)}
 .small{font-size:.88rem}
 .err{background:var(--bad-bg);color:var(--bad);padding:12px 16px;border-radius:10px;margin-top:14px}
+:focus-visible{outline:3px solid var(--foam);outline-offset:2px;box-shadow:0 0 0 5px var(--ink);border-radius:3px}
+.drop:focus-visible{outline-offset:4px}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+.avisos{position:fixed;right:16px;bottom:16px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:min(420px,calc(100vw - 32px))}
+.aviso{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:6px;box-shadow:0 6px 24px rgba(11,34,48,.18);font-size:.94rem}
+.aviso-error{background:var(--bad-bg);color:var(--bad);border:1px solid #f1c4c4}
+.aviso-info{background:var(--paper);color:var(--text);border:1px solid var(--line)}
+.aviso button{margin-left:auto;background:none;border:0;font:inherit;font-size:1.2rem;line-height:1;color:inherit;cursor:pointer;padding:0 2px}
 table{border-collapse:collapse;width:100%}
 .scroll{overflow-x:auto}
 .vars th,.vars td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;font-size:.92rem;vertical-align:top}
@@ -136,6 +144,7 @@ h1,h2,h3{font-weight:650;letter-spacing:-.02em}
   </div>
 </header>
 
+<div id="avisos" class="avisos"></div>
 <main class="wrap">
   <div class="stepper" id="stepper"><div data-s="1">1 · Datos</div><div data-s="2">2 · Variables</div><div data-s="3">3 · Análisis</div><div data-s="4">4 · Resultados</div></div>
 

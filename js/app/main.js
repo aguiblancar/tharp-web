@@ -8,6 +8,7 @@ import { DEMO_DEFAULTS, demoData, show } from './navegacion.js';
 import { calcularPotencia, pwUI, showPow } from './potencia.js';
 import { run } from './resultados/ejecutar.js';
 import { $, $$, download, track } from './utilidades.js';
+import { capturarErroresGlobales } from './avisos.js';
 
 /** Navegación entre pasos y calculadora de potencia (app.html#potencia) */
 function conectarNavegacion() {
@@ -136,6 +137,7 @@ function abrirDesdePortada() {
   }
 }
 
+capturarErroresGlobales();
 conectarNavegacion();
 conectarDatos();
 conectarResultados();

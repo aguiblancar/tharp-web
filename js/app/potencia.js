@@ -3,6 +3,7 @@ import S from '../motor/index.js';
 import { esc } from './graficos.js';
 import { f, fmtNum, nz } from './formato.js';
 import { $, $$, track } from './utilidades.js';
+import { mostrarError } from './avisos.js';
 
 const PW = {
   't-ind': {
@@ -243,9 +244,7 @@ function codigoR({ t, es, k, ratio, alpha, target, alt, mode }, n, n2) {
 function calcularPotencia() {
   const o = leerFormulario(),
     out = $('#pwOut'),
-    err = m => {
-      out.innerHTML = `<div class="err">${m}</div>`;
-    };
+    err = m => mostrarError(out, m);
   const fallo = validar(o);
   if (fallo) return err(fallo);
   const prueba = argumentosPrueba(o),

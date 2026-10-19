@@ -1,11 +1,14 @@
 /* Tharp · aplicación · Lector de archivos de SPSS (.sav sin comprimir o con compresión bytecode; .zsav con zlib).
    Sin dependencias: todo se procesa en el navegador. Formato documentado por GNU PSPP («System File Format»). */
+import { ErrorDeUsuario } from '../avisos.js';
 const DATE_FMT = new Set([20, 22, 23, 24, 28, 29, 30, 38, 39, 85]),
   DATETIME_FMT = new Set([22, 85]),
   TIME_FMT = new Set([21, 25, 40]);
 const SPSS_EPOCH = 12219379200; // segundos entre 1582-10-14 (origen de SPSS) y 1970-01-01
 const bad = () =>
-  new Error('El archivo .sav está dañado o no se reconoce. Guárdalo de nuevo desde SPSS o expórtalo como Excel/CSV.');
+  new ErrorDeUsuario(
+    'El archivo .sav está dañado o no se reconoce. Guárdalo de nuevo desde SPSS o expórtalo como Excel/CSV.'
+  );
 const CODEPAGES = { 65001: 'utf-8', 20127: 'windows-1252', 932: 'shift_jis', 936: 'gbk', 949: 'euc-kr', 950: 'big5' };
 const encodingOf = code =>
   CODEPAGES[code] ||
@@ -18,7 +21,7 @@ const pad = n => String(n).padStart(2, '0');
 
 async function inflate(bytes) {
   if (typeof DecompressionStream === 'undefined')
-    throw new Error(
+    throw new ErrorDeUsuario(
       'Tu navegador no puede leer archivos .zsav. Actualízalo o guarda el archivo en SPSS sin compresión ZSAV.'
     );
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
@@ -78,7 +81,7 @@ class Lector {
 function leerCabecera(r) {
   if (r.len < 176) throw bad();
   const magic = String.fromCharCode(...r.u8.subarray(0, 4));
-  if (magic !== '$FL2' && magic !== '$FL3') throw new Error('El archivo no es un .sav de SPSS válido.');
+  if (magic !== '$FL2' && magic !== '$FL3') throw new ErrorDeUsuario('El archivo no es un .sav de SPSS válido.');
   const lc = r.dv.getInt32(64, true);
   r.le = lc === 2 || lc === 3;
   r.off = 4;
@@ -434,7 +437,7 @@ const fmtTime = x => {
 // Convierte a la tabla de Tharp: { aoa, hints, version, app, notes }
 async function read(arrayBuffer) {
   const r = await parse(arrayBuffer);
-  if (!r.vars.length) throw new Error('El archivo de SPSS no contiene variables.');
+  if (!r.vars.length) throw new ErrorDeUsuario('El archivo de SPSS no contiene variables.');
   const hints = {},
     notes = [];
   let nMissUser = 0;

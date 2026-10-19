@@ -3,6 +3,7 @@ import { esc } from '../graficos.js';
 import { ST } from '../estado.js';
 import { citeTharp } from '../resultados/ejecutar.js';
 import { $, download, slug, track } from '../utilidades.js';
+import { avisar, errorInesperado } from '../avisos.js';
 
 /** Dibuja un SVG en un lienzo a la escala indicada y devuelve el lienzo y su tamaño original */
 function svgACanvas(svg, escala) {
@@ -245,7 +246,7 @@ async function exportDocx() {
     btn = $('#dlWord'),
     label = btn.textContent;
   if (!D) {
-    alert('No se pudo cargar el generador de Word. Recarga la página e inténtalo de nuevo.');
+    avisar('No se pudo cargar el generador de Word. Recarga la página e inténtalo de nuevo.');
     return;
   }
   btn.textContent = 'Generando…';
@@ -254,8 +255,7 @@ async function exportDocx() {
     download('tharp_resultados.docx', await D.Packer.toBlob(await documento(D)));
     track('descarga_word');
   } catch (e) {
-    console.error(e);
-    alert('No se pudo generar el Word: ' + e.message);
+    errorInesperado(e, 'No se pudo generar el Word');
   } finally {
     btn.textContent = label;
     btn.disabled = false;

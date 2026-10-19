@@ -1,5 +1,6 @@
 /* Tharp · aplicación · Lector de archivos .jasp (JASP 0.8–0.17: data.bin; JASP ≥ 0.18: internal.sqlite).
    Todo se procesa en el navegador. Las librerías se cargan solo al abrir un .jasp. */
+import { ErrorDeUsuario } from '../avisos.js';
 import { maxOf } from '../utilidades.js';
 const JSZIP = 'vendor/jszip.min.js';
 const SQLBASE = 'vendor/';
@@ -9,7 +10,8 @@ const loadScript = src =>
     const s = document.createElement('script');
     s.src = src;
     s.onload = res;
-    s.onerror = () => rej(new Error('No se pudo cargar el lector de JASP. Recarga la página e inténtalo de nuevo.'));
+    s.onerror = () =>
+      rej(new ErrorDeUsuario('No se pudo cargar el lector de JASP. Recarga la página e inténtalo de nuevo.'));
     document.head.appendChild(s);
   });
 // JASP: scale → cuantitativa; nominal → categórica; ordinal numérica → cuantitativa (editable)
@@ -44,7 +46,7 @@ async function readNew(zip) {
       return out;
     };
     const ds = q('SELECT id, emptyValuesJson FROM DataSets ORDER BY id LIMIT 1')[0];
-    if (!ds) throw new Error('El archivo JASP no contiene datos.');
+    if (!ds) throw new ErrorDeUsuario('El archivo JASP no contiene datos.');
     const emptyOf = json => {
       try {
         return JSON.parse(json || '{}').strings || [];
@@ -160,7 +162,7 @@ async function read(arrayBuffer) {
   try {
     zip = await globalThis.JSZip.loadAsync(arrayBuffer);
   } catch (e) {
-    throw new Error('El archivo no es un .jasp válido.', { cause: e });
+    throw new ErrorDeUsuario('El archivo no es un .jasp válido.', { cause: e });
   }
   let cols, version;
   if (zip.file('internal.sqlite')) {
@@ -170,10 +172,10 @@ async function read(arrayBuffer) {
     cols = await readOld(zip);
     version = 'JASP 0.8–0.17';
   } else
-    throw new Error(
+    throw new ErrorDeUsuario(
       'No se reconoce el formato de este archivo .jasp. Expórtalo desde JASP como CSV (Archivo → Exportar datos) y súbelo.'
     );
-  if (!cols.length) throw new Error('El archivo JASP no contiene variables.');
+  if (!cols.length) throw new ErrorDeUsuario('El archivo JASP no contiene variables.');
   const n = maxOf(cols.map(c => c.vals.length)),
     aoa = [cols.map(c => c.name)];
   for (let i = 0; i < n; i++) aoa.push(cols.map(c => (c.vals[i] === undefined ? null : c.vals[i])));

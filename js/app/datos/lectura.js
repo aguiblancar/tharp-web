@@ -5,6 +5,7 @@ import { detect, renderVars } from './variables.js';
 import { ST } from '../estado.js';
 import { show } from '../navegacion.js';
 import { $, maxOf, track } from '../utilidades.js';
+import { CONTACTO, ErrorDeUsuario, errorInesperado, mostrarError } from '../avisos.js';
 import { read as readJasp } from './jasp.js';
 import { read as readSav } from './sav.js';
 
@@ -91,7 +92,7 @@ async function loadFile(file) {
       setData(file.name, rows);
     } else if (['xlsx', 'xls', 'ods', 'xlsm'].includes(ext)) {
       if (!window.XLSX)
-        throw new Error('No se pudo cargar el lector de Excel. Recarga la página e inténtalo de nuevo.');
+        throw new ErrorDeUsuario('No se pudo cargar el lector de Excel. Recarga la página e inténtalo de nuevo.');
       ST.wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
       const name =
         ST.wb.SheetNames.find(
@@ -116,10 +117,14 @@ async function loadFile(file) {
       ST.sourceApp = r.app;
       ST.sourceNotes = r.notes;
       setData(file.name, r.aoa, null, r.hints);
-    } else throw new Error('Formato no admitido. Usa un archivo .xlsx, .xls, .csv, .sav (SPSS) o .jasp.');
+    } else throw new ErrorDeUsuario('Formato no admitido. Usa un archivo .xlsx, .xls, .csv, .sav (SPSS) o .jasp.');
     if (/Leyendo /.test($('#loadErr').textContent)) $('#loadErr').innerHTML = '';
   } catch (e) {
-    $('#loadErr').innerHTML = `<div class="err">${esc(e.message || e)}</div>`;
+    if (e instanceof ErrorDeUsuario) mostrarError('#loadErr', e.message);
+    else {
+      errorInesperado(e, 'No se pudo leer el archivo');
+      mostrarError('#loadErr', `No se pudo leer el archivo por un error inesperado de Tharp. ${CONTACTO}`);
+    }
   }
 }
 function loadSheet(fileName, sheet) {
@@ -136,7 +141,9 @@ function setData(fileName, aoa, defaults, hints) {
   if (!/\.(xlsx|xls|ods|xlsm)$/i.test(fileName)) ST.xlsRows = null;
   if (!hints) ST.source = '';
   if (!aoa || aoa.length < 2)
-    throw new Error('El archivo no contiene datos: necesita una fila de nombres y al menos una fila de datos.');
+    throw new ErrorDeUsuario(
+      'El archivo no contiene datos: necesita una fila de nombres y al menos una fila de datos.'
+    );
   // Excel con un título (u otras filas con una sola celda) encima de la cabecera: la cabecera es la primera fila con al menos la mitad de las columnas
   const isXls = /\.(xlsx|xls|ods|xlsm)$/i.test(fileName),
     filled = r => r.filter(v => v !== null && v !== undefined && String(v).trim() !== '').length;
@@ -167,7 +174,7 @@ function setData(fileName, aoa, defaults, hints) {
     .slice(1)
     .map(r => headers.map((_, i) => norm(r[i])))
     .filter(r => r.some(v => v !== null));
-  if (!rows.length) throw new Error('No se han encontrado filas con datos.');
+  if (!rows.length) throw new ErrorDeUsuario('No se han encontrado filas con datos.');
   // CSV con separador de miles (7.626,54 o 1.234.567; en inglés 7,626.54): si una columna lo usa de forma inequívoca, se lee entera así
   ST.thousands = {};
   if (/\.(csv|tsv|txt)$/i.test(fileName)) {

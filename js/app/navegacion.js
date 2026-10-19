@@ -25,7 +25,8 @@ function show(n) {
     d.className = s === n ? 'on' : s < n ? 'done' : '';
   });
   if (n === 3) renderConfig();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  // sin desplazamiento animado si la persona ha pedido reducir el movimiento
+  window.scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
 }
 
 export { demoData, DEMO_DEFAULTS, show };

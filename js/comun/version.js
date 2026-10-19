@@ -3,7 +3,7 @@
    Cuando exista DOI (Zenodo), escribirlo en «doi» (sin https://doi.org/).
    Autoría: «autor» para la referencia APA y «autorCorto» para la cita en el texto (también en web/CITATION.cff y web/.zenodo.json). */
 const TharpVersion = {
-  version: '1.2.1',
+  version: '1.2.2',
   year: 2026,
   url: 'https://tharp.es',
   doi: '',

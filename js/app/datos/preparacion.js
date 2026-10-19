@@ -8,6 +8,7 @@ import { catOf, detect, levelsOf, numOf, renderVars, vByName } from './variables
 import { ST } from '../estado.js';
 import { cmp, list, rq } from '../formato.js';
 import { $, $$, maxOf, minOf } from '../utilidades.js';
+import { mostrarError } from '../avisos.js';
 
 // cada transformación crea una variable nueva (o filtra casos); se guardan en ST.tf y se pueden deshacer reconstruyendo desde ST.base
 const TF_NAMES = {
@@ -413,9 +414,7 @@ const TF_CONSTRUCTORES = {
 };
 function addTf() {
   const type = $('#tfType').value,
-    msg = m => {
-      $('#tfMsg').innerHTML = `<div class="err">${m}</div>`;
-    };
+    msg = m => mostrarError('#tfMsg', m);
   const nameIn = (($('#tfN') || {}).value || '').trim();
   const construir = TF_CONSTRUCTORES[type];
   const t = construir ? construir(type, nameIn) : null;

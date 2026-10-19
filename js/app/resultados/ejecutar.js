@@ -9,9 +9,25 @@ import { svgToPng } from '../exportar/word.js';
 import { list } from '../formato.js';
 import { show } from '../navegacion.js';
 import { $, $$, track } from '../utilidades.js';
-import { tablaHTML } from './piezas.js';
+import { nuevaSeccion, tablaHTML } from './piezas.js';
+import { CONTACTO, avisar } from '../avisos.js';
 import TharpVersion from '../../comun/version.js';
 
+/**
+ * Ejecuta un análisis del registro. Si falla por un error inesperado de Tharp, su sección lo explica y los demás
+ * análisis se calculan igualmente (un fallo nunca deja a la persona sin el resto de resultados).
+ */
+function ejecutarAislado(a, add) {
+  try {
+    a.ejecutar(add);
+  } catch (e) {
+    console.error(e);
+    const titulo = ($(`.an[data-an="${a.id}"] b`) || {}).textContent || a.id,
+      sec = nuevaSeccion(titulo);
+    sec.error = `No se pudo completar este análisis por un error inesperado de Tharp; los demás resultados no se ven afectados. ${CONTACTO}`;
+    add(sec);
+  }
+}
 function run() {
   numeracion.tabla = 0;
   numeracion.figura = 0;
@@ -52,15 +68,9 @@ function run() {
     if (s.decision) log.push(`<b>${esc(s.title)}:</b> ${s.decision}`);
     else if (s.error) log.push(`<b>${esc(s.title)}:</b> no se pudo realizar. ${esc(s.error)}`);
   };
-  try {
-    for (const a of ANALISIS) if (isOn(a.id) && (!a.activo || a.activo())) a.ejecutar(add);
-  } catch (e) {
-    console.error(e);
-    alert('Ha ocurrido un error inesperado en el análisis: ' + e.message);
-    return;
-  }
+  for (const a of ANALISIS) if (isOn(a.id) && (!a.activo || a.activo())) ejecutarAislado(a, add);
   if (!secs.length) {
-    alert('Selecciona al menos un análisis.');
+    avisar('Selecciona al menos un análisis.', 'info');
     return;
   }
   ST.sections = secs;

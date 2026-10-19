@@ -13,10 +13,10 @@ Contacto: info@tharp.es
 
 Componentes de terceros (no son de la titular y se rigen por sus propias licencias):
 - vendor/jstat.min.js — jStat 1.9.6, licencia MIT (© jStat contributors)
-- vendor/xlsx.full.min.js — SheetJS Community Edition 0.18.5, licencia Apache 2.0 (© SheetJS LLC)
+- vendor/xlsx.full.min.js — SheetJS Community Edition 0.20.3, licencia Apache 2.0 (© SheetJS LLC)
 - vendor/docx.umd.js — docx 8.5.0, licencia MIT (© Dolan Miu)
-- vendor/jszip.min.js — JSZip 3.10.1, licencia MIT o GPLv3 a elección (© Stuart Knightley y colaboradores); se usa bajo MIT
-- vendor/sql-wasm.js y sql-wasm.wasm — sql.js 1.10.3, licencia MIT (© sql.js contributors); incluye SQLite, de dominio público
-- fonts/ — Newsreader, Instrument Sans y Spline Sans Mono, licencia SIL Open Font License 1.1 (© sus autores)
+- vendor/jszip.min.js — JSZip 3.10.2, licencia MIT o GPLv3 a elección (© Stuart Knightley y colaboradores); se usa bajo MIT
+- vendor/sql-wasm.js y sql-wasm.wasm — sql.js 1.14.2, licencia MIT (© sql.js contributors); incluye SQLite, de dominio público
+- fonts/ — Schibsted Grotesk, STIX Two Text, Newsreader, Instrument Sans y Spline Sans Mono, licencia SIL Open Font License 1.1 (© sus autores)
 Los textos completos de estas licencias: https://opensource.org/license/mit, https://www.apache.org/licenses/LICENSE-2.0
 y https://openfontlicense.org.

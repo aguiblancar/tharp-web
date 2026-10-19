@@ -5,6 +5,7 @@ import { loadSheet, toNum } from './lectura.js';
 import { ST } from '../estado.js';
 import { cmp, f } from '../formato.js';
 import { $, $$ } from '../utilidades.js';
+import { avisar } from '../avisos.js';
 
 // escalas ordinales habituales (español e inglés); se usa la primera en la que encajan todas las categorías presentes
 const ORD_SCALES = [
@@ -257,7 +258,7 @@ function renderVars() {
       try {
         loadSheet(ST.fileName, e.target.value);
       } catch (er) {
-        alert(er.message);
+        avisar(er.message);
       }
     };
   let h =
@@ -293,7 +294,7 @@ function renderVars() {
             .join('') +
           `<button class="btn btn-line btn-sm" data-ordclose="1" style="margin-top:6px">Hecho</button></div>`;
     }
-    h += `<tr><td><b>${esc(v.name)}</b></td><td><select data-v="${idx}"><option value="num"${v.type === 'num' ? ' selected' : ''}>Cuantitativa</option><option value="cat"${v.type === 'cat' ? ' selected' : ''}>Categórica</option><option value="ign"${v.type === 'ign' ? ' selected' : ''}>Ignorar</option></select></td>
+    h += `<tr><td><b>${esc(v.name)}</b></td><td><select data-v="${idx}" aria-label="Tipo de ${esc(v.name)}"><option value="num"${v.type === 'num' ? ' selected' : ''}>Cuantitativa</option><option value="cat"${v.type === 'cat' ? ' selected' : ''}>Categórica</option><option value="ign"${v.type === 'ign' ? ' selected' : ''}>Ignorar</option></select></td>
       <td>${v.valid}</td><td>${v.missing ? `<span class="pill warn">${v.missing}</span>` : '0'}</td><td class="small">${sum}</td><td>${v.note.map(t => `<span class="pill">${esc(t)}</span>`).join('')}${v.type === 'cat' && v.orderUser ? '<span class="pill">Orden elegido por ti</span>' : v.type === 'cat' && v.orderNote ? `<span class="pill">${esc(v.orderNote)}</span>` : ''}${v.type !== v.auto ? '<span class="pill">Cambiado por ti</span>' : ''}</td></tr>`;
   });
   $('#varTable').innerHTML = h + '</tbody>';
