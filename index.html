@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cloud.umami.is 'wasm-unsafe-eval'; connect-src 'self' https://cloud.umami.is https://gateway.umami.is; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tharp · From question to evidence · Análisis estadístico para tu artículo, tesis o proyecto</title>
 <meta name="description" content="Sube tus datos (Excel, CSV, SPSS o JASP) y Tharp comprueba los supuestos, elige la prueba adecuada y genera tablas APA, gráficos, el apartado de resultados redactado y el código R. Validado contra R. Gratis durante el lanzamiento y sin subir tus datos a ningún servidor.">
@@ -19,7 +20,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.ico" sizes="48x48"><link rel="icon" href="img/favicon-192.png" sizes="192x192" type="image/png"><link rel="icon" href="img/favicon-96.png" sizes="96x96" type="image/png"><link rel="icon" href="img/favicon-48.png" sizes="48x48" type="image/png">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
-<script>/* ?no-contar excluye este navegador de las estadísticas (Umami); ?contar lo vuelve a incluir */try{var q=location.search;if(/[?&]no-contar(&|=|$)/.test(q)){localStorage.setItem("umami.disabled","1");alert("Listo: las visitas desde este navegador ya no se cuentan en las estadísticas.")}else if(/[?&]contar(&|=|$)/.test(q)){localStorage.removeItem("umami.disabled");alert("Las visitas desde este navegador vuelven a contarse.")}}catch(e){}</script>
+<script src="js/comun/no-contar.js"></script>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
 <link rel="stylesheet" href="fuentes.css">
 <script type="application/ld+json">
@@ -354,7 +355,7 @@ section.shelf{background:#b9d2ce;--soft:#2f4c55;--mist:#cfe2df}
 @media(min-width:961px){.hero{display:flex;flex-direction:column;height:min(100svh,1000px);min-height:640px}.hero>.wrap{flex:1;display:flex;flex-direction:column;width:100%;min-height:0}.ph{padding-top:clamp(28px,6vh,72px)}.hero .band{flex:1;display:flex;flex-direction:column;min-height:0}.hero .band .sonar{flex:1;height:auto!important;min-height:150px;max-height:340px}.hero .band .chk div{padding-bottom:22px}}
 @media(max-width:960px){.ph-txt{padding-top:28px}}
 </style>
-<script>document.documentElement.classList.add('js')</script>
+<script src="js/portada/activar.js"></script>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -380,7 +381,7 @@ section.shelf{background:#b9d2ce;--soft:#2f4c55;--mist:#cfe2df}
           <a data-umami-event="portada_ejemplo" class="link" style="color:#fff" href="app.html#ejemplo">Ver un análisis de ejemplo</a>
         </div>
         <p class="ph-note" id="dropMsg" aria-live="polite"><svg class="i"><use href="#i-lock"/></svg>Excel, CSV, SPSS o JASP. Se lee en tu navegador, no se sube a ningún servidor.</p>
-        <p class="ph-proof"><a data-umami-event="franja_validacion" href="#validacion">Validado contra R: 46&nbsp;633 valores idénticos en 30 análisis</a></p>
+        <p class="ph-proof"><a data-umami-event="franja_validacion" href="#validacion">Validado contra R: 46&nbsp;670 valores idénticos en 30 análisis</a></p>
       </div>
       <div class="ph-res" id="inst" role="group" aria-label="Análisis de ejemplo calculado en este navegador">
         <div class="inst-hd"><b id="instTitle">ansiedad_pre y ansiedad_post · 324 casos</b><span class="st"><span id="instState">Analizando…</span><button type="button" id="replay">Repetir</button></span></div>
@@ -418,8 +419,8 @@ section.shelf{background:#b9d2ce;--soft:#2f4c55;--mist:#cfe2df}
 <section class="shelf" id="validacion">
   <div class="wrap">
     <div class="sec-hd"><h2 class="h2">Validación contra R</h2>
-    <p class="intro">Antes de cada versión, una batería automática compara cada análisis con los paquetes de referencia de R: <b>46&nbsp;633 valores en 30 análisis, todos idénticos</b> con una tolerancia de seis cifras. Si uno deja de coincidir, la versión no se publica. <a data-umami-event="rigor_validacion" class="link" href="validacion.html">Ver el método</a></p></div>
-    <div class="vtab-wrap"><table class="vtab"><thead><tr><th>Análisis</th><th>Referencia en R</th><th>Coinciden</th></tr></thead><tbody id="vrows"></tbody><tfoot><tr><td>30 análisis</td><td>R 4.5.3</td><td class="num">46&nbsp;633 / 46&nbsp;633</td></tr></tfoot></table></div>
+    <p class="intro">Antes de cada versión, una batería automática compara cada análisis con los paquetes de referencia de R: <b>46&nbsp;670 valores en 30 análisis, todos idénticos</b> con una tolerancia de seis cifras. Si uno deja de coincidir, la versión no se publica. <a data-umami-event="rigor_validacion" class="link" href="validacion.html">Ver el método</a></p></div>
+    <div class="vtab-wrap"><table class="vtab"><thead><tr><th>Análisis</th><th>Referencia en R</th><th>Coinciden</th></tr></thead><tbody id="vrows"></tbody><tfoot><tr><td>30 análisis</td><td>R 4.5.3</td><td class="num">46&nbsp;670 / 46&nbsp;670</td></tr></tfoot></table></div>
     <button type="button" class="showall" id="showall" aria-expanded="false">Ver los 30 análisis</button>
   </div>
 </section>
@@ -487,7 +488,7 @@ effectsize::eta_squared(modelo)</code></pre></div>
       <details><summary>¿Qué archivos puedo usar?</summary><div class="ans"><p>Excel (.xlsx, .xls, .ods), CSV y archivos de SPSS (.sav, .zsav) y de JASP (.jasp). Se respetan las etiquetas de valor, los tipos de medida y los valores perdidos definidos por el usuario. La primera fila debe tener los nombres de las variables y cada fila, un participante.</p></div></details>
       <details><summary>¿Los resultados son fiables?</summary><div class="ans"><p>Cada análisis se valida automáticamente contra R, número a número, antes de cada versión (<a href="validacion.html">cómo lo validamos</a>), y cada resultado incluye el script de R para que cualquiera (tú, tu director o un revisor) pueda reproducirlo. Aun así, revisa siempre los resultados: Tharp automatiza el cálculo, pero la interpretación es tuya.</p></div></details>
       <details><summary>¿Qué análisis incluye?</summary><div class="ans"><p>Desde descriptivos y pruebas t hasta modelos mixtos, análisis factorial confirmatorio con invarianza de medida, supervivencia o metaanálisis: tienes la lista completa en <a href="#validacion">Validación</a>. Si necesitas un análisis que aún no está, el buscador de pruebas te lo indica y puedes escribirnos: priorizamos lo que más nos pedís.</p></div></details>
-      <details><summary>¿Puedo usarlo en mi artículo o mi tesis? ¿Cómo lo cito?</summary><div class="ans"><p>Sí. Tharp genera tablas y texto en formato APA y un documento de Word editable. Las normas APA piden mencionar el software en el método y citarlo en las referencias; Tharp te da la cita al final de cada análisis:</p><p class="cite">Agüí Ruiz, B. (<span data-tharp="year">2026</span>). <i>Tharp</i> (Versión <span data-tharp="version">1.2.0</span>) [Software]. https://tharp.es</p></div></details>
+      <details><summary>¿Puedo usarlo en mi artículo o mi tesis? ¿Cómo lo cito?</summary><div class="ans"><p>Sí. Tharp genera tablas y texto en formato APA y un documento de Word editable. Las normas APA piden mencionar el software en el método y citarlo en las referencias; Tharp te da la cita al final de cada análisis:</p><p class="cite">Agüí Ruiz, B. (<span data-tharp="year">2026</span>). <i>Tharp</i> (Versión <span data-tharp="version">1.2.1</span>) [Software]. https://tharp.es</p></div></details>
     </div>
   </div>
 </section>
@@ -502,131 +503,14 @@ effectsize::eta_squared(modelo)</code></pre></div>
 
 <footer>
   <div class="wrap">
-    <div><b lang="en">From question to evidence.</b>Tharp <span data-tharp="version">1.2.0</span> · © 2026 Blanca Agüí Ruiz · <a href="https://orcid.org/0009-0002-3982-2565">ORCID 0009-0002-3982-2565</a>. Todos los derechos reservados.</div>
+    <div><b lang="en">From question to evidence.</b>Tharp <span data-tharp="version">1.2.1</span> · © 2026 Blanca Agüí Ruiz · <a href="https://orcid.org/0009-0002-3982-2565">ORCID 0009-0002-3982-2565</a>. Todos los derechos reservados.</div>
     <div><b>Producto</b><a href="app.html">Analizar mis datos</a> · <a data-umami-event="nav_validacion" href="validacion.html">Validación</a> · <a href="#finder">¿Qué prueba uso?</a></div>
     <div><b>Contacto</b><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/">Instagram</a> · <a href="privacidad.html">Privacidad</a> · Sin cookies</div>
   </div>
 </footer>
 
 <script src="vendor/jstat.min.js"></script>
-<script>window.jStat = window.jStat || jStat;</script>
-<script src="js/stats.js"></script>
-<script src="js/demo.js"></script>
-<script src="js/validacion.js"></script>
-<script src="js/version.js"></script>
-<script>
-(function () {
-  const S = window.TharpStats, rows = window.TharpDemo(), H = rows[0], R = rows.slice(1), col = n => R.map(r => r[H.indexOf(n)]);
-  const neg = s => s.replace(/^-/, '−'), f = (x, d = 2) => neg(x.toFixed(d)), nz = s => neg(s.replace(/^(-?)0\./, '$1.')), pv = p => (p < .001 ? '< .001' : '= ' + nz(p.toFixed(3))), pc = p => (p < .001 ? '< .001' : nz(p.toFixed(3)));
-  const ok = '<svg class="i"><use href="#i-ok"/></svg>', esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const narrow = matchMedia('(max-width: 560px)');
-  const by = (y, g) => { const Y = col(y), G = col(g), lv = [...new Set(G)].sort(); return { lv, groups: lv.map(l => Y.filter((v, i) => G[i] === l && v !== null)) }; };
-  const tbl = (cap, head, body) => `<div class="tw"><table class="apa"><caption>${cap}</caption><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body.map(r => `<tr>${r.map(c => (typeof c === 'object' ? `<td class="key">${c.v}</td>` : `<td>${c}</td>`)).join('')}</tr>`).join('')}</tbody></table></div>`;
-  const sig = (p, yes, no) => (p < .05 ? yes : no);
-  const normal = sw => sw.every(t => t.p >= .05);
-  const files = '<div class="files"><span>resultados.docx</span><span>analisis.R</span><span>registro de decisiones</span></div>';
-
-  // cada pregunta: calculada con el motor de Tharp; lo que se dice depende de los resultados
-  const Q = {
-    anova() { const { lv, groups } = by('ansiedad_post', 'grupo'), a = S.anova(groups), tk = S.tukeyHSD(groups, a.msw, a.df2), lev = S.levene(groups), sw = groups.map(g => S.shapiro(g));
-      const nOk = normal(sw), vOk = lev.p >= .05, pairs = tk.filter(c => c.padj < .05).map(c => `${lv[c.i]} y ${lv[c.j]}`), n = groups.reduce((t, g) => t + g.length, 0);
-      return { xname: 'ansiedad_post', title: `ansiedad_post según grupo · ${n} casos`, series: lv.map((l, i) => ({ name: l, v: groups[i] })),
-        chk: [['Normalidad', `Shapiro-Wilk ${nOk ? ok : '✗'}`], ['Varianzas', `Levene ${vOk ? ok : '✗'}`], ['Prueba', nOk && vOk ? 'ANOVA + Tukey' : !nOk ? 'Kruskal-Wallis' : 'Welch + Games-Howell'], ['Efecto', `η² = ${nz(a.eta2.toFixed(3))}`]],
-        table: tbl('<b>Tabla 1</b><i>ANOVA de un factor para ansiedad_post según el grupo</i>', ['Fuente', '<i>gl</i>', '<i>F</i>', '<i>p</i>', 'η²'], [['Grupo', a.df1, { v: f(a.F) }, pc(a.p), nz(a.eta2.toFixed(3))], ['Error', a.df2, '', '', '']]),
-        text: `${sig(a.p, 'Se encontraron diferencias estadísticamente significativas', 'No se encontraron diferencias estadísticamente significativas')} en ansiedad_post según el grupo, <mark><i>F</i>(${a.df1}, ${a.df2}) = ${f(a.F)}, <i>p</i> ${pv(a.p)}, η² = ${nz(a.eta2.toFixed(3))}</mark>${pairs.length ? `. Las comparaciones de Tukey mostraron diferencias entre ${pairs.join(', ')}` : ''}.` }; },
-    t() { const { lv, groups } = by('ansiedad_pre', 'sexo'), lev = S.levene(groups), eq = lev.p >= .05, r = S.tTestInd(groups[0], groups[1], eq), d = groups.map(g => S.describe(g)), sw = groups.map(g => S.shapiro(g));
-      const nOk = normal(sw), dir = r.diff < 0 ? 'más bajas' : 'más altas', gl = Number.isInteger(r.df) ? r.df : f(r.df);
-      return { xname: 'ansiedad_pre', title: `ansiedad_pre según sexo · ${groups[0].length + groups[1].length} casos`, series: lv.map((l, i) => ({ name: l, v: groups[i] })),
-        chk: [['Normalidad', `Shapiro-Wilk ${nOk ? ok : '✗'}`], ['Varianzas', `Levene ${eq ? ok : '✗'}`], ['Prueba', nOk ? (eq ? 't de Student' : 't de Welch') : 'Mann-Whitney'], ['Efecto', `<i>d</i> = ${f(r.d)}`]],
-        table: narrow.matches ? tbl('<b>Tabla 1</b><i>Prueba t para muestras independientes</i>', ['Comparación', '<i>t</i>', '<i>gl</i>', '<i>p</i>', '<i>d</i>'], [[`${lv[0]} − ${lv[1]}`, { v: f(r.t) }, gl, pc(r.p), f(r.d)]])
-          : tbl('<b>Tabla 1</b><i>Prueba t para muestras independientes</i>', ['Comparación', '<i>t</i>', '<i>gl</i>', '<i>p</i>', '<i>d</i>', 'IC&nbsp;95&nbsp;% (<i>d</i>)'], [[`${lv[0]} − ${lv[1]}`, { v: f(r.t) }, gl, pc(r.p), f(r.d), `[${f(r.dCI[0])}, ${f(r.dCI[1])}]`]]),
-        text: `${lv[0]} (<i>M</i> = ${f(d[0].mean)}, <i>DT</i> = ${f(d[0].sd)}) ${sig(r.p, `obtuvo puntuaciones significativamente ${dir} que`, 'no difirió significativamente de')} ${lv[1]} (<i>M</i> = ${f(d[1].mean)}, <i>DT</i> = ${f(d[1].sd)}), <mark><i>t</i>(${gl}) = ${f(r.t)}, <i>p</i> ${pv(r.p)}, <i>d</i> = ${f(r.d)}</mark>, IC&nbsp;95&nbsp;% [${f(r.dCI[0])}, ${f(r.dCI[1])}].` }; },
-    rho() { const X = col('ansiedad_pre'), Y = col('ansiedad_post'), m = X.map((v, i) => v !== null && Y[i] !== null), x = X.filter((_, i) => m[i]), y = Y.filter((_, i) => m[i]);
-      const sx = S.shapiro(x), sy = S.shapiro(y), nOk = sx.p >= .05 && sy.p >= .05, r = nOk ? S.pearson(x, y) : S.spearman(x, y), sym = nOk ? '<i>r</i>' : '<i>r</i><sub>s</sub>';
-      const fuerza = Math.abs(r.r) >= .5 ? 'fuerte' : Math.abs(r.r) >= .3 ? 'moderada' : 'débil', signo = r.r > 0 ? 'positiva' : 'negativa';
-      return { title: `ansiedad_pre y ansiedad_post · ${x.length} casos`, scatter: { x, y },
-        chk: [['Normalidad', `Shapiro-Wilk ${nOk ? ok : '✗'}`], ['Casos', `${x.length} pares`], ['Prueba', nOk ? 'Pearson' : 'Spearman'], ['Efecto', `${sym} = ${nz(r.r.toFixed(2))}`]],
-        table: tbl(`<b>Tabla 1</b><i>Correlación de ${nOk ? 'Pearson' : 'Spearman'}</i>`, ['Par', sym, '<i>gl</i>', '<i>p</i>'], [['ansiedad_pre y ansiedad_post', { v: nz(r.r.toFixed(2)) }, r.df, pc(r.p)]]),
-        text: `Las variables ansiedad_pre y ansiedad_post mostraron una correlación ${signo} ${fuerza}${sig(r.p, '', ' no significativa')}, <mark>${sym}(${r.df}) = ${nz(r.r.toFixed(2))}, <i>p</i> ${pv(r.p)}</mark>.` }; } };
-
-  const $ = id => document.getElementById(id);
-  const inst = $('inst'), sonar = $('sonar'), chk = $('chk'), paper = $('paper'), qb = [...document.querySelectorAll('.qsel button')];
-  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; let raf = 0, timers = [], cur = 'rho', O = null;
-  const nb = h => h.replace(/ (=|<|&lt;|>|&gt;) /g, '&nbsp;$1&nbsp;').replace(/(\([\d.]+|\[[−\d.]+), /g, '$1,&nbsp;');
-  const TONES = ['#e6f0ef', '#8fd3c4', '#f0a58f'], MARKS = [.25, .5, .75, .995];
-  const NS = 'http://www.w3.org/2000/svg';
-
-  // los datos tal cual: cada caso es un sondeo; cada grupo, un perfil (densidad de núcleo gaussiano)
-  function draw() { const W = sonar.clientWidth, H = sonar.clientHeight, top = O.series ? (W < 640 ? 38 : 30) : 22, bot = 46, px = 22, o = O; let g = '';
-    const ticks = (a, b, X, name) => { const raw = (b - a) / 6, m = Math.pow(10, Math.floor(Math.log10(raw))), st = [1, 2, 5, 10].map(k => k * m).find(k => k >= raw); let t = '';
-      for (let v = Math.ceil(a / st) * st; v <= b; v += st) { const x = X(v); if (x > W - px - 120) continue; t += `<line class="tk" x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${H - 14}" y2="${H - 10}"/><text class="lab tick" text-anchor="middle" x="${x.toFixed(1)}" y="${H - 1}">${neg(String(+v.toFixed(1)))}</text>`; }
-      return t + `<text class="lab tick" text-anchor="end" x="${W - px}" y="${H - 1}">${name}</text>`; };
-    if (o.series) { const all = o.series.flatMap(s => s.v), lo = Math.min(...all), hi = Math.max(...all), span = hi - lo || 1, a = lo - span * .04, b = hi + span * .04;
-      const X = v => px + (v - a) / (b - a) * (W - 2 * px), xs = Array.from({ length: 140 }, (_, i) => a + (b - a) * i / 139);
-      const dens = o.series.map(s => { const d = S.describe(s.v), h = 1.06 * d.sd * Math.pow(s.v.length, -.2); return xs.map(x => s.v.reduce((t, v) => t + Math.exp(-.5 * ((x - v) / h) ** 2), 0) / (s.v.length * h)); });
-      const mx = Math.max(...dens.flat()), Yd = d => H - bot - d / mx * (H - top - bot);
-      dens.forEach((d, k) => { const pts = d.map((y, i) => `${X(xs[i]).toFixed(1)},${Yd(y).toFixed(1)}`).join(' L');
-        g += `<path class="ar" fill="${TONES[k]}" fill-opacity=".07" d="M${X(a).toFixed(1)},${H - bot} L${pts} L${X(b).toFixed(1)},${H - bot} Z"/><path class="cv" stroke="${TONES[k]}" d="M${pts}"/>`; });
-      g += ticks(a, b, X, o.xname);
-      o.series.forEach((s, k) => { const y0 = H - bot + 6 + k * 6; g += `<path class="rug" stroke="${TONES[k]}" stroke-opacity=".55" d="${s.v.map(v => `M${X(v).toFixed(1)},${y0}v4`).join('')}"/>`; });
-      g += `<text class="lab sm" text-anchor="end" x="${W - px}" y="14" xml:space="preserve">${o.series.map((s, k) => `<tspan fill="${TONES[k]}">— ${s.name}</tspan>`).join('   ')}${W < 640 ? '' : '   · cada marca es un caso'}</text>`;
-    } else { const { x, y } = o.scatter, ax = Math.min(...x), bx = Math.max(...x), ay = Math.min(...y), by2 = Math.max(...y);
-      const X = v => px + 26 + (v - ax) / (bx - ax) * (W - 2 * px - 26), Y = v => H - bot + 14 - (v - ay) / (by2 - ay) * (H - top - bot + 8);
-      g += x.map((v, i) => `<circle class="pt" r="1.7" fill="${TONES[0]}" cx="${X(v).toFixed(1)}" cy="${Y(y[i]).toFixed(1)}"/>`).join('');
-      const mxv = x.reduce((t, v) => t + v, 0) / x.length, myv = y.reduce((t, v) => t + v, 0) / y.length; let sxy = 0, sxx = 0; x.forEach((v, i) => { sxy += (v - mxv) * (y[i] - myv); sxx += (v - mxv) ** 2; });
-      const bb = sxy / sxx, aa = myv - bb * mxv; g += `<path class="fit" d="M${X(ax).toFixed(1)},${Y(aa + bb * ax).toFixed(1)} L${X(bx).toFixed(1)},${Y(aa + bb * bx).toFixed(1)}"/>`
-        + ticks(ax, bx, X, 'ansiedad_pre') + (() => { const raw = (by2 - ay) / 4, m = Math.pow(10, Math.floor(Math.log10(raw))), st = [1, 2, 5, 10].map(k => k * m).find(k => k >= raw); let t = '';
-          for (let v = Math.ceil(ay / st) * st; v <= by2; v += st) { const y = Y(v); if (y < 10 || y > H - bot + 10) continue; t += `<text class="lab tick" x="${px}" y="${(y + 4).toFixed(1)}">${neg(String(+v.toFixed(1)))}</text>`; } return t; })()
-        + `<text class="lab sm" x="${px + 30}" y="${top - 6}">Vertical: ansiedad_post${W < 640 ? '' : '. Cada punto es un caso'}</text>`; }
-    const mk = '';
-    sonar.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"><defs><clipPath id="sw"><rect id="swr" x="0" y="0" width="${W}" height="${H}"/></clipPath></defs>${mk}<g clip-path="url(#sw)">${g}</g><line class="scan" id="scan" x1="-9" x2="-9" y1="8" y2="${H}" opacity="0"/></svg>`
-    ; $('leg').innerHTML = ''; }
-
-  function setChk(n) { [...chk.children].forEach((c, i) => { const on = i < n; c.classList.toggle('on', on); c.querySelector('b').innerHTML = on ? nb(O.chk[i][1]) : ['comprobando…', 'comprobando…', 'eligiendo…', 'calculando…'][i]; });
-    sonar.querySelectorAll('.mk').forEach((l, i) => l.classList.toggle('on', i < n)); }
-  function finish() { setChk(4); paper.classList.add('on'); $('instState').textContent = 'Listo · calculado en este navegador';
-    const sw = $('swr'), sc = $('scan'); if (sw) sw.setAttribute('width', sonar.clientWidth); if (sc) sc.setAttribute('opacity', 0);
-    timers.push(setTimeout(() => paper.classList.add('end'), reduce ? 0 : 450)); }
-  function play() { cancelAnimationFrame(raf); timers.forEach(clearTimeout); timers = []; paper.classList.remove('on', 'end'); draw();
-    if (reduce) { finish(); return; }
-    $('instState').textContent = 'Analizando…'; setChk(0); const W = sonar.clientWidth, sw = $('swr'), sc = $('scan'), D = 2600, t0 = performance.now(); sc.setAttribute('opacity', 1);
-    const step = t => { const k = Math.min(1, (t - t0) / D), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2, x = W * e;
-      sw.setAttribute('width', x); sc.setAttribute('x1', x); sc.setAttribute('x2', x); setChk(MARKS.filter(m => e >= m).length);
-      if (k < 1) raf = requestAnimationFrame(step); else finish(); };
-    raf = requestAnimationFrame(step); }
-  function render(k) { O = Q[k](); cur = k; qb.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.q === k)));
-    $('instTitle').textContent = O.title;
-    chk.innerHTML = O.chk.map((c, i) => `<div><span>${i + 1} · ${c[0]}</span><b></b></div>`).join('');
-    paper.innerHTML = O.table + `<p class="prose">${nb(O.text)}</p>`; play(); }
-  qb.forEach(b => b.addEventListener('click', () => { render(b.dataset.q); try { window.umami && window.umami.track('portada_pregunta', { prueba: b.textContent }); } catch (e) { /* estadística opcional */ } }));
-  $('replay').addEventListener('click', play);
-  render('rho');
-  let lastNarrow = narrow.matches, rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { if (narrow.matches !== lastNarrow) { lastNarrow = narrow.matches; render(cur); } else if (paper.classList.contains('on')) { draw(); setChk(4); $('swr').setAttribute('width', sonar.clientWidth); $('scan').setAttribute('opacity', 0); } }, 150); });
-
-  // tu propio archivo: se guarda en este navegador (IndexedDB) y la aplicación lo abre sin volver a elegirlo
-  const APP = 'app.html';
-  const handoff = fl => new Promise(res => { try { const rq = indexedDB.open('tharp', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('traspaso');
-      rq.onsuccess = () => { const tx = rq.result.transaction('traspaso', 'readwrite'); tx.objectStore('traspaso').put(fl, 'archivo'); tx.oncomplete = () => res(true); tx.onerror = () => res(false); }; rq.onerror = () => res(false); } catch (e) { res(false); } });
-  const drop = $('drop'), file = $('file'), msg = $('dropMsg');
-  function take(fl) { if (!fl) return; try { window.umami && window.umami.track('portada_analizar', { via: 'archivo' }); } catch (e) { /* estadística opcional */ } msg.textContent = `Abriendo «${fl.name}» en Tharp. El archivo no sale de este navegador.`; handoff(fl).then(okk => { location.href = APP + (okk ? '#importar' : ''); }); }
-  file.addEventListener('change', () => take(file.files[0]));
-  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
-  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-  drop.addEventListener('drop', e => take(e.dataTransfer.files[0]));
-
-  // variables reconocidas (datos de ejemplo)
-  $('vars').innerHTML = ['grupo', 'sexo', 'ansiedad_pre', 'ansiedad_post', 'horas_sueno', 'satisfaccion'].map(n => { const v = col(n), num = typeof v.find(x => x !== null) === 'number', miss = v.filter(x => x === null).length;
-    if (!num) { const lv = [...new Set(v.filter(x => x !== null))].sort(); return `<tr><td>${n}</td><td><span class="pill">categórica</span></td><td>${lv.length} categorías: ${lv.join(', ')}</td></tr>`; }
-    const d = S.describe(v.filter(x => x !== null)); return `<tr><td>${n}</td><td><span class="pill q">cuantitativa</span></td><td>${nb(`<i>M</i> = ${f(d.mean)}, <i>DT</i> = ${f(d.sd)}`)}${miss ? `; ${miss}&nbsp;perdidos` : ''}</td></tr>`; }).join('');
-
-  // registro de validación: datos reales de la batería contra R
-  (V => { const fmt = n => String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');
-    $('vrows').innerHTML = V.map((o, i) => `<tr class="${i >= 8 ? 'more' : ''}" ${i >= 8 ? 'hidden' : ''}><td>${o.a}</td><td class="pk">${o.r}</td><td class="num"><span class="okmark">${ok}${fmt(o.ok)} / ${fmt(o.n)}</span></td></tr>`).join('');
-    const btn = $('showall'); btn.addEventListener('click', () => { const open = btn.getAttribute('aria-expanded') === 'true'; document.querySelectorAll('#vrows tr.more').forEach(t => { t.hidden = open; }); btn.setAttribute('aria-expanded', String(!open)); btn.textContent = open ? `Ver los ${V.length} análisis` : 'Ver solo los principales'; }); })(window.TharpValidacion || []);
-
-})();
-</script>
-<script src="js/buscador.js"></script>
-<script>try{document.querySelectorAll("[data-tharp]").forEach(function(e){var v=window.TharpVersion;if(v&&v[e.dataset.tharp])e.textContent=v[e.dataset.tharp];});}catch(e){}</script>
+<script type="module" src="js/portada/main.js"></script>
+<script type="module" src="js/portada/buscador.js"></script>
 </body>
 </html>

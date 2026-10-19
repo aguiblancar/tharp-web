@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cloud.umami.is 'wasm-unsafe-eval'; connect-src 'self' https://cloud.umami.is https://gateway.umami.is; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tharp · Analiza tus datos: tablas APA, gráficos y resultados</title>
 <meta name="description" content="Sube tus datos y obtén el análisis estadístico completo: supuestos, pruebas, tablas APA, gráficos y redacción de resultados. Tus datos no salen de tu navegador.">
@@ -12,7 +13,7 @@
 <meta property="og:description" content="Supuestos, pruebas, tablas APA, gráficos y resultados redactados, sin subir tus datos a ningún servidor.">
 <meta property="og:image" content="https://tharp.es/img/og.png">
 <meta property="og:url" content="https://tharp.es/app.html">
-<script>/* ?no-contar excluye este navegador de las estadísticas (Umami); ?contar lo vuelve a incluir */try{var q=location.search;if(/[?&]no-contar(&|=|$)/.test(q)){localStorage.setItem("umami.disabled","1");alert("Listo: las visitas desde este navegador ya no se cuentan en las estadísticas.")}else if(/[?&]contar(&|=|$)/.test(q)){localStorage.removeItem("umami.disabled");alert("Las visitas desde este navegador vuelven a contarse.")}}catch(e){}</script>
+<script src="js/comun/no-contar.js"></script>
 <script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
 <link rel="stylesheet" href="fuentes.css">
 <style>
@@ -248,12 +249,6 @@ h1,h2,h3{font-weight:650;letter-spacing:-.02em}
 <script src="vendor/jstat.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="vendor/docx.umd.js" defer></script>
-<script src="js/version.js"></script>
-<script src="js/stats.js"></script>
-<script src="js/jasp.js"></script>
-<script src="js/sav.js"></script>
-<script src="js/charts.js"></script>
-<script src="js/demo.js"></script>
-<script src="js/app.js"></script>
+<script type="module" src="js/app/main.js"></script>
 </body>
 </html>
