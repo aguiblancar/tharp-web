@@ -2,15 +2,36 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cloud.umami.is 'wasm-unsafe-eval'; connect-src 'self' https://cloud.umami.is https://gateway.umami.is; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Página no encontrada · Tharp</title>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src https://cloud.umami.is; connect-src https://cloud.umami.is https://gateway.umami.is; img-src 'self'; style-src 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="robots" content="noindex">
-<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" href="/img/favicon-192.png" sizes="192x192" type="image/png"><link rel="icon" href="/img/favicon-96.png" sizes="96x96" type="image/png"><link rel="icon" href="/img/favicon-48.png" sizes="48x48" type="image/png">
-<script src="/js/comun/no-contar.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tharp · From question to evidence</title>
+<meta name="description" content="Tharp, análisis estadístico para investigación. Muy pronto.">
+<meta name="theme-color" content="#0b2230">
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" href="/img/favicon-192.png" sizes="192x192" type="image/png"><link rel="icon" href="/img/favicon-96.png" sizes="96x96" type="image/png">
+<link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
 <script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
-<link rel="stylesheet" href="/fuentes.css">
-<link rel="stylesheet" href="/tharp.css">
+<style>
+/* Página provisional de tharp.es mientras la web completa se construye en beta.tharp.es (proximamente/LEEME.md) */
+@font-face { font-family: 'Schibsted Grotesk'; font-style: normal; font-weight: 400 800; font-display: swap; src: url(/fonts/SchibstedGrotesk-latin.woff2) format('woff2'); }
+:root { --deep:#0b2230; --grid:#1f4a5e; --ping:#f2b33d; --foam:#dcedf0; --dim:#8fb0bd; }
+* { box-sizing: border-box; margin: 0; }
+body { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 32px 16px; background: var(--deep); color: var(--foam);
+  font: 400 17px/1.55 "Schibsted Grotesk", system-ui, -apple-system, sans-serif; text-align: center; }
+main { max-width: 34rem; }
+img { display: block; margin: 0 auto 28px; border-radius: 50%; }
+h1 { font-weight: 700; font-size: clamp(2rem, 7vw, 3.4rem); line-height: 1.05; letter-spacing: -0.02em; }
+p { margin-top: 18px; color: var(--dim); }
+a { color: var(--ping); text-underline-offset: 3px; }
+footer { margin-top: 36px; padding-top: 18px; border-top: 1px solid var(--grid); font-size: 15px; color: var(--dim); }
+</style>
 </head>
-<body class="dark"><main class="notfound"><div><img src="/img/logo-144.png" alt="Tharp" width="72" height="72" style="margin:0 auto;border-radius:50%"><h1>Aquí no hay <em>datos.</em></h1><p>La página que buscas no existe o ha cambiado de sitio.</p><p style="margin-top:22px"><a class="btn btn-ping" href="/">Volver a Tharp</a></p></div></main></body>
+<body>
+<main>
+  <img src="/img/logo-144.png" alt="Tharp" width="72" height="72">
+  <h1>From question to evidence</h1>
+  <p>Estamos preparando Tharp, el análisis estadístico para tu artículo, tesis o proyecto. Muy pronto, aquí.</p>
+  <footer><a href="mailto:info@tharp.es">info@tharp.es</a> · <a href="https://www.instagram.com/tharpstats/" rel="noopener">Instagram</a></footer>
+</main>
+</body>
 </html>
