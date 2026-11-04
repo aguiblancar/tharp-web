@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src https://cloud.umami.is; connect-src https://cloud.umami.is https://gateway.umami.is; img-src 'self'; style-src 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacidad · Tharp</title>
+<meta name="description" content="Cómo trata Tharp el correo de la lista de espera.">
+<meta name="theme-color" content="#05090b">
+<link rel="icon" href="/favicon.ico" sizes="48x48"><link rel="icon" href="/img/favicon-192.png" sizes="192x192" type="image/png">
+<script defer src="https://cloud.umami.is/script.js" data-website-id="fe52d2ca-82ad-4e9c-b76e-33c334449e4a" data-domains="tharp.es"></script>
+<style>
+/* Segunda capa de la información de privacidad de la lista de espera (la primera es la línea junto al formulario de
+   index.html). Mismo sistema «Sonar» que index.html. */
+@font-face { font-family: 'Schibsted Grotesk'; font-style: normal; font-weight: 400 800; font-display: swap; src: url(/fonts/SchibstedGrotesk-latin.woff2) format('woff2'); }
+:root { --fondo: #05090b; --linea: #25302f; --texto: #eef2f1; --suave: #a3adab; --senal: #ffd028;
+  --sistema: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Schibsted Grotesk', system-ui, sans-serif;
+  color-scheme: dark; }
+* { box-sizing: border-box; margin: 0; }
+body { min-height: 100vh; display: flex; flex-direction: column; background: var(--fondo); color: var(--texto);
+  font: 400 17px/1.6 var(--sistema); -webkit-font-smoothing: antialiased; }
+.contenedor { width: 100%; max-width: 1280px; margin-inline: auto; padding-inline: clamp(16px, 4vw, 56px); }
+header { padding-block: 16px; border-bottom: 1px solid var(--linea); }
+.marca { display: inline-flex; align-items: center; gap: 10px; font: 700 1.2rem/1 var(--sistema); letter-spacing: -0.02em; color: var(--texto); text-decoration: none; }
+.marca img { border-radius: 50%; }
+main { flex: 1; padding-block: clamp(32px, 6vh, 64px); }
+article { max-width: 42rem; }
+h1 { font-size: clamp(2rem, 1.4rem + 2vw, 3rem); line-height: 1.05; letter-spacing: -0.03em; margin-bottom: 20px; }
+h2 { font-size: 1.1rem; margin: 28px 0 6px; }
+p, li { color: var(--suave); }
+p b, li b { color: var(--texto); font-weight: 600; }
+ul { padding-left: 1.2em; }
+a { color: var(--texto); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+footer { padding-block: 24px; border-top: 1px solid var(--linea); color: var(--suave); font-size: 15px; }
+a:focus-visible { outline: 2px solid var(--senal); outline-offset: 2px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header><div class="contenedor"><a class="marca" href="/"><img src="/img/logo-144.png" alt="" width="34" height="34">Tharp</a></div></header>
+<main class="contenedor">
+<article>
+  <h1>Privacidad de la lista de espera</h1>
+  <p>Si dejas tu correo en tharp.es, esto es lo que hacemos con él.</p>
+
+  <h2>Quién lo trata</h2>
+  <p><b>Blanca Agüí Ruiz</b>, autora de Tharp. Contacto: <a href="mailto:info@tharp.es">info@tharp.es</a>.</p>
+
+  <h2>Para qué</h2>
+  <p>Solo para escribirte una vez, el día que Tharp abra. No lo usamos para nada más ni lo cedemos a nadie.</p>
+
+  <h2>Con qué permiso</h2>
+  <p>Con tu consentimiento: marcas la casilla y después lo confirmas con el enlace que te llega por correo. Sin esa confirmación no te escribimos.</p>
+
+  <h2>Qué datos y dónde</h2>
+  <p>Solo tu dirección de correo. Se guarda en <b>Brevo</b> (Sendinblue SAS, Francia), el servicio que envía los correos, con sus servidores en la Unión Europea. Brevo los trata por encargo nuestro y no puede usarlos para otra cosa.</p>
+
+  <h2>Cuánto tiempo</h2>
+  <p>Hasta que enviemos el aviso del lanzamiento. Después borramos la lista. Si te das de baja antes, se borra tu dirección en ese momento.</p>
+
+  <h2>Tus derechos</h2>
+  <ul>
+    <li>Darte de baja cuando quieras con el enlace que lleva cada correo.</li>
+    <li>Pedir ver, corregir o borrar tu correo, u oponerte a su uso, escribiendo a <a href="mailto:info@tharp.es">info@tharp.es</a>.</li>
+    <li>Reclamar ante la Agencia Española de Protección de Datos (<a href="https://www.aepd.es" rel="noopener">aepd.es</a>) si crees que no los hemos respetado.</li>
+  </ul>
+
+  <h2>Estadísticas de visitas</h2>
+  <p>Esta página cuenta las visitas con Umami, sin cookies y con servidores en la Unión Europea: datos agregados (páginas vistas, país, dispositivo) que no permiten identificar a nadie.</p>
+</article>
+</main>
+<footer><div class="contenedor"><a href="/">Volver a tharp.es</a></div></footer>
+</body>
+</html>
